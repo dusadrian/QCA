@@ -41,7 +41,7 @@
     tildenegated <- badnames <- logical(length(funargs))
     cols <- vector(mode = "list", length = length(funargs))
     for (i in seq(length(funargs))) {
-        if (grepl("\\*|\\+", funargs[i]) {
+        if (grepl("\\*|\\+", funargs[i])) {
             admisc::stopError("Expressions not allowed, there should only be individual conditions.")
         }
         badnames[i] <- grepl("\\(|:", funargs[i])
