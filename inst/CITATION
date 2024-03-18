@@ -1,0 +1,12 @@
+bibentry(
+    header      = "To cite this package in publications, please use:",
+    bibtype     = "Book",
+    author      = "Adrian Dusa",
+    year        = "2019",
+    title       = "QCA with R. A Comprehensive Resource",
+    address     = "Cham, Switzerland",
+    publisher   = "Springer International Publishing",
+    textVersion = paste("Dusa, Adrian (2019).",
+                        "QCA with R. A Comprehensive Resource.",
+                        "Springer International Publishing.")
+)

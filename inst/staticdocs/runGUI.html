@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>runGUI. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>run the GUI shiny app for the QCA package</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>Runs the graphical user interface app based on the <span class = "pkg">shiny</span> package.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>runGUI(x)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Path to the shiny app.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>This function is nothing but a wrapper to the <b><code><a href=''>runApp()</a></code></b>
+function in package <span class = "pkg">shiny</span>. If <b><code>x</code></b> is not provided,
+it automatically locates the <b><code>gui</code></b> directory in the path where the QCA package
+has been installed, and runs it.</p>
+
+<p>The user interface gained an interactive R console in the webpage. Commands are
+parsed and evaluated into a dedicated environment, with efforts to capture errors and
+warnings. Preliminary tests are encouraging, but users should be aware this is not a
+real console and bugs are likely to appear in this stage of development.</p>
+  
+    </div>
+      </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>runGUI</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

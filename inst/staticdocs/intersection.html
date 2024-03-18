@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>intersection. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Intersect expressions</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function takes two or more QCA expressions (combinations of conjunctions and
+disjunctions), or even entire minimization objects, and finds their intersection.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>intersection(..., snames&nbsp;=&nbsp;"", noflevels)</div></pre>
+    
+    <h2>Arguments</h2>
+    
+    <table>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>One or more expressions, combined with / or minimization objects of class
+                <code>&quot;QCA_min&quot;</code></td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>snames</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing the sets' names, separated by commas.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>noflevels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical vector containing the number of levels for each set.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The initial aim of this function was to provide a software implementation of the
+intersection examples presented by Ragin (1987: 144-147). That type of example can also
+be performed with the function <b><code><a href='SOPexpression.html'>simplify()</a></code></b>, while this function is now
+mainly used in conjunction with the <b><code><a href='modelFit.html'>modelFit()</a></code></b> function, to assess
+the intersection between theory and a QCA model.</p>
+  
+      <p>Irrespective of the input type (character expressions and / or minimiation objects), this
+function is now a wrapper to the main <b><code><a href='SOPexpression.html'>simplify()</a></code></b> function (which only
+accepts character expressions).</p>
+  
+      <p>It can deal with any kind of expressions, but multivalent crisp conditions need additional
+information about their number of levels, via the argument <b><code>noflevels</code></b>.</p>
+  
+      <p>The expressions can be formulated in terms of either lower case - upper case notation
+for the absence and the presence of the causal condition, or use the tilde notation
+(see examples below). Usage of either of these is automatically detected, as long as all
+expressions use the same notation.</p>
+  
+      <p>If the <b><code>snames</code></b> argument is provided, the result is sorted according to the order
+of the causal conditions (set names) in the original dataset, otherwise it sorts the causal
+conditions in alphabetical order.</p>
+  
+      <p>For minimization objects of class <b><code>"QCA_min"</code></b>, the number of levels,
+and the set names are automatically detected.</p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Ragin, C.C. (1987) <em>The Comparative Method: Moving beyond Qualitative and 
+Quantitative Strategies</em>. Berkeley: University of California Press.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples">
+
+<div class='input'># using minimization objects
+ttLF  &lt;- truthTable(LF, outcome = &quot;SURV&quot;, incl.cut = 0.8)
+
+pLF  &lt;- minimize(ttLF, include = &quot;?&quot;)
+
+
+# for example the intersection between the parsimonious model and
+# a theoretical expectation
+
+intersection(pLF, &quot;DEV*STB&quot;)
+</div>
+<div class='output'>E1: (DEV*~IND + URB*STB)*DEV*STB
+  I1: DEV*URB*STB + DEV*~IND*STB
+
+</div>
+
+<div class='input'># negating the model
+intersection(negate(pLF), &quot;DEV*STB&quot;)
+</div>
+<div class='output'>E1: (~DEV*~URB + ~DEV*~STB + ~URB*IND + IND*~STB)*DEV*STB
+  I1: DEV*IND*STB*~URB
+
+</div>
+
+<div class='input'># in Ragin&#39;s (1987) book, the equation E = SG + LW is the result
+# of the Boolean minimization for the ethnic political mobilization.
+
+# intersecting the reactive ethnicity perspective (R = lw)
+# with the equation E (page 144)
+intersection(&quot;~L~W&quot;, &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
+</div>
+<div class='output'>E1: ~L~W(SG + LW)
+  I1: S~L~WG
+
+</div>
+
+<div class='input'># resources for size and wealth (C = SW) with E (page 145)
+intersection(&quot;SW&quot;, &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
+</div>
+<div class='output'>E1: SW(SG + LW)
+  I1: SWG + SLW
+
+</div>
+<div class='input'># and factorized
+factorize(intersection(&quot;SW&quot;, &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;))
+</div>
+<div class='output'>M1: SWG + SLW 
+  F1: SW(G + L) 
+
+</div>
+<div class='input'># developmental perspective (D = Lg) and E (page 146)
+intersection(&quot;L~G&quot;, &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
+</div>
+<div class='output'>E1: L~G(SG + LW)
+  I1: LW~G
+
+</div>
+<div class='input'># subnations that exhibit ethic political mobilization (E) but were
+# not hypothesized by any of the three theories (page 147)
+# ~H = ~(~L~W + SW + L~G)
+
+intersection(negate(&quot;~L~W + SW + L~G&quot;), &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
+</div>
+<div class='output'>E1: (GL~S + GL~W + ~L~SW)(SG + LW)
+  I1: ~SLWG + SL~WG
+
+E2: (GL~W + G~SW + ~L~SW)(SG + LW)
+  I2: ~SLWG + SL~WG
+</div>
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>intersection</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

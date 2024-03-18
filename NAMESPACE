@@ -1,0 +1,78 @@
+import(shiny)
+import(venn)
+import(admisc)
+import(declared)
+importFrom("utils", "packageDescription", "capture.output", "data", "loadhistory", "savehistory", "tail")
+importFrom("stats", "glm", "predict", "quasibinomial", "binom.test", "cutree", "dist", "hclust", "na.omit", "dbinom", "setNames")
+importFrom("grDevices", "dev.cur", "dev.new", "dev.list")
+importFrom("graphics", "abline", "axis", "box", "mtext", "par", "title", "text")
+importFrom("methods", "is")
+importFrom("lpSolve", "lp")
+
+useDynLib(QCA, .registration = TRUE)
+
+export(.onAttach,
+    allExpressions,
+    as.panel,
+    calibrate,
+    causalChain,
+    combint,
+    complexity,
+    createMatrix,
+    eqmcc,
+    findmin,
+    findRows,
+    findSubsets,
+    findSupersets,
+    findTh,
+    fuzzyand,
+    fuzzyor,
+    generate,
+    getRow,
+    makeChart,
+    minimize,
+    minimizeLoop,
+    modelFit,
+    pof,
+    pofind,
+    rebuild,
+    removeRedundants,
+    replaceCategories,
+    retention,
+    runGUI,
+    solveChart,
+    superSubset,
+    truthTable,
+    verify.data,
+    verify.dir.exp,
+    verify.minimize,
+    verify.inf.test,
+    verify.qca,
+    verify.mqca,
+    verify.tt,
+    Xplot,
+    XYplot,
+
+    nec,
+    suf,
+    getSolution,
+    rowDominance,
+    sortMatrix,
+    sortVector,
+    writeSolution,
+
+    mvregexp
+)
+
+S3method(print, "QCA_aE")
+S3method(print, "QCA_chain")
+S3method(print, "QCA_findmin")
+S3method(print, "QCA_fuzzy")
+S3method(print, "QCA_loopmin")
+S3method(print, "QCA_min")
+S3method(print, "QCA_modelFit")
+S3method(print, "QCA_panel")
+S3method(print, "QCA_pic")
+S3method(print, "QCA_pof")
+S3method(print, "QCA_sS")
+S3method(print, "QCA_tt")

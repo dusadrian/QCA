@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>QCA package version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+
+&lt;b&gt;Authors&lt;/b&gt;:
+Adrian Dusa
+Department of Sociology
+University of Bucharest
+&lt;a href='mailto:dusa.adrian@unibuc.ro'&gt;dusa.adrian@unibuc.ro&lt;/a&gt;
+
+&lt;b&gt;Maintainer&lt;/b&gt;:
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+
+      </header>
+
+      <h1>
+QCA: A Package for Qualitative Comparative Analysis
+</h1>
+
+<div class="row">
+  <div class="span8">
+
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>The package <b><span class = "pkg">QCA</span></b> contains functions to perform Qualitative
+Comparative Analysis, complemented with a graphical user interface. It implements the comparative
+method as first described by Ragin (1987), and extended by Cronqvist and Berg-Schlosser (2009) and
+Ragin (2000, 2008). QCA is a bridge between the qualitative and quantitative research methodologies,
+making use of the qualitative procedures in a systematic, algorithmic way (therefore increasing the
+&#147;confidence&#148; in the results, as understood by quantitative researchers).</p>
+
+      <p>The Quine-McCluskey minimization algorithms implemented in this package are mathematically
+exact, as described by Dusa (2007b), Dusa (2010), Dusa and Thiem (2015) and Dusa (2017). They all return
+the same, relevant set of prime implicants for <dfn>csQCA</dfn> (binary crisp sets QCA), <dfn>mvQCA</dfn>
+(multi-value QCA) and <dfn>fsQCA</dfn> (fuzzy-sets QCA).</p>
+
+      <p>The package also showcases functionality for other types of QCA like <dfn>tsQCA</dfn>
+(temporal QCA), see Caren and Panofsky (2005), Ragin and Strand (2008), and
+more recently also causal chains similar to those from the package <b><span class = "pkg">cna</span></b>
+(see Ambuehl et all 2015).</p>
+
+      <p>The results of the <b><span class = "pkg">QCA</span></b> package are consistent with
+(and sometimes even better than) the results of the other software packages for QCA, most notably
+<b><span class = "pkg">fs/QCA</span></b> by Ragin and Davey (2014) and <b><span class = "pkg">Tosmana</span></b>
+by Cronqvist and Berg-Schlosser (2009). A comparison of several such software is provided by Thiem and
+Dusa (2013).</p>
+
+    <p>More recent versions bring major improvements and additions, most notably: - a new minimization
+algorithm called CCubes (Consistency Cubes), that is hundreds of times faster than the previous eQMC;
+- conjunctural directional expectations; - extension to categorical data.</p>
+
+    </div>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <table>
+        <tr>
+          <td>
+            Package:
+          </td>
+          <td>
+            QCA
+          </td>
+        </tr>
+        <tr>
+          <td>
+            Version:
+          </td>
+          <td>
+            3.22.1
+          </td>
+        </tr>
+        <tr>
+          <td>
+            Date:
+          </td>
+          <td>
+            2024-03-18
+          </td>
+        </tr>
+        <tr>
+          <td>
+            License:
+          </td>
+          <td>
+            GPL (>= 3)
+          </td>
+        </tr>
+      </table>
+
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Ambuehl, M. et all (2015) <em>A Package for Coincidence Analysis (CNA),
+R Package Version 1.0-3 [Computer Program]</em>
+URL: <a href = 'https://cran.r-project.org/package=cna'>https://cran.r-project.org/package=cna</a>.</p>
+
+      <p>Caren, N.; Panofsky, A. (2005) &#147;TQCA: A Technique for Adding
+Temporality to Qualitative Comparative Analysis.&#148;
+<em>Sociological Methods & Research</em> vol.34, no.2, pp.147-172.</p>
+
+      <p>Cronqvist, L. (2011) <em>Tosmana: Tool for Small-N Analysis, Version 1.3.2.0
+[Computer Program]</em>. Trier: University of Trier.</p>
+
+      <p>Dusa, A. (2007a) &#147;User manual for the QCA(GUI) package in R&#148;.
+<em>Journal of Business Research</em> vol.60, no.5, pp.576-586.</p>
+
+      <p>Dusa, A. (2007b) <em>Enhancing Quine-McCluskey</em>. WP 2007-49, COMPASSS.
+URL: <a href = 'http://www.compasss.org/wpseries/Dusa2007b.pdf'>http://www.compasss.org/wpseries/Dusa2007b.pdf</a>.</p>
+
+      <p>Dusa, A. (2010) &#147;A Mathematical Approach to the Boolean Minimization
+Problem.&#148; <em>Quality & Quantity</em> vol.44, no.1, pp.99-113.</p>
+
+      <p>Dusa, A. (2017) &#147;Consistency Cubes: A Fast, Efficient Method for Boolean
+Minimization.&#148; unpublished working paper on
+<a href = 'https://www.researchgate.net/profile/Adrian_Dusa'>ResearchGate</a>, DOI:
+<a href = 'https://doi.org/10.13140/RG.2.2.36359.19361/4'>RG.2.2.36359.19361/4</a></p>
+
+      <p>Dusa, A.; Thiem, A. (2015) &#147;Enhancing the Minimization of Boolean and
+Multivalue Output Functions With eQMC&#148; <em>Journal of Mathematical Sociology</em>
+vol.39, no.2, pp.92-108.</p>
+
+      <p>Ragin, C.C. (1987) <em>The Comparative Method: Moving beyond Qualitative and
+Quantitative Strategies</em>. Berkeley: University of California Press.</p>
+
+      <p>Ragin, C.C. (2000) <em>Fuzzy-Set Social Science</em>. Chicago: University of
+Chicago Press.</p>
+
+      <p>Ragin, C.C. (2008) <em>Redesigning Social Inquiry: Fuzzy Sets and Beyond</em>.
+Chicago: University of Chicago Press.</p>
+
+      <p>Ragin, C.C.; Strand, S.I. (2008) &#147;Using Qualitative Comparative
+Analysis to Study Causal Order: Comment on Caren and Panofsky (2005)&#148;.
+<em>Sociological Methods & Research</em> vol.36, no.4, pp.431-441.</p>
+
+      <p>Ragin, C.C.; Davey, S. (2014) <em>fs/QCA: Fuzzy-Set/Qualitative
+Comparative Analysis, Version 2.5 [Computer Program]</em>.
+Irvine: Department of Sociology, University of California.</p>
+
+      <p>Thiem, A.; Dusa, A. (2013) &#147;Boolean Minimization in Social
+Science Research: A Review of Current Software for Qualitative Comparative
+Analysis (QCA).&#148; <em>Social Science Computer Review</em> vol.31, no.4, pp.505-521.</p>
+
+    </div>
+      </div>
+  <div class="span4">
+
+
+    <h2>Author</h2>
+
+
+Adrian Dușa<br>
+Department of Sociology<br>
+University of Bucharest<br>
+<a href='mailto:dusa.adrian@unibuc.ro'>dusa.adrian@unibuc.ro</a><br>
+<br>
+<b>Maintainer</b>:<br>
+Adrian Dușa
+
+
+  </div>
+</div>
+
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

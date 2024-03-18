@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>retention. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Compute the retention probability of a csQCA solution</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function computes the retention probability for a csQCA solution, under various
+perturbation scenarios. It only works with  bivalent crisp-set data, containing the
+binary values 0 or 1.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>retention(data, outcome = "", conditions = "", type = "corruption",
+          dependent = TRUE, n.cut = 1, incl.cut = 1, p.pert = 0.5, n.pert = 1)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A dataset of bivalent crisp-set factors.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>outcome</code></b></td>
+            <td></td><td></td><td></td>
+            <td>String, the name of the outcome.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>conditions</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing the condition variables' names,
+        separated by commas.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>type</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Simulate corruptions of values in the conditions (<b><code>"corruption"</code></b>),
+          or cases deleted entirely (<b><code>"deletion"</code></b>).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>dependent</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, if <b><code>TRUE</code></b> indicating DPA - Dependent Perturbations
+        Assumption and if <b><code>FALSE</code></b> indicating IPA - Independent
+        Perturbations Assumption.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>n.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The minimum number of cases for a causal combination with a set
+        membership score above 0.5, for an output function value of "0" or "1".</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>incl.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The minimum sufficiency inclusion score for an output function 
+        value of "1".</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>p.pert</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Probability of perturbation under independent (IPA) assumption.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>n.pert</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Number of perturbations under dependent (DPA) assumption.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p></p>
+  
+      <p>The argument <b><code>data</code></b> requires a suitable data set, in the form of a data frame.
+with the following structure: values of 0 and 1 for bivalent crisp-set variables.</p>
+  
+      <p>The argument <b><code>outcome</code></b> specifies the outcome to be explained, in upper-case
+notation (e.g. <b><code>X</code></b>).</p>
+  
+      <p>The argument <b><code>conditions</code></b> specifies the names of the condition variables.
+If omitted, all variables in <b><code>data</code></b> are used except <b><code>outcome</code></b>.</p>
+  
+      <p>The argument <b><code>type</code></b> controls which type of perturbations should be simulated
+to calculate the retention probability.
+When <b><code>type = "corruption"</code></b>, it simulates changes of values in the conditions
+(values of 0 become 1, and values of 1 become 0). When <b><code>type = "deletion"</code></b>,
+it calculates the probability of retaining the same solution if a number of cases are
+deleted from the original data.</p>
+  
+      <p>The argument <b><code>dependent</code></b> is a logical which choses between two categories of
+assumptions. If <b><code>dependent = TRUE</code></b> (the default) it indicates DPA - Dependent
+Perturbations Assumption, when perturbations depend on each other and are tied to a fixed number of cases, ex-ante
+(see Thiem, Spohel and Dusa, 2016).
+If <b><code>dependent = FALSE</code></b>, it indicates IPA - Independent Perturbations Assumption, when
+perturbations are assumed to occur independently of each other.</p>
+  
+      <p>The argument <b><code>n.cut</code></b> is one of the factors that decide which configurations
+are coded as logical remainders or not, in conjunction with argument <b><code>incl.cut</code></b>.
+Those configurations that contain fewer than <b><code>n.cut</code></b> cases with membership scores
+above 0.5 are coded as logical remainders (<b><code>OUT = "?"</code></b>). If the number of such
+cases is at least <b><code>n.cut</code></b>, configurations with an inclusion score of at least
+<b><code>incl.cut</code></b> are coded positive (<b><code>OUT = "1"</code></b>), while configurations with an
+inclusion score below <b><code>incl.cut</code></b> are coded negative (<b><code>OUT = "0"</code></b>).</p>
+  
+      <p>The argument <b><code>p.pert</code></b> specifies the probability of perturbation under the
+IPA - independent perturbations assumption (when<b><code>dependent = FALSE</code></b>).</p>
+  
+      <p>The argument <b><code>n.pert</code></b> specifies the number of perturbations under the
+DPA - dependent perturbations assumption (when<b><code>dependent = TRUE</code></b>). At least one
+perturbation is needed to possibly change a csQCA solution, otherwise the solution will remain the
+same (retention equal to 100%) if zero perturbations occur under this argument.</p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p></p>
+  
+      <p>Thiem, A.; Spoehel, R.; Dusa, A. (2015) &#147;Replication Package for:
+Enhancing Sensitivity Diagnostics for Qualitative Comparative Analysis: A Combinatorial
+Approach&#148;, Harvard Dataverse, V1.
+DOI: <a href = 'http://doi.org/10.7910/DVN/QE27H9'>http://doi.org/10.7910/DVN/QE27H9</a></p>
+  
+      <p>Thiem, A.; Spoehel, R.; Dusa, A. (2016) &#147;Enhancing Sensitivity
+Diagnostics for Qualitative Comparative Analysis: A Combinatorial Approach.&#148;
+<em>Political Analysis</em> vol.24, no.1, pp.104-120.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# the replication data, see Thiem, Spohel and Dusa (2015)
+
+dat &lt;- data.frame(matrix(c(
+    rep(1, 25), rep(0, 20), rep(c(0, 0, 1, 0, 0), 3),
+    0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, rep(1, 7), 0, 1),
+    nrow = 16, byrow = TRUE, dimnames = list(c(
+    &quot;AT&quot;, &quot;DK&quot;, &quot;FI&quot;, &quot;NO&quot;, &quot;SE&quot;, &quot;AU&quot;, &quot;CA&quot;, &quot;FR&quot;,
+    &quot;US&quot;, &quot;DE&quot;, &quot;NL&quot;, &quot;CH&quot;, &quot;JP&quot;, &quot;NZ&quot;, &quot;IE&quot;, &quot;BE&quot;),
+    c(&quot;P&quot;, &quot;U&quot;, &quot;C&quot;, &quot;S&quot;, &quot;W&quot;))
+))
+
+
+# calculate the retention probability, for 2.5% probability of data corruption
+# under the IPA - independent perturbation assuption
+retention(dat, outcome = &quot;W&quot;, type = &quot;corruption&quot;, dep = FALSE,
+       p.pert = 0.025, incl.cut = 1)
+</div>
+<div class='output'>[1] 0.7962228
+</div>
+<div class='input'>
+# the probability that a csQCA solution will change
+1 - retention(dat, outcome = &quot;W&quot;, type = &quot;corruption&quot;, dep = FALSE,
+       p.pert = 0.025, incl.cut = 1)
+</div>
+<div class='output'>[1] 0.2037772
+</div>
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>retention</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

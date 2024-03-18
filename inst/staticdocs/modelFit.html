@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>modelFit. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Theory evaluation</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>Function to enable theory evaluation, as introduced by Ragin (1987, p.118) 
+and extended Schneider & Wageman (2012, p.295), by producing parameters of fit
+for all possible intersections between a given theoretical statement (a SOP
+expresison) and the solutions found by function
+<b><code><a href='minimize.html'>minimize()</a></code></b>.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>modelFit(model, theory)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>model</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A minimization object of class <code>&quot;QCA_min&quot;</code>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>theory</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Character, a SOP expression.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+  
+      <p>There are in fact four intersections: presence - presence, presence - absence,
+absence - presence and absence - absence, where by &quot;absence&quot; is actually
+meant a negation of an expression using the function
+<b><code><a href='negate.html'>negate()</a></code></b>.</p>
+
+      <p>When multiple models exist, all of them are automatically detected, negated and
+intersection with the theory. Intersections and parameters of fit are going to
+be produced using a single theoretical expression.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+<p><dl>
+A list containing objects of class <code>&quot;QCA_pof&quot;</code> with the parameters of fit. For a
+single theoretical expression and a single model, the object is a simple
+<code>&quot;QCA_pof&quot;</code> object.
+</dl></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Ragin, C.C. (1987) <em>The Comparative Method: Moving beyond Qualitative 
+and Quantitative Strategies</em>. Berkeley: University of California Press.</p>
+
+      <p>Schneider, C.Q.; Wagemann, C. (2012) <em>Set-Theoretic Methods 
+for the Social Sciences: A Guide to Qualitative Comparative Analysis (QCA)</em>.
+Berkeley: University of California Press.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+<pre class="examples">
+
+<div class='input'># Lipset fuzzy version data
+
+ttLF &lt;- truthTable(LF, outcome = &quot;SURV&quot;, incl.cut = 0.8)
+
+
+# parsimonious solution
+pLF &lt;- minimize(ttLF, include = &quot;?&quot;)
+
+modelFit(model = pLF, theory = &quot;DEV*STB&quot;)
+</div>
+<div class='output'>
+model:          DEV*~IND + URB*STB
+theory:         DEV*STB
+model*theory:   DEV*URB*STB + DEV*~IND*STB
+model*~theory:  ~DEV*URB*STB + DEV*~IND*~STB
+~model*theory:  DEV*~URB*IND*STB
+~model*~theory: ~DEV*~URB + ~DEV*~STB + IND*~STB
+
+                   inclS   PRI   covS  
+-------------------------------------- 
+1  DEV*~IND        0.815  0.721  0.284 
+2  URB*STB         0.874  0.845  0.520 
+3  model           0.850  0.819  0.714 
+4  theory          0.869  0.848  0.824 
+5  model*theory    0.866  0.839  0.660 
+6  model*~theory   0.688  0.422  0.191 
+7  ~model*theory   0.709  0.634  0.237 
+8  ~model*~theory  0.234  0.057  0.255 
+-------------------------------------- 
+</div>
+
+<div class='input'>
+
+# hypothetical exploration of intermediate solutions
+iLF &lt;- minimize(ttLF, include = &quot;?&quot;, dir.exp = &quot;1,0,0,0,0&quot;)
+
+modelFit(iLF, &quot;DEV*STB&quot;)
+</div>
+<div class='output'>
+M-C1P1
+model:          DEV*URB*STB + DEV*~URB*~IND
+theory:         DEV*STB
+model*theory:   DEV*URB*STB + DEV*~URB*~IND*STB
+model*~theory:  DEV*~URB*~IND*~STB
+~model*theory:  DEV*~URB*IND*STB
+~model*~theory: ~DEV + URB*~STB + ~URB*IND*~STB
+
+                   inclS   PRI   covS  
+-------------------------------------- 
+1  DEV*URB*STB     0.901  0.879  0.468 
+2  DEV*~URB*~IND   0.806  0.719  0.268 
+3  model           0.866  0.839  0.662 
+4  theory          0.869  0.848  0.824 
+5  model*theory    0.866  0.839  0.660 
+6  model*~theory   0.671  0.311  0.122 
+7  ~model*theory   0.709  0.634  0.237 
+8  ~model*~theory  0.254  0.091  0.295 
+--------------------------------------
+</div>
+
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>modelFit</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    <h2>See also</h2>
+<b><code><a href='intersection.html'>intersection</a></code></b>,
+<b><code><a href='negate.html'>negate</a></code></b>
+<b><code><a href='pof.html'>pof</a></code></b>
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

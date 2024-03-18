@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>calibrate. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Calibrate raw data to crisp or fuzzy sets</h1>
+
+<div class="row">
+  <div class="span8">
+  
+  <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function transforms (calibrates) the raw data to either crisp or fuzzy sets
+values, using the <dfn>direct</dfn> method of calibration.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>calibrate(x, type = &quot;fuzzy&quot;, method = &quot;direct&quot;, thresholds = NA,
+          logistic = TRUE, idm = 0.95, ecdf = FALSE, below = 1, above = 1, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A numerical causal condition.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>type</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Calibration type, either <b><code>"crisp"</code></b> or <b><code>"fuzzy"</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>method</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Calibration method, either <b><code>"direct"</code></b>, <b><code>"indirect"</code></b>,
+            or <b><code>"TFR"</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>thresholds</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector of (named) thresholds.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>logistic</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Calibrate to fuzzy sets using the logistic function.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>idm</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The set inclusion degree of membership for the logistic function.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>ecdf</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Calibrate to fuzzy sets using the empirical cumulative distribution 
+        function of the raw data.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>below</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numeric (non-negative), determines the shape below crossover.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>above</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numeric (non-negative), determines the shape above crossover.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Additional parameters, mainly for backwards compatibility.</td>
+        </tr>
+    </table>
+    
+    
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>Calibration is a transformational process from raw numerical data (interval or
+ratio level of measurement) to set membership scores, based on a certain number of
+qualitative anchors.</p>
+  
+      <p>When <b><code>type = "crisp"</code></b>, the process is similar to recoding the original
+values to a number of categories defined by the number of thresholds. For one
+threshold, the calibration produces two categories (intervals): 0 if below, 1 if above.
+For two thresholds, the calibration produces three categories: 0 if below the first threshold,
+1 if in the interval between the thresholds and 2 if above the second threshold etc.</p>
+  
+      <p>When <b><code>type = "fuzzy"</code></b>, calibration produces fuzzy set membership scores, using
+three anchors for the increasing or decreasing <dfn>s-shaped</dfn> distributions (including
+the logistic function), and six anchors for the increasing or decreasing <dfn>bell-shaped</dfn>
+distributions.</p>
+  
+      <p>The argument <b><code>thresholds</code></b> can be specified either as a simple numeric vector, or as a
+named numeric vector. If used as a named vector, for the first category of <dfn>s-shaped</dfn>
+distributions, the names of the thresholds should be:</p>
+  
+      <p>
+      <table>
+        <tr>
+            <td> <b><code>"e"</code></b> </td>
+            <td> for the full set exclusion</td>
+        </tr>
+        <tr>
+            <td> <b><code>"c"</code></b> </td>
+            <td> for the set crossover</td>
+        </tr>
+        <tr>
+            <td> <b><code>"i"</code></b> </td>
+            <td> for the full set inclusion</td>
+        </tr>
+      </table>
+      </p>
+  
+      <p>For the second category of <dfn>bell-shaped</dfn> distributions, the names of the thresholds
+should be:</p>
+  
+      <p>
+        <table>
+            <tr>
+                <td> <b><code>"e1"</code></b> </td>
+                <td> for the first (left) threshold for full set exclusion</td>
+            </tr>
+            <tr>
+                <td> <b><code>"c1"</code></b> </td>
+                <td> for the first (left) threshold for set crossover</td>
+            </tr>
+            <tr>
+                <td> <b><code>"i1"</code></b> </td>
+                <td> for the first (left) threshold for full set inclusion</td>
+            </tr>
+            <tr>
+                <td> <b><code>"i2"</code></b> </td>
+                <td> for the second (right) threshold for full set inclusion</td>
+            </tr>
+            <tr>
+                <td> <b><code>"c2"</code></b> </td>
+                <td> for the second (right) threshold for set crossover</td>
+            </tr>
+            <tr>
+                <td> <b><code>"e2"</code></b> </td>
+                <td> for the second (right) threshold for full set exclusion</td>
+            </tr>
+        </table>
+      </p>
+  
+      <p>If used as a simple numerical vector, the order of the values matter.</p>
+  
+      <p>If <b><code>e</code></b> $<$ <b><code>c</code></b> $<$ <b><code>i</code></b>, then the membership 
+function is increasing from <b><code>e</code></b> to <b><code>i</code></b>. If <b><code>i</code></b> $<$ 
+<b><code>c</code></b> $<$ <b><code>e</code></b>, then the membership function is decreasing from 
+<b><code>i</code></b> to <b><code>e</code></b>.</p>
+  
+      <p>Same for the <dfn>bell-shaped</dfn> distribution, if <b><code>e1</code></b> $<$ <b><code>c1</code></b>
+$<$ <b><code>i1</code></b> $\le$ <b><code>i2</code></b> $<$ <b><code>c2</code></b> $<$
+<b><code>e2</code></b>, then the membership function is first increasing from <b><code>e1</code></b>
+to <b><code>i1</code></b>, then flat between <b><code>i1</code></b> and  <b><code>i2</code></b>, and then
+decreasing from <b><code>i2</code></b> to <b><code>e2</code></b>. In contrast, if <b><code>i1</code></b>
+$<$ <b><code>c1</code></b> $<$ <b><code>e1</code></b> $\le$ <b><code>e2</code></b> $<$
+<b><code>c2</code></b> $<$ <b><code>i1</code></b>, then the membership function is first decreasing
+from <b><code>i1</code></b> to <b><code>e1</code></b>, then flat between <b><code>e1</code></b> and 
+<b><code>e2</code></b>, and finally increasing from <b><code>e2</code></b> to <b><code>i2</code></b>.</p>
+  
+      <p>When <b><code>logistic = TRUE</code></b> (the default), the argument <b><code>idm</code></b> specifies the
+inclusion degree of membership for the logistic function. If <b><code>logistic = FALSE</code></b>, the
+function returns linear <dfn>s-shaped</dfn> or <dfn>bell-shaped</dfn> distributions (curved using the
+arguments <b><code>below</code></b> and <b><code>above</code></b>), unless activating the argument
+<b><code>ecdf</code></b>.</p>
+  
+      <p>If there is no prior knowledge on the shape of the distribution, the argument <b><code>ecdf</code></b>
+asks the computer to determine the underlying distribution of the empirical, observed points,
+and the calibrated measures are found along that distribution.</p>
+  
+      <p>Both <b><code>logistic</code></b> and <b><code>ecdf</code></b> arguments can be used only for <dfn>s-shaped</dfn>
+distributions (using 3 thresholds), and they are mutually exclusive.</p>
+  
+      <p>The parameters <b><code>below</code></b> and <b><code>above</code></b> (active only when both
+<b><code>logistic = TRUE</code></b> and <b><code>ecdf</code></b> are deactivated, establish the degree of
+concentration and  dilation (convex or concave shape) between the threshold and crossover:</p>
+      
+      <p>
+        <table>
+            <tr>
+                <td> <b><code>0 < below < 1</code></b> </td>
+                <td> dilates in a concave shape below the crossover</td>
+            </tr>
+            <tr>
+                <td> <b><code>below = 1</code></b> </td>
+                <td> produces a linear shape (neither convex, nor concave)</td>
+            </tr>
+            <tr>
+                <td> <b><code>below > 1</code></b> </td>
+                <td> concentrates in a convex shape below the crossover</td>
+            </tr>
+            <tr>
+                <td> <b><code>0 < above < 1</code></b> </td>
+                <td> dilates in a concave shape above the crossover</td>
+            </tr>
+            <tr>
+                <td> <b><code>above = 1</code></b> </td>
+                <td> produces a linear shape (neither convex, nor concave)</td>
+            </tr>
+            <tr>
+                <td> <b><code>above > 1</code></b> </td>
+                <td> concentrates in a convex shape above the crossover</td>
+            </tr>
+        </table>
+      </p>
+  
+      <p>Usually, <b><code>below</code></b> and <b><code>above</code></b> have equal values, unless specific reasons
+exist to make them different.</p>
+  
+      <p>For the <b><code>type = "fuzzy"</code></b> it is also possible to use the <b><code>"indirect"</code></b>
+method to calibrate the data, using a procedure first introduced by Ragin (2008). The indirect method
+assumes a vector of thresholds to cut the original data into equal intervals, then it applies
+a (quasi)binomial logistic regression with a fractional polynomial equation.
+      </p>
+  
+<p>The results are also fuzzy between 0 and 1, but the method is entirely different: it has no anchors
+(specific to the direct method), and it doesn't need to specify a calibration function to calculate
+the scores with.
+</p>
+  
+<p>The third method applied to fuzzy calibrations is called <b><code>type = "TFR"</code></b> and calibrates
+categorical data (such as Likert type response scales) to fuzzy values using the Totally Fuzzy and Relative
+method (Chelli and Lemmi, 1995).
+</p>
+
+      <p></p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A numeric vector of set membership scores, either crisp (starting from 0 with increments of 1),
+or fuzzy numeric values between 0 and 1.
+</dl></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Thiem, A.; Dusa, A. (2013) <em>Qualitative Comparative Analysis with R: 
+A User's Guide</em>. New York: Springer.</p>
+  
+      <p>Thiem, A. (2014) &#147;Membership Function Sensitivity of Descriptive Statistics 
+in Fuzzy-Set Relations.&#148; <em>International Journal of Social Research Methodology</em> 
+vol.17, no.6, pp.625-642.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# generate heights for 100 people
+# with an average of 175cm and a standard deviation of 10cm
+set.seed(12345)
+x &lt;- rnorm(n = 100, mean = 175, sd = 10)
+
+
+cx &lt;- calibrate(x, type = &quot;crisp&quot;, thresholds = 175)
+plot(x, cx, main=&quot;Binary crisp set using 1 threshold&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;, yaxt=&quot;n&quot;)
+axis(2, at = 0:1)
+</div>
+
+<p><img src='img/calibrate-3.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+cx &lt;- calibrate(x, type = &quot;crisp&quot;, thresholds = c(170, 180))
+plot(x, cx, main=&quot;3 value crisp set using 2 thresholds&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;, yaxt=&quot;n&quot;)
+axis(2, at = 0:2)
+</div>
+<p><img src='img/calibrate-6.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# calibrate to an increasing, s-shaped fuzzy-set
+cx &lt;- calibrate(x, thresholds = &quot;e=165, c=175, i=185&quot;)
+plot(x, cx, main = &quot;Membership scores in the set of tall people&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-8.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+     
+# calibrate to a decreasing, s-shaped fuzzy-set
+cx &lt;- calibrate(x, thresholds = &quot;i=165, c=175, e=185&quot;)
+plot(x, cx, main = &quot;Membership scores in the set of short people&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-10.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# when not using the logistic function, linear increase
+cx &lt;- calibrate(x, thresholds = &quot;e=165, c=175, i=185&quot;, logistic = FALSE)
+plot(x, cx, main = &quot;Membership scores in the set of tall people&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-12.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# tweaking the parameters &quot;below&quot; and &quot;above&quot; the crossover,
+# at value 3.5 approximates a logistic distribution, when e=155 and i=195
+cx &lt;- calibrate(x, thresholds = &quot;e=155, c=175, i=195&quot;,
+      logistic = FALSE, below = 3.5, above = 3.5)
+plot(x, cx, main = &quot;Membership scores in the set of tall people&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-14.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# calibrate to a bell-shaped fuzzy set
+cx &lt;- calibrate(x, thresholds = &quot;e1=155, c1=165, i1=175, i2=175, c2=185, e2=195&quot;,
+      below = 3, above = 3)
+plot(x, cx, main = &quot;Membership scores in the set of average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-16.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# calibrate to an inverse bell-shaped fuzzy set
+cx &lt;- calibrate(x, thresholds = &quot;i1=155, c1=165, e1=175, e2=175, c2=185, i2=195&quot;,
+      below = 3, above = 3)
+plot(x, cx, main = &quot;Membership scores in the set of non-average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-18.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# the default values of &quot;below&quot; and &quot;above&quot; will produce a triangular shape
+cx &lt;- calibrate(x, thresholds = &quot;e1=155, c1=165, i1=175, i2=175, c2=185, e2=195&quot;)
+plot(x, cx, main = &quot;Membership scores in the set of average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-20.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# different thresholds to produce a linear trapezoidal shape
+cx &lt;- calibrate(x, thresholds = &quot;e1=156, c1=164, i1=172, i2=179, c2=187, e2=195&quot;)
+plot(x, cx, main = &quot;Membership scores in the set of average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-21.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# larger values of above and below will increase membership in or out of the set
+cx &lt;- calibrate(x, thresholds = &quot;e1=155, c1=165, i1=175, i2=175, c2=185, e2=195&quot;,
+      below = 10, above = 10)
+plot(x, cx, main = &quot;Membership scores in the set of average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-22.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+
+# while extremely large values will produce virtually crisp results
+cx &lt;- calibrate(x, thresholds = &quot;e1=155, c1=165, i1=175, i2=175, c2=185, e2=195&quot;,
+      below = 10000, above = 10000)
+plot(x, cx, main = &quot;Binary crisp scores in the set of average height&quot;,
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;, yaxt=&quot;n&quot;)
+axis(2, at = 0:1)
+abline(v = c(165, 185), col = &quot;red&quot;, lty = 2)
+</div>
+<p><img src='img/calibrate-26.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# check if crisp
+cx
+</div>
+<div class='output'>  [1] 1 1 1 1 1 0 1 1 1 1 1 0 1 1 1 1 1 1 0 1 1 0 1 0 0 0 1 1 1 1 1 0 0 0 1 1 1 0 0 1 0
+ [42] 0 0 1 1 0 0 1 1 0 1 0 1 1 1 1 1 1 0 0 1 0 1 0 1 0 1 0 1 0 1 1 0 0 0 1 1 1 1 0 1 0
+ [83] 1 0 1 0 1 1 1 1 1 1 0 1 1 1 1 0 1 1
+</div>
+<div class='input'>
+
+# using the empirical cumulative distribution function
+# require manually setting logistic to FALSE
+cx &lt;- calibrate(x, thresholds = &quot;e=155, c=175, i=195&quot;, logistic = FALSE,
+      ecdf = TRUE)
+plot(x, cx, main = &quot;Membership scores in the set of tall people&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+<p><img src='img/calibrate-30.svg' alt='' width='400' height='400' /></p>
+
+<div class='input'>
+
+## the indirect method, per capita income data from Ragin (2008)
+inc &lt;- c(40110, 34400, 25200, 24920, 20060, 17090, 15320, 13680, 11720,
+         11290, 10940, 9800, 7470, 4670, 4100, 4070, 3740, 3690, 3590,
+         2980, 1000, 650, 450, 110)
+
+cinc &lt;- calibrate(inc, method = &quot;indirect&quot;,
+        thresholds = &quot;1000, 4000, 5000, 10000, 20000&quot;)
+
+plot(inc, cinc, main = &quot;Membership scores in the set of high income&quot;, 
+     xlab = &quot;Raw data&quot;, ylab = &quot;Calibrated data&quot;)
+</div>
+
+<p><img src='img/calibrate-31.svg' alt='' width='400' height='400' /></p>
+
+
+<div class='input'>
+set.seed(12345)
+values <- sample(1:7, 100, replace = TRUE)
+
+TFR <- calibrate(values, method = "TFR")
+
+table(round(TFR, 3))
+</div>
+<div class='output'></div>
+    0 0.151 0.314 0.477 0.605 0.814     1 
+   14    13    14    14    11    18    16
+</div>
+<div class="span4">
+  <!-- <ul>
+    <li>factorize</li>
+  </ul>
+  <ul>
+    <li>functions</li>
+  </ul> -->
+  
+  <h2>Author</h2>
+  
+Adrian Dusa
+  
+</div>
+</div>
+    
+    <footer>
+    <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+    </footer>
+  </div>
+</body>
+</html>

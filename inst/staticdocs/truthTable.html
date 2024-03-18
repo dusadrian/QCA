@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>truthTable. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+
+      </header>
+
+      <h1>Create a truth table</h1>
+
+<div class="row">
+  <div class="span8">
+
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>Function to create a truth table from all types of calibrated data (binary
+crisp, multi-value crisp and fuzzy). For fuzzy data, an improved verson of Ragin's (2008)
+procedure is applied to assign cases to the vector space corners (the truth table rows,
+combinations of causal conditions).</p>
+
+    </div>
+
+    <h2>Usage</h2>
+<pre><div>truthTable(data, outcome = "", conditions = "", incl.cut = 1, n.cut = 1, pri.cut = 0,
+           exclude = NULL, complete = FALSE, use.letters = FALSE, use.labels = FALSE,
+           show.cases = FALSE, dcc = FALSE, sort.by = "", inf.test = "", ...)</div></pre>
+
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A data frame containing calibrated causal conditions and an outcome</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>outcome</code></b></td>
+            <td></td><td></td><td></td>
+            <td>String, the name of the outcome.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>conditions</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A single string containing the conditions' (columns) names
+        separated by commas, or a character vector of conditions' names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>incl.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The inclusion cutoff(s): either a single value for the presence of the
+        output, or a vector of length 2, the second for the absence of the output.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>n.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The minimum number of cases under which a truth table row is
+        declared as a remainder.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>pri.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The minimal score for the <b><code>PRI</code></b> - proportional reduction in
+        inconsistency, under which a truth table row is declared as negative.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>exclude</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector of row numbers from the truth table, to code as negative output configurations.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>complete</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, print complete truth table.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>use.letters</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, use letters instead of causal conditions' names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>use.labels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, use category labels if present.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>show.cases</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, print case names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>dcc</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, if <b><code>show.cases = TRUE</code></b>, the cases being displayed
+                are the deviant cases consistency in kind.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>sort.by</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Sort the truth table according to various columns.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>inf.test</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Specifies the statistical inference test to be performed
+        (currently only <b><code>"binom"</code></b>) and the critical significance level. It can be either
+        a vector of length 2, or a single string containing both, separated by a comma.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments (mainly for backward compatibility).</td>
+        </tr>
+    </table>
+
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The <b><code>data</code></b> should always be provided as a data frame, with calibrated columns.</p>
+
+      <p>Calibration can be either crisp, with 2 or more values starting from 0, or fuzzy with
+continous scores from 0 to 1. Raw data containing relative frequencies can
+also be continous between 0 and 1, but these are not calibrated, fuzzy data.</p>
+
+      <p>Some columns can contain the placeholder <b><code>"-"</code></b> indicating a &#147;don't care&#148;,
+which is used to indicate the temporal order between other columns in tQCA. These
+special columns are not causal conditions, hence no parameters of fit will be
+calculated for them.</p>
+
+      <p>The argument <b><code>outcome</code></b> specifies the column name to be explained.
+If the outcome is a multivalue column, it can be specified in curly bracket notation,
+indicating the value to be explained (the others being automatically converted to
+zero).</p>
+
+      <p>The outcome can be negated using a tilde operator <b><code>~X</code></b>. The logical argument
+<b><code>neg.out</code></b> is now deprecated, but still backwards compatible. Replaced by the tilde
+in front of the outcome name, it controls whether <b><code>outcome</code></b> is to be explained or
+its negation. Note that using both <b><code>neg.out = TRUE</code></b> and a tilde <b><code>~</code></b>
+in the outcome name cancel each other out.</p>
+
+      <p>If the outcome column is multi-value, the argument <b><code>outcome</code></b> should use the standard
+curly-bracket notation <b><code>X{value}</code></b>. Multiple values are allowed, separated by a comma
+(for example <b><code>X{1,2}</code></b>). Negation of the outcome can also be performed using the tilde
+<b><code>~</code></b> operator, for example <b><code>~X{1,2}</code></b>, which is interpreted as:
+"all values in X except 1 and 2" and it becomes the new outcome to be explained.</p>
+
+      <p>The argument <b><code>conditions</code></b> specifies the causal conditions' names among the other
+columns in the data. When this argument is not specified, all other columns except for
+the outcome are taken as causal conditions.</p>
+
+      <p>A good practice advice is to specify both <b><code>outcome</code></b> and <b><code>conditions</code></b>
+as upper case letters. It is possible, in a next version, to negate outcomes using lower case
+letters, situation in which it really does matter how the outcome and/or conditions are
+specified.</p>
+
+      <p>The argument <b><code>incl.cut</code></b> replaces the (deprecated, but still backwards compatible)
+former arguments <b><code>incl.cut1</code></b> and <b><code>incl.cut0</code></b>. Most of the analyses use
+the inclusion cutoff for the presence of the output (code <b><code>"1"</code></b>). When users need
+both inclusion cutoffs (see below), <b><code>incl.cut</code></b> can be specified as a vector of
+length 2, in the form: <b><code>c(ic1, ic0)</code></b> where:</p>
+
+      <p><table><tr><td>
+<b><code>ic1</code></b> </td>
+<td> is the inclusion cutoff for the presence of the output,</td>
+</tr><tr><td></td>
+<td> a minimum sufficiency inclusion score above which the output
+                       value is coded with <b><code>"1"</code></b>.</td>
+</tr><tr><td>
+<b><code>ic0</code></b> </td>
+<td> is the inclusion cutoff for the absence of the output,</td>
+</tr></table></p>
+
+      <p>If not specifically declared, the argument <b><code>ic0</code></b> is automatically set equal to
+<b><code>ic1</code></b>, but otherwise <b><code>ic0</code></b> should always be lower than <b><code>ic1</code></b>.</p>
+
+      <p>Using these two cutoffs, the observed combinations are coded with:</p>
+
+      <p><table><tr><td>
+<b><code>"1"</code></b> </td>
+<td> if they have an inclusion score above <b><code>ic1</code></b></td>
+</tr><tr><td>
+<b><code>"C"</code></b> </td>
+<td> if they have an inclusion score below <b><code>ic1</code></b> and above <b><code>ic0</code></b> (contradiction)</td>
+</tr></table></p>
+
+      <p>The argument <b><code>n.cut</code></b> specifies the frequency threshold under which a truth
+table row is coded as a remainder, irrespective of its inclusion score.</p>
+
+      <p>When argument <b><code>show.cases</code></b> is set to <b><code>TRUE</code></b>, the case names will be
+printed at their corresponding row in the truth table. The resulting object always contains
+the cases for each causal combination, even if not printed on the screen (the print function
+can later be used to print them).</p>
+
+      <p>The <b><code>sort.by</code></b> argument orders all configurations by any of the columns
+present in the truth table. Typically, sorting occurs by their outcome value,
+and/or by their inclusion score, and/or by their frequency, in any order.</p>
+
+      <p>Sorting decreasingly (the default) or increasingly can be specified adding the signs
+<b><code>-</code></b> or <b><code>+</code></b> next after the column name in argument
+<b><code>sort.by</code></b> (see examples). Note that <b><code>-</code></b> is redundant because
+it is the default anyways.</p>
+
+    <p>The order specified in this vector is the order in which the configurations will
+be sorted. When sorting based on the OUTput column, remainders will always be sorted last.</p>
+
+      <p>The argument <b><code>use.letters</code></b> controls using the original names of the causal
+conditions, or replace them by single letters in alphabetical order. If the
+causal conditions are already named with single letters, the original letters
+will be used.</p>
+
+      <p>The argument <b><code>inf.test</code></b> combines the inclusion score with a statistical
+inference test, in order to assign values in the output column OUT. For the moment, it
+is only the binomial test, which needs crisp data (it doesn't work with fuzzy sets).
+Following a similar logic as above, for a given (specified) critical significance level,
+the output for a truth table row will be coded as:</p>
+
+      <p><table><tr><td>
+<b><code>"1"</code></b> </td>
+<td> if the true inclusion score is significanly higher than <b><code>ic1</code></b>,</td>
+
+</tr><tr><td>
+<b><code>"C"</code></b> </td>
+<td> contradiction, if the true inclusion score is not significantly higher than <b><code>ic1</code></b></td>
+</tr><tr><td></td>
+<td> but significantly higher than <b><code>ic0</code></b>,</td>
+
+</tr></table></p>
+
+      <p>It should be noted that statistical tests perform well only when the number of cases is large,
+otherwise they are usually not significant. For a low number of cases, depending on the inclusion
+cutoff value(s), it will be harder to code a value of <b><code>"1"</code></b> in the output, and also
+harder to obtain contradictions if the true inclusion is not signficantly higher than <b><code>ic0</code></b>.</p>
+
+      <p>The argument <b><code>exclude</code></b> is used to exclude truth table rows from the
+minimization process, from the positive configurations and/or from the remainders. This
+is achieved by coding those configurations with a value of 0 in the OUTput column (thus
+treating them as if they were observed as negative output configurations).</p>
+
+      <p>The argument <b><code>complete</code></b> controls how to print the table on the screen, either
+complete (when set to <b><code>TRUE</code></b>), or just the observed combinations (default).
+For up to 7 causal conditions, the resulting object will always contain the complete
+truth table, even if it's not printed on the screen. This is useful for multiple reasons:
+researchers like to manually change output values in the truth table (sometimes including
+in this way a remainder, for example), and it is also useful to plot Venn diagrams, each
+truth table row having a correspondent intersection in the diagram.</p>
+
+      <p></p>
+
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+An object of class &#147;tt&#148;, a list containing the following components:</p>
+
+    <p>
+    <table>
+        <tr>
+            <td valign="top"><b><code>tt</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The truth table itself.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>indexes</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The line numbers for the observed causal configurations.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>noflevels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector with the number of values for each causal condition.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>initial.data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The initial data.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>recoded.data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The crisp version of the <b><code>initial.data</code></b>, if fuzzy.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>cases</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The cases for each observed causal configuration.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>options</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The command options used.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>rowsorder</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The order of the rows after sorting, if using <b><code>sort.by</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>minmat</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A membership scores matrix of cases in the observed truth table combinations.</td>
+        </tr>
+    </table>
+    </p>
+
+      <p></dl></p>
+
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Cronqvist, L.; Berg-Schlosser, D. (2009) &#147;Multi-Value QCA (mvQCA)&#148;, in
+Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods. Qualitative
+Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+
+      <p>Dusa, A. (2019) <em>QCA with R. A Comprehensive Resource</em>.
+Springer International Publishing.</p>
+
+      <p>Lipset, S.M. (1959) &#147;Some Social Requisites of Democracy: Economic Development
+and Political Legitimacy&#148;, <em>American Political Science Review</em> vol.53, pp.69-105.</p>
+
+      <p>Ragin, C.C. (1987) <em>The Comparative Method: Moving beyond Qualitative and
+Quantitative Strategies</em>. Berkeley: University of California Press.</p>
+
+      <p>Ragin, C.C. (2008) <em>Redesigning Social Inquiry: Fuzzy Sets and Beyond</em>.
+Chicago: University of Chicago Press.</p>
+
+      <p>Ragin, C.C.; Strand, S.I. (2008) &#147;Using Qualitative Comparative
+Analysis to Study Causal Order: Comment on Caren and Panofsky (2005).&#148;
+<em>Sociological Methods & Research</em> vol.36, no.4, pp.431-441.</p>
+
+      <p>Schneider, C.Q.; Wagemann, C. (2012) <em>Set-Theoretic Methods
+for the Social Sciences: A Guide to Qualitative Comparative Analysis (QCA)</em>.
+Cambridge: Cambridge University Press.</p>
+
+    </div>
+
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'># -----
+# Lipset binary crisp data
+ttLC &lt;- truthTable(LC, &quot;SURV&quot;)
+
+# inspect the truth table
+ttLC
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+22   1   0   1   0   1   1  2  1.000 1.000
+23   1   0   1   1   0   0  1  0.000 0.000
+24   1   0   1   1   1   1  2  1.000 1.000
+31   1   1   1   1   0   0  1  0.000 0.000
+32   1   1   1   1   1   1  4  1.000 1.000
+
+</div>
+<div class='input'>
+# print the cases too, even if not specifically asked for
+print(ttLC, show.cases = TRUE)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI   cases
+ 1   0   0   0   0   0   0  3  0.000 0.000 GR,PT,ES
+ 2   0   0   0   0   1   0  2  0.000 0.000 IT,RO
+ 5   0   0   1   0   0   0  2  0.000 0.000 HU,PL
+ 6   0   0   1   0   1   0  1  0.000 0.000 EE
+22   1   0   1   0   1   1  2  1.000 1.000 FI,IE
+23   1   0   1   1   0   0  1  0.000 0.000 AU
+24   1   0   1   1   1   1  2  1.000 1.000 FR,SE
+31   1   1   1   1   0   0  1  0.000 0.000 DE
+32   1   1   1   1   1   1  4  1.000 1.000 BE,CZ,NL,UK
+
+</div>
+<div class='input'>
+# the printing function also supports the complete version
+print(ttLC, show.cases = TRUE, complete = TRUE)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI   cases
+ 1   0   0   0   0   0   0  3  0.000 0.000 GR,PT,ES
+ 2   0   0   0   0   1   0  2  0.000 0.000 IT,RO
+ 3   0   0   0   1   0   ?  0    -     -
+ 4   0   0   0   1   1   ?  0    -     -
+ 5   0   0   1   0   0   0  2  0.000 0.000 HU,PL
+ 6   0   0   1   0   1   0  1  0.000 0.000 EE
+ 7   0   0   1   1   0   ?  0    -     -
+ 8   0   0   1   1   1   ?  0    -     -
+ 9   0   1   0   0   0   ?  0    -     -
+10   0   1   0   0   1   ?  0    -     -
+11   0   1   0   1   0   ?  0    -     -
+12   0   1   0   1   1   ?  0    -     -
+13   0   1   1   0   0   ?  0    -     -
+14   0   1   1   0   1   ?  0    -     -
+15   0   1   1   1   0   ?  0    -     -
+16   0   1   1   1   1   ?  0    -     -
+17   1   0   0   0   0   ?  0    -     -
+18   1   0   0   0   1   ?  0    -     -
+19   1   0   0   1   0   ?  0    -     -
+20   1   0   0   1   1   ?  0    -     -
+21   1   0   1   0   0   ?  0    -     -
+22   1   0   1   0   1   1  2  1.000 1.000 FI,IE
+23   1   0   1   1   0   0  1  0.000 0.000 AU
+24   1   0   1   1   1   1  2  1.000 1.000 FR,SE
+25   1   1   0   0   0   ?  0    -     -
+26   1   1   0   0   1   ?  0    -     -
+27   1   1   0   1   0   ?  0    -     -
+28   1   1   0   1   1   ?  0    -     -
+29   1   1   1   0   0   ?  0    -     -
+30   1   1   1   0   1   ?  0    -     -
+31   1   1   1   1   0   0  1  0.000 0.000 DE
+32   1   1   1   1   1   1  4  1.000 1.000 BE,CZ,NL,UK
+
+</div>
+<div class='input'>
+# formally asking the complete version
+truthTable(LC, &quot;SURV&quot;, complete = TRUE)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 3   0   0   0   1   0   ?  0    -     -
+ 4   0   0   0   1   1   ?  0    -     -
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+ 7   0   0   1   1   0   ?  0    -     -
+ 8   0   0   1   1   1   ?  0    -     -
+ 9   0   1   0   0   0   ?  0    -     -
+10   0   1   0   0   1   ?  0    -     -
+11   0   1   0   1   0   ?  0    -     -
+12   0   1   0   1   1   ?  0    -     -
+13   0   1   1   0   0   ?  0    -     -
+14   0   1   1   0   1   ?  0    -     -
+15   0   1   1   1   0   ?  0    -     -
+16   0   1   1   1   1   ?  0    -     -
+17   1   0   0   0   0   ?  0    -     -
+18   1   0   0   0   1   ?  0    -     -
+19   1   0   0   1   0   ?  0    -     -
+20   1   0   0   1   1   ?  0    -     -
+21   1   0   1   0   0   ?  0    -     -
+22   1   0   1   0   1   1  2  1.000 1.000
+23   1   0   1   1   0   0  1  0.000 0.000
+24   1   0   1   1   1   1  2  1.000 1.000
+25   1   1   0   0   0   ?  0    -     -
+26   1   1   0   0   1   ?  0    -     -
+27   1   1   0   1   0   ?  0    -     -
+28   1   1   0   1   1   ?  0    -     -
+29   1   1   1   0   0   ?  0    -     -
+30   1   1   1   0   1   ?  0    -     -
+31   1   1   1   1   0   0  1  0.000 0.000
+32   1   1   1   1   1   1  4  1.000 1.000
+
+</div>
+<div class='input'>
+# sorting by multiple columns, decreasing by default
+truthTable(LC, &quot;SURV&quot;, complete = TRUE, sort.by = &quot;incl, n&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+32   1   1   1   1   1   1  4  1.000 1.000
+22   1   0   1   0   1   1  2  1.000 1.000
+24   1   0   1   1   1   1  2  1.000 1.000
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+23   1   0   1   1   0   0  1  0.000 0.000
+31   1   1   1   1   0   0  1  0.000 0.000
+ 3   0   0   0   1   0   ?  0    -     -
+ 4   0   0   0   1   1   ?  0    -     -
+ 7   0   0   1   1   0   ?  0    -     -
+ 8   0   0   1   1   1   ?  0    -     -
+ 9   0   1   0   0   0   ?  0    -     -
+10   0   1   0   0   1   ?  0    -     -
+11   0   1   0   1   0   ?  0    -     -
+12   0   1   0   1   1   ?  0    -     -
+13   0   1   1   0   0   ?  0    -     -
+14   0   1   1   0   1   ?  0    -     -
+15   0   1   1   1   0   ?  0    -     -
+16   0   1   1   1   1   ?  0    -     -
+17   1   0   0   0   0   ?  0    -     -
+18   1   0   0   0   1   ?  0    -     -
+19   1   0   0   1   0   ?  0    -     -
+20   1   0   0   1   1   ?  0    -     -
+21   1   0   1   0   0   ?  0    -     -
+25   1   1   0   0   0   ?  0    -     -
+26   1   1   0   0   1   ?  0    -     -
+27   1   1   0   1   0   ?  0    -     -
+28   1   1   0   1   1   ?  0    -     -
+29   1   1   1   0   0   ?  0    -     -
+30   1   1   1   0   1   ?  0    -     -
+
+</div>
+<div class='input'>
+# sort the truth table decreasing for inclusion, and increasing for n
+# note that &quot;-&quot; is redundant, sorting is decreasing by default
+truthTable(LC, &quot;SURV&quot;, complete = TRUE, sort.by = &quot;incl-, n+&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+22   1   0   1   0   1   1  2  1.000 1.000
+24   1   0   1   1   1   1  2  1.000 1.000
+32   1   1   1   1   1   1  4  1.000 1.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+23   1   0   1   1   0   0  1  0.000 0.000
+31   1   1   1   1   0   0  1  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 3   0   0   0   1   0   ?  0    -     -
+ 4   0   0   0   1   1   ?  0    -     -
+ 7   0   0   1   1   0   ?  0    -     -
+ 8   0   0   1   1   1   ?  0    -     -
+ 9   0   1   0   0   0   ?  0    -     -
+10   0   1   0   0   1   ?  0    -     -
+11   0   1   0   1   0   ?  0    -     -
+12   0   1   0   1   1   ?  0    -     -
+13   0   1   1   0   0   ?  0    -     -
+14   0   1   1   0   1   ?  0    -     -
+15   0   1   1   1   0   ?  0    -     -
+16   0   1   1   1   1   ?  0    -     -
+17   1   0   0   0   0   ?  0    -     -
+18   1   0   0   0   1   ?  0    -     -
+19   1   0   0   1   0   ?  0    -     -
+20   1   0   0   1   1   ?  0    -     -
+21   1   0   1   0   0   ?  0    -     -
+25   1   1   0   0   0   ?  0    -     -
+26   1   1   0   0   1   ?  0    -     -
+27   1   1   0   1   0   ?  0    -     -
+28   1   1   0   1   1   ?  0    -     -
+29   1   1   1   0   0   ?  0    -     -
+30   1   1   1   0   1   ?  0    -     -
+
+</div>
+<div class='input'>
+
+
+# -----
+# Lipset multi-value crisp data (Cronqvist &amp; Berg-Schlosser 2009, p.80)
+truthTable(LM, &quot;SURV&quot;, sort.by = &quot;incl&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+22   1   0   1   0   1   1  2  1.000 1.000
+32   1   1   1   1   1   1  1  1.000 1.000
+40   2   0   1   1   1   1  2  1.000 1.000
+48   2   1   1   1   1   1  3  1.000 1.000
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+23   1   0   1   1   0   0  1  0.000 0.000
+31   1   1   1   1   0   0  1  0.000 0.000
+
+</div>
+<div class='input'>
+# using a frequency cutoff equal to 2 cases
+ttLM &lt;- truthTable(LM, &quot;SURV&quot;, n.cut = 2, sort.by = &quot;incl&quot;)
+ttLM
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+22   1   0   1   0   1   1  2  1.000 1.000
+40   2   0   1   1   1   1  2  1.000 1.000
+48   2   1   1   1   1   1  3  1.000 1.000
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+
+</div>
+<div class='input'>
+# the observed combinations coded as remainders
+ttLM$removed
+</div>
+<div class='output'>    DEV URB LIT IND STB OUT n  incl  PRI   cases
+ 6   0   0   1   0   1   ?  1  0.000 0.000  EE
+23   1   0   1   1   0   ?  1  0.000 0.000  AU
+31   1   1   1   1   0   ?  1  0.000 0.000  DE
+32   1   1   1   1   1   ?  1  1.000 1.000  CZ
+
+</div>
+<div class='input'>
+
+
+# -----
+# Cebotari &amp; Vink fuzzy data
+ttCVF &lt;- truthTable(CVF, &quot;PROTEST&quot;, incl.cut = 0.8, sort.by = &quot;incl&quot;)
+
+# view the Venn diagram for this truth table
+library(venn)
+venn(ttCVF)
+</div>
+<p><img src='img/truthTable-20.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# each intersection transparent by its inclusion score
+venn(ttCVF, transparency = ttCVF$tt$incl)
+</div>
+<p><img src='img/truthTable-22.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# the truth table negating the outcome
+truthTable(CVF, &quot;~PROTEST&quot;, incl.cut = 0.8, sort.by = &quot;incl&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEMOC ETHFRACT GEOCON POLDIS NATPRIDE OUT n  incl  PRI
+10    0      1       0      0       1      1  1  0.976 0.914
+ 6    0      0       1      0       1      1  1  0.953 0.852
+28    1      1       0      1       1      1  1  0.933 0.775
+14    0      1       1      0       1      1  3  0.929 0.816
+ 2    0      0       0      0       1      1  4  0.922 0.818
+20    1      0       0      1       1      1  1  0.902 0.714
+ 8    0      0       1      1       1      1  1  0.902 0.705
+22    1      0       1      0       1      1  4  0.846 0.597
+30    1      1       1      0       1      1  2  0.843 0.333
+ 5    0      0       1      0       0      1  2  0.823 0.416
+27    1      1       0      1       0      0  1  0.776 0.217
+16    0      1       1      1       1      0  1  0.742 0.409
+29    1      1       1      0       0      0  1  0.738 0.142
+32    1      1       1      1       1      0  1  0.726 0.283
+24    1      0       1      1       1      0  2  0.699 0.229
+31    1      1       1      1       0      0  1  0.662 0.109
+15    0      1       1      1       0      0  2  0.629 0.161
+
+</div>
+<div class='input'>
+# allow contradictions
+truthTable(CVF, &quot;PROTEST&quot;, incl.cut = c(0.8, 0.75), sort.by = &quot;incl&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEMOC ETHFRACT GEOCON POLDIS NATPRIDE OUT n  incl  PRI
+31    1      1       1      1       0      1  1  0.959 0.891
+29    1      1       1      0       0      1  1  0.957 0.858
+27    1      1       0      1       0      1  1  0.938 0.783
+15    0      1       1      1       0      1  2  0.929 0.839
+30    1      1       1      0       1      1  2  0.922 0.667
+24    1      0       1      1       1      1  2  0.904 0.754
+32    1      1       1      1       1      1  1  0.892 0.717
+ 5    0      0       1      0       0      1  2  0.874 0.584
+16    0      1       1      1       1      1  1  0.821 0.591
+28    1      1       0      1       1      C  1  0.768 0.225
+ 8    0      0       1      1       1      0  1  0.749 0.248
+10    0      1       0      0       1      0  1  0.741 0.086
+ 6    0      0       1      0       1      0  1  0.732 0.148
+22    1      0       1      0       1      0  4  0.725 0.281
+20    1      0       0      1       1      0  1  0.711 0.162
+14    0      1       1      0       1      0  3  0.653 0.098
+ 2    0      0       0      0       1      0  4  0.648 0.182
+
+</div>
+<div class='input'>
+
+
+# -----
+# Ragin and Strand data with temporal QCA
+# truth table containing the &quot;-&quot; placeholder as a &quot;don&#39;t care&quot;
+truthTable(RS, &quot;REC&quot;)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    P  E  A  S  EBA OUT n  incl  PRI
+ 3  0  0  0  0   -   0  3  0.000 0.000
+15  0  1  0  0   -   0  1  0.000 0.000
+22  0  1  1  1   0   1  1  1.000 1.000
+27  1  0  0  0   -   0  1  0.000 0.000
+30  1  0  0  1   -   0  3  0.000 0.000
+36  1  0  1  1   -   0  2  0.000 0.000
+42  1  1  0  1   -   1  1  1.000 1.000
+44  1  1  1  0   1   1  2  1.000 1.000
+46  1  1  1  1   0   1  1  1.000 1.000
+47  1  1  1  1   1   1  2  1.000 1.000
+
+</div>
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>truthTable</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+
+    <h2>See also</h2>
+    <b><code><a href='minimize.html'>minimize</a></code></b>
+
+    <h2>Author</h2>
+
+Adrian Dusa
+
+
+  </div>
+</div>
+
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+      </footer>
+    </div>
+  </body>
+</html>

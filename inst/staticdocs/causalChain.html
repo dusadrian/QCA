@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>causalChain. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Perform CNA - coincidence analysis using QCA</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function mimics the functionality in the package <b><span class = "pkg">cna</span></b>,
+finding all possible necessary and sufficient solutions for all possible outcomes in a specific dataset.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>causalChain(data, ordering = NULL, strict = FALSE, pi.cons = 0, pi.depth = 0,
+      sol.cons = 0, sol.cov = 1, sol.depth = 0, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A data frame containing calibrated causal conditions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>ordering</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A character string, or a list of character vectors specifying
+                the causal ordering of the causal conditions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>strict</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, prevents causal conditions on the same temporal level to
+                act as outcomes for each other.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>pi.cons</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical fuzzy value between 0 and 1, minimal consistency
+        threshold for a prime implicant to be declared as sufficient.</td>
+        </tr>
+        <tr>
+          <td valign="top"><b><code>pi.depth</code></b></td>
+          <td></td><td></td><td></td>
+          <td>Integer, a maximum number of causal conditions to be used when
+          searching for conjunctive prime implicants.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>sol.cons</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical fuzzy value between 0 and 1, minimal consistency 
+        threshold for a model to be declared as sufficient.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>sol.cov</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical fuzzy value between 0 and 1, minimal coverage 
+        threshold for a model to be declared as necessary.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>sol.depth</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Integer, a maximum number of prime implicants to be used when
+        searching for disjunctive solutions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments to be passed to functions
+              <b><code><a href='minimize.html'>minimize()</a></code></b> and
+              <b><code><a href='truthTable.html'>truthTable()</a></code></b>.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>Although claiming to be a novel technique, coincidence analysis is yet another form
+of Boolean minimization. What it does is very similar and results in the same set of
+solutions as performing separate QCA analyses where every causal condition from the
+<b><code>data</code></b> is considered an outcome.</p>
+      
+      <p>This function aims to demonstrate this affirmation and show that results from package
+<b><span class = "pkg">cna</span></b> can be obtained with package <b><span class = "pkg">QCA</span></b>.
+It is not intended to offer a complete replacement for the function
+<b><code><a href=''>cna()</a></code></b>, but only to replicate its so called &quot;asf&quot; - 
+atomic solution formulas.</p>
+      
+      <p>The three most important arguments from function <b><code><a href=''>cna()</a></code></b>
+have direct correspondents in function <b><code><a href='minimize.html'>minimize()</a></code></b>:</p>
+
+<table>
+    <tr>
+        <td valign="top"><b><code>con</code></b></td>
+        <td></td><td></td><td></td>
+        <td>corresponds to <b><code>sol.cons</code></b></td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>con.msc</code></b></td>
+        <td></td><td></td><td></td>
+        <td>corresponds to <b><code>pi.cons</code></b></td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>cov</code></b></td>
+        <td></td><td></td><td></td>
+        <td>corresponds to <b><code>sol.cov</code></b></td>
+    </tr>
+</table>
+
+      
+      <p>Two other arguments from function <b><code><a href=''>cna()</a></code></b> have been
+directly imported in this function, to complete the list of arguments that generate the same
+results.</p>
+      
+      <p>The argument <b><code>ordering</code></b> splits the causal conditions in different
+temporal levels, where prior arguments can act as causal conditions, but not as outcomes for
+the subsequent temporal conditions. One simple way to split conditions is to use a list
+object, where different components act as different temporal levels, in the order of
+their index in the list: conditions from the first component act as the oldest causal
+factors, while those from the and the last component are part of the most recent temporal
+level.</p>
+      
+      <p>Another, perhaps simpler way to express the same thing is to use a single character,
+where factors on the same level are separated with a comma, and temporal levels are
+separated by the sign <b><code>&lt;</code></b>.</p>
+      
+      <p>A possible example is: <b><code>&quot;A, B, C < D, E < F&quot;</code></b>.</p>
+      
+      <p>Here, there are three temporal levels and conditions A, B and C can act as causal factors
+for the conditions D, E and F, while the reverse is not possible. Given that D, E and F
+happen in a subsequent temporal levels, they cannot act as causal conditions for A, B or C.
+The same thing is valid with D and E, which can act as causal conditions for F, whereas
+F cannot act as a causal condition for D or E, and certainly not for A, B or C.</p>
+      
+      <p>The argument <b><code>strict</code></b> controls whether causal conditions from the same temporal
+level may be outcomes for each other. If activated, none of A, B and C can act as causal
+conditions for the other two, and the same thing happens in the next temporal level where
+neither D nor E can be causally related to each other.</p>
+      
+      <p>Although the two functions reach the same results, they follow different methods.
+The input for the minimization behind the function <b><code><a href=''>cna()</a></code></b>
+is a coincidence list, while in package <b><span class = "pkg">cna</span></b> the input for the
+minimization procedure is a truth table. The difference is subtle but important, with the most
+important difference that package <b><span class = "pkg">cna</span></b> is not exhaustive.</p>
+
+      <p>To find a set of solutions in a reasonable time, the formal choice in package
+<b><span class = "pkg">cna</span></b> is to deliberately stop the search at certain (default)
+depths of complexity. Users are free to experiment with these depths from the argument
+<b><code>maxstep</code></b>, but there is no guarantee the results will be exhaustive.</p>
+      
+      <p>On the other hand, the function <b><code><a href=''>causalChain()</a></code></b> and
+generally all related functions from package <b><span class = "pkg">QCA</span></b> are spending
+more time to make sure the search is exhaustive. Depths can be set via the arguments
+<b><code>pi.depth</code></b> and <b><code>sol.depth</code></b> from the arguments in function
+<b><code><a href='minimize.html'>minimize()</a></code></b>, but unlike package
+<b><span class = "pkg">cna</span></b> these are not mandatory.</p>
+
+<p>By default, the package <b><span class = "pkg">QCA</span></b> employes a different search
+algorithm based on Consistency Cubes (<a href = "https://doi.org/10.13140/RG.2.2.36359.19361/4">Dusa, 2017</a>),
+analysing all possible combinations of causal conditions and all possible combinations of their 
+respective levels. The structure of the input dataset (number of causal conditions, number of levels, 
+number of unique rows in the truth table) has a direct implication on the search time, as all of those 
+characteristics become entry parameters when calculating all possible combinations.</p>
+
+<p>Consequently, two kinds of depth arguments are provided:</p>
+<table>
+    <tr>
+        <td valign="top"><b><code>pi.depth</code></b></b></td>
+        <td></td><td></td><td></td>
+        <td>the maximum number of causal conditions needed to construct a prime
+            implicant, the complexity level where the search can be stopped, as long as the
+            PI chart can be solved.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>sol.depth</code></b></td>
+        <td></td><td></td><td></td>
+        <td>the maximum number of prime implicants needed to find a solution (to cover all
+            initial positive output configurations)</td>
+    </tr>
+</table>
+
+<p></p>
+
+<p>These arguments introduce a possible new way of deriving prime implicants and solutions,
+that can lead to different results (i.e. even more parsimonious) compared to the classical
+Quine-McCluskey. When either of them is modified from the default value of 0, the minimization
+method is automatically set to <b><code>&quot;CCubes&quot;</code></b> and the remainders are
+automatically included in the minimization.</p>
+
+<p>The higher these depths, the higher the search time. Connversely, the search time can be
+significantly shorter if these depths are smaller. Irrespective of how large 
+<b><code>pi.depth</code></b> is, the algorithm will always stop at a maximum complexity level
+where no new, non-redundant prime implicants are found. The argument <b><code>sol.depth</code></b>
+is relevant only when activating the argument <b><code>all.sol</code></b> to solve the PI chart.</p>
+      
+<p>Exhaustiveness is guaranteed in package <b><span class = "pkg">QCA</span></b> precisely
+because it uses a truth table as an input for the minimization procedure. The only exception is
+the option of finding solutions based on their consistency, with the argument
+<b><code>sol.cons</code></b>: for large PI charts, time can quickly increase to infinity. If not
+otherwise specified in the argument <b><code>sol.depth</code></b> the function
+<b><code><a href=''>causalChain()</a></code></b> silently sets a complexity level of 5 prime
+implicants per solution.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A list of length equal to the number of columns in the <b><code>data</code></b>. Each component
+contains the result of the QCA minimization for that specific column acting as an outcome.
+</dl></p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# The following examples assume the package cna is installed
+
+library(cna)
+cna(d.educate, what = &quot;a&quot;)
+</div>
+<div class='output'>--- Coincidence Analysis (CNA) ---
+
+Factors: U, D, L, G, E 
+
+Atomic solution formulas:
+-------------------------
+Outcome E:
+ solution        consistency coverage complexity
+ L + G <-> E               1        1          2
+ U + D + G <-> E           1        1          3
+
+Outcome L:
+ solution    consistency coverage complexity
+ U + D <-> L           1        1          2
+</div>
+
+<div class='input'>
+# same results with
+cc &lt;- causalChain(d.educate)
+cc
+</div>
+<div class='output'>
+M1: U + D <=> L
+
+M1: L + G <=> E
+M2: U + D + G <=> E
+</div>
+
+<div class='input'># inclusion and coverage scores can be inspected for each outcome
+cc$E$IC
+</div>
+<div class='output'>                            ------------------- 
+       inclS  PRI    covS   covU   (M1)   (M2)  
+----------------------------------------------- 
+1  G   1.000  1.000  0.571  0.143  0.143  0.143 
+----------------------------------------------- 
+2  U   1.000  1.000  0.571  0.000         0.143 
+3  D   1.000  1.000  0.571  0.000         0.143 
+4  L   1.000  1.000  0.857  0.000  0.429        
+----------------------------------------------- 
+   M1  1.000  1.000  1.000 
+   M2  1.000  1.000  1.000 
+</div>
+
+<div class='input'>
+
+
+# another example, function cna() requires specific complexity depths
+cna(d.women, maxstep = c(3, 4, 9), what = &quot;a&quot;)
+</div>
+<div class='output'>--- Coincidence Analysis (CNA) ---
+
+Factors: ES, QU, WS, WM, LP, WNP 
+
+Atomic solution formulas:
+-------------------------
+Outcome WNP:
+ solution                           consistency coverage complexity
+ WS + ES*WM + es*LP + QU*LP <-> WNP           1        1          7
+ WS + ES*WM + QU*LP + WM*LP <-> WNP           1        1          7
+</div>
+
+<div class='input'>
+# same results with, no specific depths are required
+causalChain(d.women)
+</div>
+<div class='output'>
+M1: WS + ~ES*LP + ES*WM + QU*LP <=> WNP
+M2: WS + ES*WM + QU*LP + WM*LP <=> WNP
+</div>
+
+<div class='input'>
+
+# multivalue data require a different function in package cna
+mvcna(d.pban, ordering = list(c(&quot;C&quot;, &quot;F&quot;, &quot;T&quot;, &quot;V&quot;), &quot;PB&quot;),
+      cov = 0.95, maxstep = c(6, 6, 10), what = &quot;a&quot;)
+</div>
+<div class='output'>--- Coincidence Analysis (CNA) ---
+
+Causal ordering:
+C, F, T, V < PB
+
+Atomic solution formulas:
+-------------------------
+Outcome PB=1:
+ solution                                         consistency coverage complexity
+ C=1 + F=2 + C=0*F=1 + C=2*V=0 <-> PB=1                     1    0.952          6
+ C=1 + F=2 + C=0*T=2 + C=2*V=0 <-> PB=1                     1    0.952          6
+ C=1 + F=2 + C=2*F=0 + C=0*F=1 + F=1*V=0 <-> PB=1           1    0.952          8
+ C=1 + F=2 + C=2*F=0 + C=0*T=2 + F=1*V=0 <-> PB=1           1    0.952          8
+ C=1 + F=2 + C=0*F=1 + C=2*T=1 + T=2*V=0 <-> PB=1           1    0.952          8
+ ... (total no. of formulas: 14)
+</div>
+
+<div class='input'>
+# same results again, simpler command
+causalChain(d.pban, ordering = &quot;C, F, T, V < PB&quot;, sol.cov = 0.95)
+</div>
+<div class='output'>
+M01: C{1} + F{2} + C{0}*F{1} + C{2}*V{0} <=> PB{1}
+M02: C{1} + F{2} + C{0}*T{2} + C{2}*V{0} <=> PB{1}
+M03: C{1} + F{2} + C{0}*F{1} + C{2}*F{0} + F{1}*V{0} <=> PB{1}
+M04: C{1} + F{2} + C{0}*F{1} + C{2}*T{1} + T{2}*V{0} <=> PB{1}
+M05: C{1} + F{2} + C{0}*F{1} + T{1}*V{0} + T{2}*V{0} <=> PB{1}
+M06: C{1} + F{2} + C{0}*T{2} + C{2}*F{0} + F{1}*V{0} <=> PB{1}
+M07: C{1} + F{2} + C{0}*T{2} + C{2}*T{1} + T{2}*V{0} <=> PB{1}
+M08: C{1} + F{2} + C{0}*T{2} + T{1}*V{0} + T{2}*V{0} <=> PB{1}
+M09: C{1} + F{2} + C{0}*F{1} + C{2}*F{0} + F{1}*T{1} + T{2}*V{0} <=> PB{1}
+M10: C{1} + F{2} + C{0}*F{1} + C{2}*T{1} + F{0}*T{2} + F{1}*V{0} <=> PB{1}
+M11: C{1} + F{2} + C{0}*F{1} + F{0}*T{2} + F{1}*V{0} + T{1}*V{0} <=> PB{1}
+M12: C{1} + F{2} + C{0}*T{2} + C{2}*F{0} + F{1}*T{1} + T{2}*V{0} <=> PB{1}
+M13: C{1} + F{2} + C{0}*T{2} + C{2}*T{1} + F{0}*T{2} + F{1}*V{0} <=> PB{1}
+M14: C{1} + F{2} + C{0}*T{2} + F{0}*T{2} + F{1}*V{0} + T{1}*V{0} <=> PB{1}
+</div>
+
+<div class='input'>
+
+# specifying a lower consistency threshold for the solutions
+mvcna(d.pban, ordering = list(c(&quot;C&quot;, &quot;F&quot;, &quot;T&quot;, &quot;V&quot;), &quot;PB&quot;), con = .93,
+      maxstep = c(6, 6, 10), what = &quot;a&quot;)
+</div>
+<div class='output'>--- Coincidence Analysis (CNA) ---
+
+Causal ordering:
+C, F, T, V < PB
+
+Atomic solution formulas:
+-------------------------
+Outcome PB=1:
+ solution                                     consistency coverage complexity
+ C=1 + F=2 + T=2 + C=2*T=1 <-> PB=1                 0.955        1          5
+ C=1 + F=2 + T=2 + C=2*F=0 + F=1*T=1 <-> PB=1       0.955        1          7
+</div>
+
+<div class='input'>
+# same thing with
+causalChain(d.pban, ordering = &quot;C, F, T, V < PB&quot;, pi.cons = 0.93, sol.cons = 0.95)
+</div>
+<div class='output'>
+M1: C{1} + F{2} + T{2} + C{2}*T{1} <=> PB{1}
+M2: C{1} + F{2} + T{2} + C{2}*F{0} + F{1}*T{1} <=> PB{1}
+</div>
+
+<div class='input'>
+
+# setting consistency thresholds for the PIs, solutions and also
+# a coverage threshold for the solution (note that an yet another
+# function for fuzzy sets is needed in package cna)
+
+dat2 <- d.autonomy[15:30, c(&quot;AU&quot;,&quot;RE&quot;, &quot;CN&quot;, &quot;DE&quot;)]
+fscna(dat2, ordering = list(&quot;AU&quot;), con = .9, con.msc = .85, cov = .85, what = &quot;a&quot;)
+</div>
+<div class='output'>--- Coincidence Analysis (CNA) ---
+
+Causal ordering:
+RE, CN, DE < AU
+
+Atomic solution formulas:
+-------------------------
+Outcome AU:
+ solution             consistency coverage complexity
+ RE*cn + re*CN <-> AU        0.92    0.851          4
+ re*DE + cn*DE <-> AU        0.90    0.862          4
+</div>
+
+<div class='input'>
+# again, the same results using the same function:
+causalChain(dat2, ordering = &quot;AU&quot;, sol.cons = 0.9, pi.cons = 0.85, sol.cov = 0.85)
+</div>
+<div class='output'>
+M1: ~RE*CN + RE*~CN <=> AU
+M2: ~RE*DE + ~CN*DE <=> AU
+</div>
+
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>causalChain</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+
+    <h2>See also</h2>
+    
+<b><code><a href='minimize.html'>minimize()</a></code></b>,
+<b><code><a href='truthTable.html'>truthTable()</a></code></b>
+    
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

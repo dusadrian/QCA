@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>Implicant matrix functions: allExpressions, createMatrix, getRow. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Functions Related to the Implicant Matrix</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This is a set of functions dedicated to the implicant matrix, a space where all
+causal configurations and their minimized solutions are found.</p>
+  
+      <p>They can produce all possible implicants and prime implicants, or all possible
+combinations for a specific number of causal conditions and their number
+of values (either binary or multi-value).</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>allExpressions(noflevels, arrange = FALSE, depth, raw = FALSE, ...)</div>
+<div>createMatrix(noflevels, ...)</div>
+<div>getRow(noflevels, row.no, zerobased = FALSE)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>noflevels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The number of levels (values) for each causal condition.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>arrange</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, if <code>TRUE</code> the result matrix is arranged for visual inspection.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>depth</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Integer, an upper number of causal conditions to form expressions with.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>raw</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, if <code>TRUE</code> it returns the matrix indicating which conditions have
+             been minimized, using <b><code>-1</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>row.no</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector, the desired row numbers.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>zerobased</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, the first row number is zero.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>A truth table for binary crisp conditions is a matrix with $2^k$ rows, where
+$k$ is the number of causal conditions.</p>
+  
+      <p>For multi-value causal conditions, the same equation can be generalised to:</p>
+  
+      <p>$v_{1} \cdot v_{2} \phantom{.} \cdot \phantom{.} ... \phantom{.} \cdot \phantom{.} v_{k}$</p>
+  
+      <p>where $v$ is the number of values (levels) for every causal condition from $1$ to $k$.</p>
+  
+      <p>Implicant matrices contain all rows from the truth table, plus all of their supersets,
+(all implicants and prime implicants), including the empty set (Dusa 2007, 2010).</p>
+  
+      <p>For a binary crisp set procedure, there are $3^k - 1$ possible expressions (groupings),
+see Ragin (2010). Including the empty set (the situation when all causal conditions have
+been minimized), the implicant matrix consists of exactly $3^k$ rows, including the
+truth table configurations.</p>
+  
+      <p>In fact, $3^k$ is also obtained by the product:</p>
+  
+      <p>$(2 + 1) \cdot (2 + 1) \phantom{.} \cdot \phantom{.} ... \phantom{.} \cdot \phantom{.} (2 + 1)$</p>
+  
+      <p>For multi-value causal conditions, the same equation can be generalised to:</p>
+  
+      <p>$(v_{1} + 1) \cdot (v_{2} + 1) \phantom{.} \cdot \phantom{.} ... \phantom{.} \cdot \phantom{.} (v_{k} + 1)$</p>
+  
+      <p>where every number of levels in each causal conditions is incremented with 1, to allow
+coding the minimization of literals in each (prime) implicant (see examples).</p>
+  
+      <p>The function <b><code><a href=''>allExpressions()</a></code></b> creates a matrix which contains all possible implicants
+and prime implicants, displayed in the original values form using the code <b><code>-1</code></b> to
+point the minimized literals, while the other functions use the code <b><code>0</code></b>, all other
+values being incremented with 1.</p>
+  
+      <p>Specifying a smaller <b><code>depth</code></b> automatically activates the argument
+<b><code>arrange</code></b>.</p>
+  
+      <p>When the argument <b><code>arrange</code></b> is activated, the output is arranged in the
+increasing order of the number of conditions which form conjunctions, up to the maximum number
+specified by the argument <b><code>depth</code></b> (which if <b><code>NULL</code></b>, it is
+considered equal to the number of columns in the matrix).</p>
+  
+      <p>The function <b><code><a href=''>createMatrix()</a></code></b> creates a base matrix for truth tables and implicant
+matrices.</p>
+  
+      <p>The function <b><code><a href=''>getRow()</a></code></b> takes the number of a row in the truth table or implicant matrix
+(in its decimal form), and transforms it into its binary (or multi-base) representation,
+as a configuration of binary or multi-values for each causal condition.</p>
+  
+      <p>Note that $\textsf{R}$ is not a zero-based language (where all numbers start from 0), and positions
+in vectors and matrices start with 1. For this reason, although (mathematicall) the binary
+representation of the decimal number 0 (for example, at three causal conditions) is 0 0 0,
+in $\textsf{R}$ that would be the &#147;first&#148; line in the implicant matrix, therefore 0 0 0 is
+translated into the number 1.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A matrix with $k$ columns and:</p>
+  
+      <p>$v_{1} \cdot v_{2} \phantom{.} \cdot \phantom{.} ... \phantom{.} \cdot \phantom{.} v_{k}$ rows if a truth table;</p>
+  
+      <p>$(v_{1} + 1) \cdot (v_{2} + 1) \phantom{.} \cdot \phantom{.} ... \phantom{.} \cdot \phantom{.} (v_{k} + 1)$ rows if an implicant matrix;</p>
+  
+      <p>$x$ rows, equal to the length of <b><code>row.no</code></b>.
+</dl></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Dusa, Adrian. 2007. <em>Enhancing Quine-McCluskey</em>.
+<a href = 'http://www.compasss.org/wpseries/Dusa2007b.pdf'>WP 2007-49, COMPASSS</a>.</p>
+  
+      <p>Dusa, Adrian. 2010. &#147;A Mathematical Approach to the Boolean Minimization 
+Problem.&#148; <em>Quality & Quantity</em> vol.44, no.1, pp.99-113.</p>
+  
+      <p>Ragin, Charles C. (2000) <em>Fuzzy-Set Social Science</em>. Chicago: University of 
+Chicago Press.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# three binary causal conditions, having two levels each: 0 and 1=
+noflevels &lt;- c(2, 2, 2)
+
+# for three binary causal conditions
+allExpressions(noflevels)
+</div>
+<div class='output'>
+ 1                
+ 2              0 
+ 3              1 
+ 4         0      
+ 5         0    0 
+ 6         0    1 
+ 7         1      
+ 8         1    0 
+ 9         1    1 
+10    0           
+11    0         0 
+12    0         1 
+13    0    0      
+14    0    0    0 
+15    0    0    1 
+16    0    1      
+17    0    1    0 
+18    0    1    1 
+19    1           
+20    1         0 
+21    1         1 
+22    1    0      
+23    1    0    0 
+24    1    0    1 
+25    1    1      
+26    1    1    0 
+27    1    1    1 
+
+</div>
+<div class='input'>
+# the same matrix, this time arranged better
+# (last rows represent the truth table)
+allExpressions(noflevels, arrange = TRUE)
+</div>
+<div class='output'>
+1    0           
+2    1           
+3         0      
+4         1      
+5              0 
+6              1 
+7    0    0      
+8    0    1      
+9    1    0      
+10    1    1      
+11    0         0 
+12    0         1 
+13    1         0 
+14    1         1 
+15         0    0 
+16         0    1 
+17         1    0 
+18         1    1 
+19    0    0    0 
+20    0    0    1 
+21    0    1    0 
+22    0    1    1 
+23    1    0    0 
+24    1    0    1 
+25    1    1    0 
+26    1    1    1 
+
+</div>
+<div class='input'>
+# show only the implicants (excluding the truth table)
+allExpressions(noflevels, arrange = TRUE, depth = 2)
+</div>
+<div class='output'>
+ 1    0           
+ 2    1           
+ 3         0      
+ 4         1      
+ 5              0 
+ 6              1 
+ 7    0    0      
+ 8    0    1      
+ 9    1    0      
+10    1    1      
+11    0         0 
+12    0         1 
+13    1         0 
+14    1         1 
+15         0    0 
+16         0    1 
+17         1    0 
+18         1    1 
+
+</div>
+<div class='input'>
+# using the raw form
+allExpressions(noflevels, raw = TRUE)
+</div>
+<div class='output'>
+ 1   -1   -1   -1 
+ 2   -1   -1    0 
+ 3   -1   -1    1 
+ 4   -1    0   -1 
+ 5   -1    0    0 
+ 6   -1    0    1 
+ 7   -1    1   -1 
+ 8   -1    1    0 
+ 9   -1    1    1 
+10    0   -1   -1 
+11    0   -1    0 
+12    0   -1    1 
+13    0    0   -1 
+14    0    0    0 
+15    0    0    1 
+16    0    1   -1 
+17    0    1    0 
+18    0    1    1 
+19    1   -1   -1 
+20    1   -1    0 
+21    1   -1    1 
+22    1    0   -1 
+23    1    0    0 
+24    1    0    1 
+25    1    1   -1 
+26    1    1    0 
+27    1    1    1 
+
+</div>
+<div class='input'>
+
+# create a base truth table for 3 binary conditions
+createMatrix(noflevels)
+</div>
+<div class='output'>     [,1] [,2] [,3]
+[1,]    0    0    0
+[2,]    0    0    1
+[3,]    0    1    0
+[4,]    0    1    1
+[5,]    1    0    0
+[6,]    1    0    1
+[7,]    1    1    0
+[8,]    1    1    1
+</div>
+<div class='input'>
+# its implicant matrix
+createMatrix(noflevels + 1)
+</div>
+<div class='output'>      [,1] [,2] [,3]
+ [1,]    0    0    0
+ [2,]    0    0    1
+ [3,]    0    0    2
+ [4,]    0    1    0
+ [5,]    0    1    1
+ [6,]    0    1    2
+ [7,]    0    2    0
+ [8,]    0    2    1
+ [9,]    0    2    2
+[10,]    1    0    0
+[11,]    1    0    1
+[12,]    1    0    2
+[13,]    1    1    0
+[14,]    1    1    1
+[15,]    1    1    2
+[16,]    1    2    0
+[17,]    1    2    1
+[18,]    1    2    2
+[19,]    2    0    0
+[20,]    2    0    1
+[21,]    2    0    2
+[22,]    2    1    0
+[23,]    2    1    1
+[24,]    2    1    2
+[25,]    2    2    0
+[26,]    2    2    1
+[27,]    2    2    2
+</div>
+<div class='input'>
+# create a base truth table where the second condition has three levels
+createMatrix(c(2, 3, 2))
+</div>
+<div class='output'>      [,1] [,2] [,3]
+ [1,]    0    0    0
+ [2,]    0    0    1
+ [3,]    0    1    0
+ [4,]    0    1    1
+ [5,]    0    2    0
+ [6,]    0    2    1
+ [7,]    1    0    0
+ [8,]    1    0    1
+ [9,]    1    1    0
+[10,]    1    1    1
+[11,]    1    2    0
+[12,]    1    2    1
+</div>
+<div class='input'>
+
+
+# deriving rows
+rows &lt;- c(2, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17)
+mat &lt;- getRow(rows, noflevels + 1) # note the +1
+rownames(mat) &lt;- rows
+colnames(mat) &lt;- c(&quot;A&quot;, &quot;B&quot;, &quot;C&quot;)
+mat
+</div>
+<div class='output'>   A B C
+2  0 0 1
+4  0 1 0
+5  0 1 1
+7  0 2 0
+8  0 2 1
+10 1 0 0
+11 1 0 1
+13 1 1 0
+14 1 1 1
+16 1 2 0
+17 1 2 1
+</div>
+<div class='input'>
+# implicant matrix     normal values
+
+#      A  B  C    |       A  B  C       
+#   2  0  0  1    |    2  -  -  0       ~C      
+#   4  0  1  0    |    4  -  0  -       ~B
+#   5  0  1  1    |    5  -  0  0       ~B~C
+#   7  0  2  0    |    7  -  1  -       B
+#   8  0  2  1    |    8  -  1  0       B~C
+#  10  1  0  0    |   10  0  -  -       ~A  
+#  11  1  0  1    |   11  0  -  0       ~A~C                 
+#  13  1  1  0    |   13  0  0  -       ~A~B   
+#  14  1  1  1    |   14  0  0  0       ~A~B~C
+#  16  1  2  0    |   16  0  1  -       ~AB
+#  17  1  2  1    |   17  0  1  0       ~AB~C
+                          
+</div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>allExpressions</li><li>createMatrix</li><li>getRow</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+    
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+      
+    <h2>See also</h2>
+    
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/base/html/expand.grid.html'>expand.grid</a></code></b>
+
+
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

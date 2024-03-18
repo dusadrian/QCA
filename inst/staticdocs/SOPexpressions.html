@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>compute, simplify. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Interpret SOP/DNF expressions: compute, simplify, expand</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>These functions interpret an expression written in sum of products (SOP) or in canonical
+disjunctive normal form (DNF), for both crisp and multivalue QCA. The function
+<b><code><a href=''>compute()</a></code></b> calculates set membership scores based on a SOP
+expression applied to a calibrated data set.</p>
+  
+      <p>A function similar to <b><code><a href=''>compute()</a></code></b> was initially written
+by Lewandowski (2015) but the actual code in these functions has been completely re-written and
+expanded with more extensive functionality (see details and examples below).</p>
+  
+      <p>The function <b><code><a href=''>simplify()</a></code></b> transforms a SOP expression
+into a simpler equivalent through a process of Boolean minimization.</p>
+  
+      <p>Function <b><code><a href=''>expand()</a></code></b> performs a Quine expansion to the
+complete DNF, or a partial expansion to a SOP expression with equally complex terms.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre>
+<div>compute(expression = &quot;&quot;, data, separate = FALSE)</div>
+<div>simplify(expression = &quot;&quot;, snames = &quot;&quot;, noflevels, ...)</div>
+<div>expand(expression = &quot;&quot;, snames = &quot;&quot;, noflevels, partial = FALSE, implicants = FALSE, ...)</div></pre>
+</pre>
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>expression</code></b></td>
+            <td></td><td></td><td></td>
+            <td>String: a QCA expression written in sum of products form.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>snames</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing the sets' names, separated by commas.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>noflevels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical vector containing the number of levels for each set.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A dataset with binary cs, mv and fs data.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>separate</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, perform computations on individual, separate paths.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>partial</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, perform a partial Quine expansion.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>implicants</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, return an expanded matrix in the implicants space.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments, mainly for backwards compatibility.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>An expression written in SOP - sum of products, is a &quot;union of intersections&quot;, for
+example <b><code>A*B + B*~C</code></b>. The DNF - disjunctive normal form is also a sum of products,
+with the restriction that each product has to contain all literals. The equivalent expression is:
+<b><code>A*B*~C + A*B*C + ~A*B*~C</code></b></p>
+  
+      <p>The same expression can be written in multivalue notation:
+<b><code>A{1}*B{1} + B{1}*C{0}</code></b>.</p>
+  
+      <p>Expressions can contain multiple values for the same condition, separated by a comma. If B
+was a multivalue causal condition, an expression could be: <b><code>A{1} + B{1,2}*C{0}</code></b>.</p>
+  
+      <p>Whether crisp or multivalue, expressions are treated as Boolean. In this last example, all values
+in B equal to either 1 or 2 will be converted to 1, and the rest of the (multi)values will be
+converted to 0.</p>
+  
+      <p>Negating a multivalue condition requires a known number of levels (see examples below).
+Improvements from version 2.5 allow for intersections between multiple levels of the same condition. For
+a causal condition with 3 levels (0, 1 and 2) the following expression <b><code>~A{0,2}*A{1,2}</code></b>
+is equivalent with <b><code>A{1}</code></b>, while <b><code>A{0}*A{1}</code></b> results in the empty set.</p>
+
+      <p>The number of levels, as well as the set names can be automatically detected from a dataset via
+the argument <b><code>data</code></b>. When specified, arguments <b><code>snames</code></b> and
+<b><code>noflevels</code></b> have precedence over <b><code>data</code></b>.</p>
+
+      <p>The product operator <b><code>*</code></b>  should always be used, but it can be omitted when
+the data is multivalue (where product terms are separated by curly brackets), and/or when the set names
+are single letters (for example <b><code>AD + B~C</code></b>), and/or when the set names are provided
+via the argument <b><code>snames</code></b>.</p>
+
+      <p>When expressions are simplified, their simplest equivalent can result in the empty set, if the
+conditions cancel each other out.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+For the function <b><code><a href=''>compute()</a></code></b>, a vector of set membership values.
+
+For function <b><code><a href=''>simplify()</a></code></b>, a character expression.
+</dl></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Ragin, C.C. (1987) <em>The Comparative Method: Moving beyond Qualitative and 
+Quantitative Strategies</em>. Berkeley: University of California Press.</p>
+      <p>Lewandowski, J. (2015) <em>QCAtools: Helper functions for QCA in R</em>. R package version 0.1</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# for compute()
+compute(&quot;DEV*~IND + URB*STB&quot;, data = LF)
+</div>
+<div class='output'>
+ [1] 0.27 0.89 0.91 0.16 0.58 0.19 0.31 0.09 0.13 0.72 0.34 0.99 0.02 0.01 0.03
+[16] 0.20 0.33 0.98
+</div>
+<div class='input'>
+
+compute(&quot;DEV*~IND + URB*STB&quot;, data = LF, separate = TRUE)
+</div>
+<div class='output'>   DEV*~IND URB*STB
+1      0.27    0.12
+2      0.00    0.89
+3      0.10    0.91
+4      0.16    0.07
+5      0.58    0.03
+6      0.19    0.03
+7      0.04    0.31
+8      0.04    0.09
+9      0.07    0.13
+10     0.72    0.05
+11     0.34    0.10
+12     0.06    0.99
+13     0.02    0.00
+14     0.01    0.01
+15     0.01    0.03
+16     0.03    0.20
+17     0.33    0.13
+18     0.00    0.98
+</div>
+
+<div class='input'>
+
+
+# for simplify()
+simplify("(A + B)(A + ~B)")
+</div>
+<div class='output'>
+S1: A
+</div>
+
+<div class='input'>
+# to force a certain order of the set names
+simplify("(URB + LIT*~DEV)(~LIT + ~DEV)", snames = "DEV, URB, LIT")
+</div>
+<div class='output'>
+S1: ~DEV*LIT + URB*~LIT
+</div>
+
+<div class='input'>
+# multilevel conditions can also be specified (and negated)
+simplify("(A{1} + ~B{0})(B{1} + C{0})", snames = "A, B, C", noflevels = c(2, 3, 2))
+</div>
+<div class='output'>
+S1: B{1} + A{1}C{0} + B{2}C{0}
+</div>
+
+<div class='input'>
+# Ragin's (1987) book presents the equation E = SG + LW as the result
+# of the Boolean minimization for the ethnic political mobilization.
+
+# intersecting the reactive ethnicity perspective (R = ~L~W)
+# with the equation E (page 144)
+
+simplify("~L~W(SG + LW)", snames = "S, L, W, G")
+</div>
+<div class='output'>
+S1: S~L~WG
+</div>
+
+<div class='input'>
+# resources for size and wealth (C = SW) with E (page 145)
+simplify("SW(SG + LW)", snames = "S, L, W, G")
+</div>
+<div class='output'>
+S1: SLW + SWG
+</div>
+
+<div class='input'>
+# and factorized
+factorize(simplify("SW(SG + LW)", snames = "S, L, W, G"))
+</div>
+<div class='output'>
+F1: SW(G + L)
+</div>
+
+<div class='input'>
+# developmental perspective (D = L~G) and E (page 146)
+simplify("L~G(SG + LW)", snames = "S, L, W, G")
+</div>
+<div class='output'>
+S1: LW~G
+</div>
+
+<div class='input'>
+# subnations that exhibit ethnic political mobilization (E) but were
+# not hypothesized by any of the three theories (page 147)
+# ~H = ~(~L~W + SW + L~G) = GL~S + GL~W + G~SW + ~L~SW
+
+simplify("(GL~S + GL~W + G~SW + ~L~SW)(SG + LW)", snames = "S, L, W, G")
+</div>
+<div class='output'>
+S1: ~SLWG + SL~WG
+</div>
+
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>translate</li><li>compute</li><li>findRows</li><li>simplify</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

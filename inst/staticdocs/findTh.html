@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>findTh. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Find calibration thresholds</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>The purpose of this function is to automatically find calibration thresholds
+for a numerical causal condition, to be split into separate groups.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>findTh(x, n = 1, hclustm = &quot;complete&quot;, distm = &quot;euclidean&quot;, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A numerical causal condition.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>n</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The number of thresholds to find.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>hclustm</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The agglomeration (clustering) method to be used.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>distm</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The distance measure to be used.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments (mainly for backwards compatibility).</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The process of calibration into crisp sets assumes expert knowledge about the
+best threshold(s) that separate the raw data into the most meaningful
+groups.</p>
+  
+      <p>In the absence of such knowledge, an automatic procedure might help grouping
+the raw data according to statistical clustering techniques.</p>
+  
+      <p>The number of groups to split depends on the number of thresholds: one
+thresholds splits into two groups, two thresholds splits into three groups etc.</p>
+  
+      <p>For more details about how many groups can be formed with how many thresholds,
+see <b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/cutree.html'>cutree()</a></code></b>
+</p>
+  
+      <p>More details about the clustering techniques used in this function are found
+using <b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/hclust.html'>hclust()</a></code></b>,
+and also more details about different distance measures can be found with
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/dist.html'>dist()</a></code></b>.
+This function uses their default values.</p>
+
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A numeric vector of length <b><code>n</code></b>.
+</dl></p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# hypothetical list of country GDPs, clearly separated
+# into either two or three groups
+gdp &lt;- c(460, 500, 900, 2000, 2100, 2400, 15000, 16000, 20000)
+
+
+# find one threshold to separate into two groups
+findTh(gdp)
+</div>
+<div class='output'>[1] 8700
+</div>
+<div class='input'>
+
+# find two thresholds to separate into two groups
+findTh(gdp, n = 2)
+</div>
+<div class='output'>[1]  8700 18000
+</div>
+<div class='input'>
+
+# using different clustering methods
+findTh(gdp, n = 2, hclustm = &quot;ward.D2&quot;, distm = &quot;canberra&quot;)
+</div>
+<div class='output'>[1] 1450 8700
+</div>
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>findTh</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+
+    <h2>See also</h2>
+    
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/cutree.html'>cutree</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/hclust.html'>hclust</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/stats/html/dist.html'>dist</a></code></b>
+    
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

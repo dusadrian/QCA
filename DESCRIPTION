@@ -1,0 +1,38 @@
+Package: QCA
+Version: 3.22.1
+SystemRequirements: GNU make
+Title: Qualitative Comparative Analysis
+Authors@R: c(
+       person(given = "Adrian", family = "Dusa",
+              role = c("aut", "cre", "cph"),
+              email = "dusa.adrian@unibuc.ro",
+              comment = c(ORCID = "0000-0002-3525-9253")),
+       person("Ciprian", "Paduraru", role = "ctb",
+              email = "ciprian.paduraru@fmi.unibuc.ro",
+              comment = c(ORCID = "0000-0002-4518-374X")),
+       person(family = "jQuery Foundation", role = "cph",
+              comment = "jQuery library and jQuery UI library"),
+       person(family = "jQuery contributors", role = c("ctb", "cph"),
+              comment = "jQuery library; authors listed in inst/gui/www/lib/jquery-AUTHORS.txt"),
+       person("Vasil", "Dinkov", role = c("ctb", "cph"),
+              comment = "jquery.smartmenus.js library"),
+       person("Dmitry", "Baranovskiy", role = c("ctb", "cph"),
+              comment = "raphael.js library"),
+       person("Emmanuel", "Quentin", role = c("ctb", "cph"),
+              comment = "raphael.inline_text_editing.js library"),
+       person("Jimmy", "Breck-McKye", role = c("ctb", "cph"),
+              comment = "raphael-paragraph.js library"),
+       person("Alrik", "Thiem", role = "aut",
+              comment = "from version 1.0-0 up to version 1.1-3")
+       )
+Depends: R (>= 3.6.0), admisc (> 0.34)
+LazyData: yes
+Imports: methods, shiny, declared, venn, lpSolve
+Description: An extensive set of functions to perform Qualitative Comparative Analysis:
+       crisp sets ('csQCA'), temporal ('tQCA'), multi-value ('mvQCA')
+       and fuzzy sets ('fsQCA'), using a GUI - graphical user interface.
+       'QCA' is a methodology that bridges the qualitative and quantitative
+       divide in social science research. It uses a Boolean minimization
+       algorithm, resulting in a minimal causal configuration associated
+       with a given phenomenon.
+License: GPL (>= 3)

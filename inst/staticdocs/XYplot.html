@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>XYplot. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Create an XY plot</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function creates an XY plot from the first two columns of a dataframe/matrix, or from
+two separate vectors of numeric values.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>XYplot(x, y, data, relation = "sufficiency", mguides = TRUE,
+       jitter = FALSE, clabels, enhance = FALSE, model = FALSE, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string with the name of the column from the <b><code>data</code></b> for the X axis,
+        or the coordinates of points in the plot (either a matrix/dataframe with at least
+        two columns, or a vector of values for the X axis).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>y</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string with the name of the column from the <b><code>data</code></b> for the Y axis,
+        or the Y coordinates of points in the plot, optional if <b><code>x</code></b> is a matrix / dataframe.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A calibrated dataset, only if <b><code>x</code></b> and <b><code>y</code></b> are names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>relation</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The set relation to Y, either <b><code>"sufficiency"</code></b> (default) or
+        <b><code>"necessity"</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>mguides</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, print the middle guides.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>jitter</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, jitter the points.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>clabels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector of case labels with the same length as <b><code>x</code></b> and <b><code>y</code></b></td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>enhance</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, if <b><code>TRUE</code></b> print the points using different characters
+            for each of the five significant regions for process tracing.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>model</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, for an enhanced plot specify if the SOP expression in argument
+            <b><code>x</code></b> is a solution model.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other graphical parameters from <b><code>?par</code></b></td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>If <b><code>x</code></b> is a dataframe or a matrix, the X and Y labels will be taken
+from the column names of <b><code>x</code></b>, otherwise they will be inferred from
+the names of the <b><code>x</code></b> and <b><code>y</code></b> objects that are passed to
+this function.</p>
+  
+      <p><b><code>x</code></b> can also be a string containing either the name of the column
+for the X axis, or two column names separated by a comma, referring to the X
+and Y axis respectively. When <b><code>x</code></b> contains both X and Y column names,
+the next argument will be considered as the <b><code>data</code></b>.</p>
+  
+      <p>If <b><code>data</code></b> is provided, and the names of the X and Y columns are valid
+R statements, quoting them is not even necessary and they can be negated using
+either a tilde <b><code>"~"</code></b> or <b><code>"1 - "</code></b>.</p>
+  
+      <p>The numeric values should be restricted between 0 and 1, otherwise an error is
+generated.</p>
+  
+      <p>The XY plot will also produce inclusion and coverage scores for a sufficiency
+or a necessity relation, along with <b><code>PRI</code></b> for a sufficiency relation
+and <b><code>RoN</code></b> (relevance of necessity) for a necessity relation.</p>
+  
+      <p>The argument <b><code>...</code></b> is used to pass various graphical parameters for the
+various plotting functions used.</p>
+  
+      <p>The points have a default <b><code>cex</code></b> (character expansion) value of 0.8, and
+a default <b><code>pch</code></b> value of 21 (filled points), which can be modified
+accordingly (for example with value 1 of empty points). When <b><code>pch = 21</code></b>,
+the color for the margins of the points can be specified via the argument
+<b><code>col</code></b>, while the argument <b><code>bg</code></b> will determine the fill color
+of the points.</p>
+  
+      <p>The axis labels have a default <b><code>cex.axis</code></b> value of 0.8, which affects
+both the tickmarks labels and the axis labels.</p>
+  
+      <p>When jittering the points, default values of 0.01 are used for the parameters
+<b><code>factor</code></b> and <b><code>amount</code></b>, on both horizontal and vertical axes.</p>
+  
+      <p>The argument <b><code>enhance</code></b> does all the work for the shape of the points
+and their colors, acording to the five regions specified by Schneider & Rohlfing (2016),
+who augmented the classical XY plot with process tracing.</p>
+  
+      <p>The default enhanced XY plot has even more settings when the input SOP expression is
+a minimization model (different colors, different regions where to place the labels etc.),
+available by activating the argument <b><code>model</code></b>. The model is automatically
+detected if the input for <b><code>x</code></b> is a minimization object.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A list of x and y values, especially useful when the points are jittered.
+</dl></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+  
+      <p>Schneider, C.; Wagemann, C. (2012) <em>Set-Theoretic Metods for the Social Sciences.
+A Guide to Qualitative Comparative Analysis</em>. Cambridge: Cambridge University Press.</p>
+
+      <p>Cebotari, V.; Vink, M.P. (2013) &#147;A Configurational Analysis of Ethnic
+Protest in Europe. <em>International Journal of Comparative Sociology</em>
+vol.54, no.4, pp.298-324.</p>
+  
+      <p>Schneider, C.; Rohlfing, I. (2016) &#147;Case Studies Nested in Fuzzy-set QCA on
+Sufficiency. Formalizing Case Selection and Causal Inference&#148; <em>Sociological
+Methods and Research</em> vol.45, no.3, pp.536-568, DOI:
+<a href = "https://doi.org/10.1177/0049124114532446">10.1177/0049124114532446</a></p>
+
+
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'># Cebotari &amp; Vink (2013)
+# necessity relation between NATPRIDE and PROTEST
+XYplot(CVF[, 5:6])
+</div>
+<div class='input'>
+# same using two numeric vectors
+XYplot(CVF$NATPRIDE, CVF$PROTEST)
+</div>
+<p><img src='img/XYplot-3.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# same using two column names
+XYplot(&quot;NATPRIDE, PROTEST&quot;, data = CVF)
+
+# or using one string containing both
+XYplot(&quot;NATPRIDE, PROTEST&quot;, data = CVF)
+
+# since they are valid R statements, it works even without quotes
+# (this only works in the normal R console, not in the GUI version)
+XYplot(NATPRIDE, PROTEST, data = CVF)
+
+# negating the X axis, using numeric vectors
+XYplot(1 - CVF$NATPRIDE, CVF$PROTEST)
+</div>
+<p><img src='img/XYplot-5.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# same thing using quotes
+XYplot(&quot;1 - NATPRIDE, PROTEST&quot;, data = CVF)
+
+# using tilde for negation
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF)
+
+# different color for the points
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, col = &quot;blue&quot;)
+</div>
+<p><img src='img/XYplot-6.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# using a different character expansion for the axes
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, cex.axis = 0.9)
+</div>
+<p><img src='img/XYplot-7.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# custom axis labels
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, xlab = &quot;Negation of NATPRIDE&quot;,
+       ylab = &quot;Outcome: PROTEST&quot;)
+</div>
+<p><img src='img/XYplot-8.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# necessity relation
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, relation = &quot;necessity&quot;)
+</div>
+<p><img src='img/XYplot-9.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# jitter the points
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, jitter = TRUE)
+</div>
+<p><img src='img/XYplot-10.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# jitter with more amount
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, jitter = TRUE, amount = 0.02)
+</div>
+<p><img src='img/XYplot-11.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# adding labels to points
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, jitter = TRUE, cex = 0.8,
+       clabels = rownames(CVF))
+</div>
+<p><img src='img/XYplot-12.svg' alt='' width='400' height='400' /></p>
+
+<div class='input'>
+# or just the row numbers, since the labels are very long
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, jitter = TRUE, cex = 0.8,
+       clabels = seq(nrow(CVF)))
+</div>
+<p><img src='img/XYplot-13.svg' alt='' width='400' height='400' /></p>
+
+<div class='input'>
+
+#-----
+# enhanced XY plot for process tracing
+XYplot(&quot;~NATPRIDE, PROTEST&quot;, data = CVF, enhance = TRUE, jitter = TRUE)
+</div>
+<p><img src='img/XYplot-14.svg' alt='' width='400' height='400' /></p>
+
+<div class='input'>
+# enhanced XY plot for a solution model
+sol &lt;- &quot;natpride + DEMOC*GEOCON*POLDIS + DEMOC*ETHFRACT*GEOCON&quot;
+XYplot(sol, &quot;PROTEST&quot; data = CVF, enhance = TRUE, model = TRUE)
+
+</div>
+<p><img src='img/XYplot-15.svg' alt='' width='400' height='400' /></p>
+
+<div class='input'>
+# same plot, automatically detected from object pCVF
+ttCVF &lt;- truthTable(CVF, &quot;PROTEST&quot;, incl.cut = 0.85)
+pCVF &lt;- minimize(ttCVF, include = &quot;?&quot;)
+XYplot(pCVF$solution[1], &quot;PROTEST&quot;, data = CVF, enhance = TRUE)
+</div>
+<p><img src='img/XYplot-15.svg' alt='' width='400' height='400' /></p>
+
+
+
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>XYplot</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    <h2>See also</h2>
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/par.html'>par</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/text.html'>text</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/base/html/jitter.html'>jitter</a></code></b>
+    
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

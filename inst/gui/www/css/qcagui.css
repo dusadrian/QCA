@@ -1,0 +1,347 @@
+@media (min-width: 768px) {
+    #main-menu {
+        position: relative;
+        z-index: 9999;
+    }
+    #main-menu ul {
+        width: 12em; /* fixed width only please - you can use the "subMenusMinWidth"/"subMenusMaxWidth" script options to override this if you like */
+    }
+}
+
+
+
+body {
+    margin: 0;
+    background-color: #fffcf7;
+}
+
+
+
+/*  background: -webkit-linear-gradient("#b4d395", "#8ab958"); /* For Safari 5.1 to 6.0 */
+/*  background: -o-linear-gradient("#b4d395", "#8ab958"); /* For Opera 11.1 to 12.0 */
+/*  background: -moz-linear-gradient("#b4d395", "#8ab958"); /* For Firefox 3.6 to 15 */
+/*  background: linear-gradient("#b4d395", "#8ab958"); /* Standard syntax */
+
+.header {
+    background: linear-gradient(to bottom, #b4d395 0%, #8ab958 100%);
+    height: 19px;
+    font-size: 14px;
+    font-family: "Arial";
+    vertical-align: middle;
+}
+
+
+.outerborder {
+    border: 2px solid;
+    border-color: #aaaaaa;
+    box-shadow: none;
+}
+
+/*
+.outerborder:hover, .outerborder:active {
+    box-shadow: 0 0 20px #aaaaaa;
+}
+*/
+
+.border {
+    height: 15px;
+    border: 1px solid;
+    border-color: #d0d0d0;
+    background: #ffffff;
+}
+
+
+#command_main{
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: pre;
+    font-size: 14px;
+    font-family: Monaco,Menlo,Consolas,'Courier New',monospace;
+    //font-family: courier,fixed,swiss,sans-serif;
+    padding: 7 7 7 7;
+    box-sizing: border-box;
+}
+
+
+#result_main{
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: pre;
+    font-size: 14px;
+    font-family: Monaco,Menlo,Consolas,'Courier New',monospace;
+    //font-family: courier,fixed,swiss,sans-serif;
+    padding: 7 7 7 7;
+    box-sizing: border-box;
+}
+
+#about_main {
+    font-family: "Arial";
+    font-size: 14px;
+    padding: 7 7 7 7;
+    box-sizing: border-box;
+}
+
+#changes_main {
+    overflow-x: hidden;
+    overflow-y: auto;
+    font-family: "Arial";
+    font-size: 14px;
+    padding: 7 7 7 7;
+    box-sizing: border-box;
+}
+
+
+#dircontent{
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 280;
+}
+
+
+
+
+#data_editor_colnames{
+    overflow: hidden;
+}
+
+
+#data_editor_rownames{
+    overflow: hidden;
+}
+
+
+#data_editor_body{
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+
+table, th, td {
+    border: none;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 0px;
+}
+
+
+
+
+.spinnerbackground {
+    background-color: rgba(160,160,160,0.2);
+}
+
+
+
+/* 
+Everything below taken from:
+https://icons8.com/cssload/en/spinners/2 
+
+courtesy of Martin van Driel:
+https://codepen.io/martinvd/pen/xbQJom
+*/
+
+
+
+.cssload-loader {
+	width: 80px;
+	height: 80px;
+	border-radius: 50%;
+		-o-border-radius: 50%;
+		-ms-border-radius: 50%;
+		-webkit-border-radius: 50%;
+		-moz-border-radius: 50%;
+	perspective: 780px;
+}
+
+.cssload-inner {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	box-sizing: border-box;
+		-o-box-sizing: border-box;
+		-ms-box-sizing: border-box;
+		-webkit-box-sizing: border-box;
+		-moz-box-sizing: border-box;
+	border-radius: 50%;
+		-o-border-radius: 50%;
+		-ms-border-radius: 50%;
+		-webkit-border-radius: 50%;
+		-moz-border-radius: 50%;	
+}
+
+.cssload-inner.cssload-one {
+	left: 0%;
+	top: 0%;
+	animation: cssload-rotate-one 1.15s linear infinite;
+		-o-animation: cssload-rotate-one 1.15s linear infinite;
+		-ms-animation: cssload-rotate-one 1.15s linear infinite;
+		-webkit-animation: cssload-rotate-one 1.15s linear infinite;
+		-moz-animation: cssload-rotate-one 1.15s linear infinite;
+	border-bottom: 4px solid rgb(203,38,38);
+}
+
+.cssload-inner.cssload-two {
+	right: 0%;
+	top: 0%;
+	animation: cssload-rotate-two 1.15s linear infinite;
+		-o-animation: cssload-rotate-two 1.15s linear infinite;
+		-ms-animation: cssload-rotate-two 1.15s linear infinite;
+		-webkit-animation: cssload-rotate-two 1.15s linear infinite;
+		-moz-animation: cssload-rotate-two 1.15s linear infinite;
+	border-right: 4px solid rgb(203,38,38);
+}
+
+.cssload-inner.cssload-three {
+	right: 0%;
+	bottom: 0%;
+	animation: cssload-rotate-three 1.15s linear infinite;
+		-o-animation: cssload-rotate-three 1.15s linear infinite;
+		-ms-animation: cssload-rotate-three 1.15s linear infinite;
+		-webkit-animation: cssload-rotate-three 1.15s linear infinite;
+		-moz-animation: cssload-rotate-three 1.15s linear infinite;
+	border-top: 4px solid rgb(203,38,38);
+}
+
+
+
+
+
+
+
+@keyframes cssload-rotate-one {
+	0% {
+		transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+	}
+	100% {
+		transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+	}
+}
+
+@-o-keyframes cssload-rotate-one {
+	0% {
+		-o-transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+	}
+	100% {
+		-o-transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+	}
+}
+
+@-ms-keyframes cssload-rotate-one {
+	0% {
+		-ms-transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+	}
+	100% {
+		-ms-transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+	}
+}
+
+@-webkit-keyframes cssload-rotate-one {
+	0% {
+		-webkit-transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+	}
+	100% {
+		-webkit-transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+	}
+}
+
+@-moz-keyframes cssload-rotate-one {
+	0% {
+		-moz-transform: rotateX(35deg) rotateY(-45deg) rotateZ(0deg);
+	}
+	100% {
+		-moz-transform: rotateX(35deg) rotateY(-45deg) rotateZ(360deg);
+	}
+}
+
+@keyframes cssload-rotate-two {
+	0% {
+		transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+	}
+	100% {
+		transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+	}
+}
+
+@-o-keyframes cssload-rotate-two {
+	0% {
+		-o-transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+	}
+	100% {
+		-o-transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+	}
+}
+
+@-ms-keyframes cssload-rotate-two {
+	0% {
+		-ms-transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+	}
+	100% {
+		-ms-transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+	}
+}
+
+@-webkit-keyframes cssload-rotate-two {
+	0% {
+		-webkit-transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+	}
+	100% {
+		-webkit-transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+	}
+}
+
+@-moz-keyframes cssload-rotate-two {
+	0% {
+		-moz-transform: rotateX(50deg) rotateY(10deg) rotateZ(0deg);
+	}
+	100% {
+		-moz-transform: rotateX(50deg) rotateY(10deg) rotateZ(360deg);
+	}
+}
+
+@keyframes cssload-rotate-three {
+	0% {
+		transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+	}
+	100% {
+		transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+	}
+}
+
+@-o-keyframes cssload-rotate-three {
+	0% {
+		-o-transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+	}
+	100% {
+		-o-transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+	}
+}
+
+@-ms-keyframes cssload-rotate-three {
+	0% {
+		-ms-transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+	}
+	100% {
+		-ms-transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+	}
+}
+
+@-webkit-keyframes cssload-rotate-three {
+	0% {
+		-webkit-transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+	}
+	100% {
+		-webkit-transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+	}
+}
+
+@-moz-keyframes cssload-rotate-three {
+	0% {
+		-moz-transform: rotateX(35deg) rotateY(55deg) rotateZ(0deg);
+	}
+	100% {
+		-moz-transform: rotateX(35deg) rotateY(55deg) rotateZ(360deg);
+	}
+}
+
+

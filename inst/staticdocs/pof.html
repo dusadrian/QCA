@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>pof. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Calculate parameters of fit</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>These functions returns inclusion (consistency) and coverage, plus PRI for sufficiency
+and RoN for necessity. The function <b><code><a href=''>pofind()</a></code></b> is a stripped down version
+of the <b><code><a href=''>pof()</a></code></b> function, to calculate parameters of fit for single conditions.</p>
+   
+    </div>
+    
+    <h2>Usage</h2>
+<pre><div>pof(setms = NULL, outcome = NULL, data = NULL, relation = "necessity",
+      use.labels = FALSE, inf.test = "", incl.cut = c(0.75, 0.5), add = NULL, ...)</div>
+<div>pofind(data = NULL, outcome = "", conditions = "", relation = "necessity",
+      use.labels = FALSE, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>setms</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A data frame of (calibrated) set memberships, or a matrix of implicants, 
+        or a vector of row numbers from the implicant matrix, or a character expression</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>outcome</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The name of the outcome column from a calibrated data frame, or
+        the actual numerical column from the data frame, representing the outcome.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>data</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The calibrated data frame, in case the <b><code>outcome</code></b> is a name.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>conditions</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A single string containing the conditions' (columns) names
+        separated by commas, or a character vector of conditions' names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>relation</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The set relation to <b><code>outcome</code></b>, either <b><code>"necessity"</code></b>
+        or <b><code>"sufficiency"</code></b>, partial words like <b><code>"suf"</code></b>
+        being accepted (see examples).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>use.labels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, use category labels if present.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>inf.test</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Specifies the statistical inference test to be performed (currently 
+        only <b><code>"binom"</code></b>) and the critical significance level. It can be either
+        a vector of length 2, or a single string containing both, separated by a comma.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>incl.cut</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The inclusion cutoff(s): either a single value for the presence of the
+        output, or a vector of length 2, the second for the absence of the output.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>add</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A function, or a list containing functions, to add more parameters of fit.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments to be passed to the main function.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The function <b><code>pof()</code></b> is one of the most flexible functions in the <b><span class = "pkg">QCA</span></b>
+package. Depending on particular situations, its arguments can be provided in various
+formats which are automatically recognized and treated accordingly.</p>
+  
+      <p>When specified as a data frame, the argument <b><code>setms</code></b> contains
+any kind of set membership scores:</p>
+  
+      <p>- calibrated causal conditions from the original data,</p>
+  
+      <p>- membership scores from the resulting combinations (component <b><code>coms</code></b>) of
+function <b><code><a href='subsetsAndSupersets.html'>superSubset()</a></code></b>,</p>
+  
+      <p>- prime implicant membership scores (component <b><code>pims</code></b>) from function
+<b><code><a href='minimize.html'>minimize()</a></code></b>,</p>
+  
+      <p>- any other, custom created combinations of set memberships.</p>
+  
+      <p>When specified as a matrix, <b><code>setms</code></b> contains the crisp causal combinations
+similar to those found in the truth table. If some of the causal conditions have
+been minimized, they can be replaced by the numerical value <b><code>-1</code></b> (see examples
+section). The number of columns in the matrix should be equal to the number of causal
+conditions in the original <b><code>data</code></b>.</p>
+  
+      <p>More generally, <b><code>setms</code></b> can be a numerical vector of line numbers from the
+implicant matrix (see function <b><code><a href='createMatrix.html'>createMatrix()</a></code></b>),
+which are automatically transformed into their corresponding set membership scores.</p>
+  
+      <p>The argument <b><code>setms</code></b> can also be a string expression, written
+in sum of products (SOP) form.</p>
+  
+      <p>For all other situations when <b><code>setms</code></b> is something else than a data frame, it requires
+the original <b><code>data</code></b> to generate the set memberships.</p>
+  
+      <p>If character, the argument <b><code>outcome</code></b> is the name of the column
+from the original <b><code>data</code></b>, to be explained (it is a good practice advice
+to specify it using upper case letters, although it will nevertheless be converted,
+by default).</p>
+  
+      <p>If the outcome column is multi-value, the argument <b><code>outcome</code></b> should use the standard
+curly-bracket notation <b><code>X{value}</code></b>. Multiple values are allowed, separated by a comma
+(for example <b><code>X{1,2}</code></b>). Negation of the outcome can also be performed using the tilde
+<b><code>~</code></b> operator, for example <b><code>~X{1,2}</code></b>, which is interpreted as:
+&quot;all values in X except 1 and 2&quot; and it becomes the new outcome to be explained.</p>
+  
+      <p>The argument <b><code>outcome</code></b> can also be a numerical vector of set membership values,
+either directly from the original data frame, or a recoded version (if originally multi-value).</p>
+  
+      <p>The argument <b><code>inf.test</code></b> provides the possibility to perform statistical inference
+tests, comparing the calculated inclusion score with a pair of thresholds (<b><code>ic1</code></b> and
+<b><code>ic0</code></b>) specified in the argument <b><code>incl.cut</code></b>. Currently, it can only
+perform binomial tests (<b><code>&quot;binom&quot;</code></b>), which means that data should only be provided
+as binary crisp (not multivalue, not fuzzy).</p>
+  
+      <p>If the critical significance level is not provided, the default level of <b><code>0.05</code></b>
+is taken.</p>
+  
+      <p>The resulting object will contain the calculated p-values (pval1 and pval0) from two separate,
+one-tailed tests with the alternative hypothesis that the true inclusion score is:</p>
+<p>- greater than <b><code>ic1</code></b> (the inclusion cutoff for an output value of 1)</p>
+<p>- greater than <b><code>ic0</code></b> (the inclusion cutoff for an output value of 0)</p>
+  
+      <p>It should be noted that statistical tests are performing well only when the number
+of cases is large, otherwise they are usually not significant.</p>
+  
+      <p>For the necessity relation, the standard measures of inclusion and coverage are
+supplemented with the <b><code>RoN</code></b> (Relevance of Necessity) measure, as suggested by
+Schneider & Wagemann's (2012).</p>
+  
+      <p>The negation of both <b><code>setms</code></b> and <b><code>outcome</code></b> is
+accepted and recognized using the Boolean subtraction from 1. If the names of the conditions
+are provided via an optional (undocumented) argument <b><code>conditions</code></b>,
+the colnames of the <b><code>setms</code></b> object are negated using
+<b><code><a href='negate.html'>negate()</a></code></b>.</p>
+  
+      <p>The logical argument <b><code>neg.out</code></b> is deprecated, but backwards compatible.
+<b><code>neg.out = TRUE</code></b> and a tilde <b><code>~</code></b> in the outcome name 
+don't cancel each other out, either one (or even both) signaling if the <b><code>outcome</code></b>
+should be negated.</p>
+
+      <p>The arguments from function <b><code>pofind()</code></b> are passed to the main function
+<b><code>pof()</code></b> to calculate parameters of fit.
+
+  
+      <p></p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Cebotari, V.; Vink, M.P. (2013) &#147;A Configurational Analysis of Ethnic
+Protest in Europe&#148;. <em>International Journal of Comparative Sociology</em>
+vol.54, no.4, pp.298-324.</p>
+  
+      <p>Schneider, C. and Wagemann, C. (2012) <em>Set-Theoretic Metods for the Social Sciences.
+A Guide to Qualitative Comparative Analysis</em>. Cambridge: Cambridge University Press.</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'># -----
+# Cebotari &amp; Vink (2013) fuzzy data
+
+conds &lt;- CVF[, 1:5]
+PROTEST &lt;- CVF$PROTEST
+
+# parameters of fit (default is necessity)
+pof(conds, PROTEST)
+</div>
+<div class='output'>
+             inclN  RoN    covN 
+-------------------------------- 
+1  DEMOC     0.741  0.758  0.713 
+2  ETHFRACT  0.680  0.830  0.755 
+3  GEOCON    0.904  0.492  0.624 
+4  POLDIS    0.518  0.878  0.744 
+5  NATPRIDE  0.708  0.523  0.539 
+-------------------------------- 
+
+</div>
+<div class='input'>
+# parameters of fit negating the conditions
+pof(1 - conds, PROTEST)
+</div>
+<div class='output'>
+              inclN  RoN    covN
+---------------------------------- 
+1  ~DEMOC     0.564  0.736  0.601 
+2  ~ETHFRACT  0.661  0.684  0.614 
+3  ~GEOCON    0.317  0.873  0.601 
+4  ~POLDIS    0.631  0.517  0.493 
+5  ~NATPRIDE  0.597  0.952  0.899 
+---------------------------------- 
+
+</div>
+<div class='input'>
+# negating the outcome
+pof(conds, 1 - PROTEST)
+</div>
+<div class='output'>
+             inclN  RoN    covN  
+-------------------------------- 
+1  DEMOC     0.618  0.682  0.580 
+2  ETHFRACT  0.574  0.760  0.623 
+3  GEOCON    0.784  0.436  0.529 
+4  POLDIS    0.335  0.776  0.470 
+5  NATPRIDE  0.932  0.622  0.693 
+-------------------------------- 
+
+</div>
+<div class='input'>
+# parameters of fit for sufficiency
+pof(conds, PROTEST, relation = &quot;suf&quot;)
+</div>
+<div class='output'>
+             inclS  PRI    covS   covU  
+--------------------------------------- 
+1  DEMOC     0.713  0.508  0.741  0.000 
+2  ETHFRACT  0.755  0.578  0.680  0.002 
+3  GEOCON    0.624  0.449  0.904  0.052 
+4  POLDIS    0.744  0.624  0.518  0.000 
+5  NATPRIDE  0.539  0.279  0.708  0.024 
+--------------------------------------- 
+
+</div>
+<div class='input'>
+# also negating the outcome
+pof(conds, 1 - PROTEST, relation = &quot;suf&quot;)
+</div>
+<div class='output'>
+             inclS  PRI    covS   covU  
+--------------------------------------- 
+1  DEMOC     0.580  0.281  0.618  0.001 
+2  ETHFRACT  0.623  0.349  0.574  0.000 
+3  GEOCON    0.529  0.309  0.784  0.000 
+4  POLDIS    0.470  0.221  0.335  0.000 
+5  NATPRIDE  0.693  0.520  0.932  0.086 
+--------------------------------------- 
+
+</div>
+<div class='input'>
+
+# -----
+# standard analysis of necessity
+# using the &quot;coms&quot; component from superSubset()
+nCVF &lt;- superSubset(CVF, outcome = &quot;PROTEST&quot;, incl.cut = 0.90, cov.cut = 0.6)
+
+# also checking their necessity inclusion score in the negated outcome
+pof(nCVF$coms, 1 - PROTEST)
+</div>
+<div class='output'>
+                                       inclN   RoN   covN  
+---------------------------------------------------------- 
+ 1  GEOCON                             0.784  0.436  0.529 
+ 2  DEMOC+ETHFRACT+~GEOCON             0.881  0.440  0.579 
+ 3  DEMOC+~ETHFRACT+POLDIS             0.804  0.450  0.545 
+ 4  DEMOC+ETHFRACT+POLDIS              0.821  0.458  0.558 
+ 5  DEMOC+~ETHFRACT+~NATPRIDE          0.809  0.476  0.560 
+ 6  DEMOC+ETHFRACT+~NATPRIDE           0.801  0.463  0.550 
+ 7  DEMOC+~GEOCON+POLDIS               0.792  0.474  0.550 
+ 8  DEMOC+~GEOCON+~NATPRIDE            0.779  0.513  0.562 
+ 9  DEMOC+POLDIS+~NATPRIDE             0.708  0.492  0.515 
+10  ~ETHFRACT+POLDIS+~NATPRIDE         0.815  0.501  0.575 
+11  ~DEMOC+ETHFRACT+POLDIS+~NATPRIDE   0.843  0.491  0.584 
+12  ETHFRACT+~GEOCON+POLDIS+~NATPRIDE  0.768  0.533  0.567 
+----------------------------------------------------------
+
+</div>
+<div class='input'>
+
+# -----
+# standard analysis of sufficiency
+# using the &quot;pims&quot; component from minimize()
+
+# conservative solution
+cCVF &lt;- minimize(CVF, outcome = &quot;PROTEST&quot;, incl.cut = 0.8, details = TRUE)
+
+# verify if their negations are also sufficient for the outcome
+pof(1 - cCVF$pims, PROTEST)
+</div>
+<div class='output'>
+                                           inclN   RoN   covN  
+-------------------------------------------------------------- 
+1  ~DEMOC+~ETHFRACT+~GEOCON                0.841  0.452  0.575 
+2  ~ETHFRACT+~GEOCON+~POLDIS               0.790  0.354  0.508 
+3  ~DEMOC+~ETHFRACT+~POLDIS+NATPRIDE       0.892  0.259  0.526 
+4  ~DEMOC+~GEOCON+~POLDIS+~NATPRIDE        0.893  0.304  0.542 
+5  DEMOC+ETHFRACT+~GEOCON+POLDIS+NATPRIDE  0.945  0.299  0.567 
+--------------------------------------------------------------
+
+</div>
+<div class='input'>
+
+# -----
+# using a SOP expression, translated using the function translate()
+
+# notice that lower case letters mean the absence of a causal condition
+pof(&quot;~NATPRIDE + GEOCON =&gt; PROTEST&quot;, data = CVF)
+</div>
+<div class='output'>
+               inclS   PRI   covS   covU  
+----------------------------------------- 
+1  ~NATPRIDE   0.899  0.807  0.597  0.042 
+2  GEOCON      0.624  0.449  0.904  0.349 
+3  expression  0.633  0.462  0.946    -   
+-----------------------------------------
+
+</div>
+<div class='input'>
+# same for the negation of the outcome
+pof(&quot;~NATPRIDE + GEOCON =&gt; ~PROTEST&quot;, data = CVF)
+</div>
+<div class='output'>
+               inclS   PRI   covS   covU  
+----------------------------------------- 
+1  ~NATPRIDE   0.561  0.156  0.381  0.018 
+2  GEOCON      0.529  0.309  0.784  0.421 
+3  expression  0.524  0.303  0.803    -   
+----------------------------------------- 
+
+</div>
+<div class='input'>
+# necessity is indicated by the reverse arrow
+pof(&quot;~NATPRIDE + GEOCON &lt;= PROTEST&quot;, data = CVF)
+</div>
+<div class='output'>
+               inclN   RoN   covN  
+---------------------------------- 
+1  ~NATPRIDE   0.597  0.952  0.899 
+2  GEOCON      0.904  0.492  0.624 
+3  expression  0.946  0.468  0.633 
+---------------------------------- 
+
+</div>
+<div class='input'>
+
+# -----
+# more parameters of fit, for instance Haesebrouck' consistency
+
+inclH &lt;- function(x, y) {
+    sum(fuzzyand(x, y)) /
+    sum(fuzzyand(x, y) + sqrt(fuzzyor(x - y, 0)*x))
+}
+
+pof(&quot;~NATPRIDE + GEOCON => ~PROTEST&quot;, data = CVF, add = inclH)
+</div>
+<div class='output'>
+               inclS   PRI   covS   covU   inclH 
+------------------------------------------------ 
+1  ~NATPRIDE   0.561  0.156  0.381  0.018  0.517 
+2  GEOCON      0.529  0.309  0.784  0.421  0.471 
+3  expression  0.524  0.303  0.803    -    0.467 
+------------------------------------------------ 
+
+</div>
+
+
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>pof</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    <h2>See also</h2>
+<b><code><a href='minimize.html'>minimize</a></code></b>,
+<b><code><a href='subsetsAndSupersets.html'>superSubset</a></code></b>
+    
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

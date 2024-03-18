@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>Xplot. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Display the distribution of points for a single condition</h1>
+
+<div class="row">
+    <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function creates a plot for a single vector of numerical values, arranging them
+horizontally from minimum to maximum.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>Xplot(x, jitter = FALSE, at, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A numeric vector.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>jitter</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, vertically jitter the points.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>at</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The points at which tick-marks are to be drawn. Non-finite (infinite, NaN or NA)
+          values are omitted. By default (when NULL) tickmark locations are automatically
+          computed, see the help file for <b><code>?axis</code></b>.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other graphical parameters from <b><code>?par</code></b></td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>This is a special type of (scatter)plot, with points being arranged only on the
+horizontal axis (it has no vertical axis). Useful when inspecting if points
+are grouped into naturally occuring clusters, mainly for crisp calibration purposes.</p>
+
+      <p>The argument <b><code>...</code></b> is used to pass various graphical parameters for the
+various plotting functions used.</p>
+  
+      <p>The points have a default <b><code>cex</code></b> (character expansion) value of 1, and
+a default <b><code>pch</code></b> value of 1 (empty points), which can be modified
+accordingly (for example with value 21 of filled points). When <b><code>pch = 21</code></b>,
+the color for the margins of the points can be specified via the argument
+<b><code>col</code></b>, while the argument <b><code>bg</code></b> will determine the fill color
+of the points.</p>
+  
+      <p>The axis labels have a default <b><code>cex.axis</code></b> value of 0.8, which affects
+both the tickmarks labels and the axis labels.</p>
+  
+      <p>When jittering the points, default values of 0.5 are used for the parameters
+<b><code>factor</code></b> and <b><code>amount</code></b>, on the horizontal axis.
+More details can be found in the base function
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/base/html/jitter.html'>jitter()</a></code></b>.</p>
+  
+      <p>Although the points are displayed in a single dimension, on the horizontal axis,
+the R graphical window will still have the default squared shape, with a lot of 
+empty space on the vertical axis. Users are free to create their custom code to 
+determine the size of the graphics window, or simply resize it to a suitable
+height.</p>
+  
+    </div>
+
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'># Lipset's raw data
+# plot the DEV (level of developent) causal condition
+Xplot(LR$DEV)
+</div>
+<p><img src='img/Xplot-1.svg' alt='' width='400' height='100' /></p>
+<div class='input'>
+# jitter the points vertically
+Xplot(LR$DEV, jitter = TRUE)
+</div>
+<p><img src='img/Xplot-2.svg' alt='' width='400' height='100' /></p>
+<div class='input'>
+# make the x axis large enough to accommodate all values
+Xplot(LR$DEV, jitter = TRUE, at = pretty(LR$DEV))
+</div>
+<p><img src='img/Xplot-3.svg' alt='' width='400' height='100' /></p>
+<div class='input'>
+# clip plotting between the range of min and max
+Xplot(LR$DEV, jitter = TRUE, at = range(LR$DEV))
+</div>
+<p><img src='img/Xplot-4.svg' alt='' width='400' height='100' /></p>
+
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>XYplot</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    <h2>See also</h2>
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/par.html'>par</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/graphics/html/text.html'>text</a></code></b>,
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/base/html/jitter.html'>jitter</a></code></b>
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

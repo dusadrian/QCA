@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>minimize. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+
+      </header>
+
+      <h1>Minimize a truth table</h1>
+
+<div class="row">
+  <div class="span8">
+
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function performs the QCA minimization of an input truth table, or if the
+input is a dataset the minimization it minimizes a set of causal conditions with
+respect to an outcome. Three minimization methods are available: the classical
+Quine-McCluskey, the enhanced Quine-McCluskey and the latest Consistency Cubes
+algorithm that is built for performance.</p>
+
+<p>All algorithms return the same, exact solutions, see
+<a href = "https://doi.org/10.32614/RJ-2018-080">Dusa (2018)</a> and
+<a href = "https://doi.org/10.1080/0022250X.2014.897949">Dusa and Thiem (2015)</a></p>
+
+    </div>
+
+    <h2>Usage</h2>
+<pre><div>minimize(input, include = "", dir.exp = NULL, details = FALSE, pi.cons = 0,
+    sol.cons = 0, all.sol = FALSE, row.dom = FALSE, first.min = FALSE,
+    max.comb = 0, use.labels = FALSE, method = "CCubes", ...
+
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>input</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A truth table object (preferred) or a data frame containing
+        calibrated causal conditions and an outcome.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>include</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A vector of other output values to include in the minimization
+        process.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>dir.exp</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Character, a vector of directional expectations to derive intermediate
+        solutions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>details</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, print more details about the solution.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>pi.cons</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical fuzzy value between 0 and 1, minimal consistency
+        threshold for a prime implicant to be declared as sufficient.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>sol.cons</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numerical fuzzy value between 0 and 1, minimal consistency
+        threshold for a model to be declared as sufficient.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>all.sol</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, search for all possible solutions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>row.dom</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, perform row dominance in the prime implicants' chart to
+        eliminate redundant prime implicants.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>first.min</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, to return only the very first minimal solution (see
+                Details).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>max.comb</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numeric real, to limit the size of the PI chart (see Details).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>use.labels</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, use category labels if present (See Examples).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>method</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Minimization method, one of <b><code>&quot;CCubes&quot;</code></b> (default), or <b><code>&quot;QMC&quot;</code></b> the
+        classical Quine-McCluskey, or <b><code>&quot;eQMC&quot;</code></b> the enhanced Quine-McCluskey.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments to be passed to function <b><code><a href='truthTable.html'>truthTable()</a></code></b>.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+
+      <p>Most of the times, this function takes a truth table object as the
+<b><code>input</code></b> for the minimization procedure, but the same argument can refer to
+a data frame containing calibrated columns.</p>
+
+      <p>For the later case, the function <b><code><a href=''>minimize()</a></code></b> originally
+had some additional formal arguments which were sent to the function
+<b><code><a href='truthTable.html'>truthTable()</a></code></b>:
+<b><code>outcome</code></b>, <b><code>conditions</code></b>, <b><code>n.cut</code></b>,
+<b><code>incl.cut</code></b>, <b><code>show.cases</code></b>, <b><code>use.letters</code></b>
+and <b><code>inf.test</code></b>.</p>
+
+    <p>All of these parameters are still possible with function <b><code><a href=''>minimize()</a></code></b>, but
+since they are sent to the <b><code><a href='truthTable.html'>truthTable()</a></code></b> function
+anyway, it is unnecessary to duplicate their explanation here. The only situation which does need
+an additional description relates to the argument <b><code>outcome</code></b>, where
+unlike <b><code><a href='truthTable.html'>truthTable()</a></code></b> which accepts a single one, the
+function <b><code><a href=''>minimize()</a></code></b> accepts multiple outcomes and performs a
+minimization for  each of them (a situation when all columns are considered causal conditions).</p>
+
+    <p>The argument <b><code>include</code></b> specifies which other truth table rows are
+included in the minimization process. Most often, the remainders are included but
+any value accepted in the argument <b><code>explain</code></b> is also accepted in the
+argument <b><code>include</code></b>.</p>
+
+    <p>The argument <b><code>dir.exp</code></b> is used to specify directional expectations,
+as described by Ragin (2003). They can be specified using SOP expressions, which opens
+up the possibility to experiment with conjunctural directional expectations. "Don't care"
+conditions are simply left unspecified.</p>
+
+    <p>Activating the <b><code>details</code></b> argument has the effect of printing
+parameters of fit for each prime implicant and each overall solution, the essential prime
+implicants being listed in the top part of the table. It also prints the truth
+table, in case the argument <b><code>input</code></b> has been provided as a data frame
+instead of a truth table object.</p>
+
+    <p>The default method (when <b><code>all.sol</code></b>), is to find the minimal number
+(<b><code>k</code></b>) of prime implicants needed to cover all initial positive output
+configurations (minterms), then exhaustively search through all possible disjunctions of
+<b><code>k</code></b> prime implicants which do cover those configurations.</p>
+
+    <p>Once the PI chart is constructed using the prime implicants found in the previous
+stages, the argument <b><code>row.dom</code></b> can be used to further eliminate
+irrelevant prime implicants when solving the PI chart, applying the principle of row
+dominance: if a prime implicant A covers the same (intial) positive output
+configurations as another prime implicant B and in the same time covers
+other configurations which B does not cover, then B is irrelevant and eliminated.</p>
+
+    <p>Depending on the complexity of the PI chart, it sometimes may take a very long time
+to identify all possible irredundant (disjunctions that are not subsets of
+previously found) disjunctive solutions. In such a situation, the number of
+combinations of all possible numbers of prime implicants is potentially too large to be
+solved in a polynomial time and if not otherwise specified, the depth for the disjunctive
+solutions is automatically bounded to 5 prime implicants.</p>
+
+      <p>If minimizing a dataset instead of a truth table, unless otherwise specified the
+argument <b><code>incl.cut</code></b> is automatically set to the minimum value between
+<b><code>pi.cons</code></b> and <b><code>sol.cons</code></b>, then passed to the function
+<b><code><a href='truthTable.html'>truthTable()</a></code></b>.</p>
+
+      <p>The argument <b><code>sol.cons</code></b> introduces another possibility to change
+the method of solving the PI chart. Normally, once the solutions are found among all possible
+combinations of <b><code>k</code></b> prime implicants, consistencies and coverages are
+subsequently calculated. When <b><code>sol.cons</code></b> is lower than 1, then solutions
+are searched based on their consistencies, which should be at least equal to this threshold.</p>
+
+    <p>A large number of causal conditions (i.e. over 15), combined with a large number of cases
+(i.e. hundreds) usually produce a very large number of prime implicants, resulting in a huge
+and extremely complex PI chart with sometimes thousands of rows and hundreds of columns.</p>
+
+    <p>For such a complex PI chart, even finding a minimum is a formidable task, and exhaustively
+solving it is very likely impossible in polynomial time. For this reason, after each level
+of complexity the CCubes algorithm determines if the PI chart is too difficult, by
+calculating the total number of combinations of minimum <b><code>k</code></b> PIs necessary to
+cover all columns.</p>
+
+    <p>The argument \bold{\code{max.comb}} controls this maximum number of combinations. It is a
+rational number counted in (fractions of) billions, defaulted at zero to signal searching
+to the maximum possible extent. If the total number of combinations exceeds a positive
+value of <b><code>max.comb</code></b>, the PI chart is determined as too complex, the search is
+stopped and CCubes attempts to return all possible models using the PIs from the previous
+levels of complexity, when the PI chart was still not too complex.</p>
+
+    <p>In the extreme situation even this is not feasible, the argument <b><code>first.min</code></b>
+controls returning only one (the very first found) minimal model, if at all possible.</p>
+
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+An object of class <code>&quot;qca&quot;</code> when using a single outcome, or class
+<code>&quot;mqca&quot;</code> when using multiple outcomes. These objects are lists having
+the following components:</p>
+
+    <p>
+    <table>
+        <tr>
+            <td valign="top"><b><code>tt</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The truth table object.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>options</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Values for the various options used in the function (including defaults).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>negatives</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The line number(s) of the negative configuration(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>initials</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The initial positive configuration(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>PIchart</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list containing the PI chart(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>primes</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The prime implicant(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>solution</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list of solution(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>essential</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list of essential PI(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>pims</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list of PI membership scores.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>IC</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The matrix containing the inclusion and coverage scores for the solution(s).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>SA</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list of simplifying assumptions.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>i.sol</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A list of components specific to intermediate solution(s), each having
+      a PI chart, prime implicant membership scores, (non-simplifying) easy
+      counterfactuals and difficult counterfactuals.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>complex</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Flag solutions from a too complex PI chart.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>call</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The user's command which produced all these objects and result(s).</td>
+        </tr>
+    </table>
+    </p>
+
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+    <p>Cebotari, V.; Vink, M.P. (2013) &#147;A Configurational Analysis of Ethnic
+Protest in Europe&#148;. <em>International Journal of Comparative Sociology</em>
+vol.54, no.4, pp.298-324, DOI:
+<a href = 'https://doi.org/10.1177/0020715213508567'>10.1177/0020715213508567</a>.</p>
+
+    <p>Cebotari, V.; Vink, M.P. (2015) &#147;Replication Data for: A configurational
+analysis of ethnic protest in Europe&#148;, Harvard Dataverse, V2, DOI:
+<a href = 'https://doi.org/10.7910/DVN/PT2IB9'>10.7910/DVN/PT2IB9</a></p>
+
+    <p>Cronqvist, L.; Berg-Schlosser, D. (2009) &#147;Multi-Value QCA (mvQCA)&#148;, in
+Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods. Qualitative
+Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+
+    <p>Dusa, A.; Thiem, A. (2015) &#147;Enhancing the Minimization of Boolean and
+Multivalue Output Functions With eQMC&#148; <em>Journal of Mathematical Sociology</em>
+vol.39, no.2, pp.92-108, DOI:
+<a href = 'https://doi.org/10.1080/0022250X.2014.897949'>10.1080/0022250X.2014.897949</a>.</p>
+
+    <p>Dusa, A. (2018) &#147;Consistency Cubes: A Fast, Efficient Method for Boolean
+Minimization&#148; <em>R Journal</em>
+vol.10, no.2, pp.357-370, DOI:
+<a href = 'https://doi.org/10.32614/RJ-2018-080'>10.32614/RJ-2018-080</a>.</p>
+
+    <p>Dusa, A. (2019) <em>QCA with R. A Comprehensive Resource</em>.
+Springer International Publishing.</p>
+
+    <p>Ragin, C.C. (2003) <em>Recent Advances in Fuzzy-Set Methods and Their Application to Policy Questions</em>.
+<a href = 'https://www.compasss.org/wpseries/Ragin2003a.pdf'>WP 2003-9, COMPASSS</a>.</p>
+
+    <p>Ragin, C.C. (2009) &#147;Qualitative Comparative Analysis Using Fuzzy-Sets (fsQCA)&#148;,
+in Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods.
+Qualitative Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+
+    <p>Ragin, C.C.; Strand, S.I. (2008) &#147;Using Qualitative Comparative
+Analysis to Study Causal Order: Comment on Caren and Panofsky (2005).&#148;
+<em>Sociological Methods & Research</em> vol.36, no.4, pp.431-441, DOI:
+<a href = 'https://doi.org/10.1177/0049124107313903'>10.1177/0049124107313903</a>.</p>
+
+    <p>Rihoux, B.; De Meur, G. (2009) &#147;Crisp Sets Qualitative Comparative Analysis
+(mvQCA)&#148;, in Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods.
+Qualitative Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+
+      <p></p>
+
+    </div>
+
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'># -----
+# Lipset binary crisp data
+
+# the associated truth table
+ttLC &lt;- truthTable(LC, &quot;SURV&quot;, sort.by = &quot;incl, n&quot;)
+ttLC
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+    DEV URB LIT IND STB OUT n  incl  PRI
+32   1   1   1   1   1   1  4  1.000 1.000
+22   1   0   1   0   1   1  2  1.000 1.000
+24   1   0   1   1   1   1  2  1.000 1.000
+ 1   0   0   0   0   0   0  3  0.000 0.000
+ 2   0   0   0   0   1   0  2  0.000 0.000
+ 5   0   0   1   0   0   0  2  0.000 0.000
+ 6   0   0   1   0   1   0  1  0.000 0.000
+23   1   0   1   1   0   0  1  0.000 0.000
+31   1   1   1   1   0   0  1  0.000 0.000
+
+</div>
+<div class='input'>
+# conservative solution (Rihoux &amp; De Meur 2009, p.57)
+cLC &lt;- minimize(ttLC)
+cLC
+</div>
+<div class='output'>
+M1: DEV*urb*LIT*STB + DEV*LIT*IND*STB &lt;=&gt; SURV
+
+</div>
+<div class='input'>
+# view the Venn diagram for the associated truth table
+library(venn)
+venn(cLC)
+</div>
+<p><img src='img/minimize-1.svg' alt='' width='400' height='400' /></p>
+<div class='input'>
+# add details and case names
+minimize(ttLC, details = TRUE, show.cases = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 8/10/0
+  Total      : 18
+
+Number of multiple-covered cases: 2
+
+M1: DEV*~URB*LIT*STB + DEV*LIT*IND*STB &lt;=&gt; SURV
+
+                     inclS   PRI   covS   covU   cases
+-------------------------------------------------------------------
+1  DEV*~URB*LIT*STB  1.000  1.000  0.500  0.250  FI,IE; FR,SE
+2  DEV*LIT*IND*STB   1.000  1.000  0.750  0.500  FR,SE; BE,CZ,NL,UK
+-------------------------------------------------------------------
+   M1                1.000  1.000  1.000
+
+</div>
+<div class='input'>
+# negating the outcome
+ttLCn &lt;- truthTable(LC, &quot;~SURV&quot;, sort.by = &quot;incl, n&quot;)
+minimize(ttLCn)
+</div>
+<div class='output'>
+M1: ~DEV*~URB*~IND + DEV*LIT*IND*~STB &lt;=&gt; ~SURV
+
+</div>
+<div class='input'>
+# parsimonious solution, positive output
+pLC &lt;- minimize(ttLC, include = &quot;?&quot;, details = TRUE, show.cases = TRUE)
+pLC
+</div>
+<div class='output'>
+n OUT = 1/0/C: 8/10/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV*STB &lt;=&gt; SURV
+
+            inclS  PRI    covS   covU   cases
+-----------------------------------------------------------------
+1  DEV*STB  1.000  1.000  1.000    -    FI,IE; FR,SE; BE,CZ,NL,UK
+-----------------------------------------------------------------
+   M1       1.000  1.000  1.000
+
+</div>
+<div class='input'>
+# the associated simplifying assumptions
+pLC$SA
+</div>
+<div class='output'>$M1
+   DEV URB LIT IND STB
+18   1   0   0   0   1
+20   1   0   0   1   1
+26   1   1   0   0   1
+28   1   1   0   1   1
+30   1   1   1   0   1
+
+</div>
+<div class='input'>
+# parsimonious solution, negative output
+pLCn &lt;- minimize(ttLCn, include = &quot;?&quot;, details = TRUE, show.cases = TRUE)
+pLCn
+</div>
+<div class='output'>
+n OUT = 1/0/C: 10/8/0
+  Total      : 18
+
+Number of multiple-covered cases: 5
+
+M1: ~DEV + ~STB &lt;=&gt; ~SURV
+
+         inclS   PRI   covS   covU   cases
+---------------------------------------------------------------
+1  ~DEV  1.000  1.000  0.800  0.300  GR,PT,ES; IT,RO; HU,PL; EE
+2  ~STB  1.000  1.000  0.700  0.200  GR,PT,ES; HU,PL; AU; DE
+---------------------------------------------------------------
+   M1    1.000  1.000  1.000
+
+</div>
+<div class='input'>
+
+
+# -----
+# Lipset multi-value crisp data (Cronqvist &amp; Berg-Schlosser 2009, p.80)
+
+# truth table
+ttLM &lt;- truthTable(LM, &quot;SURV&quot;, conditions = &quot;DEV, URB, LIT, IND&quot;,
+        sort.by = &quot;incl&quot;, show.cases = TRUE)
+
+# conservative solution, positive output
+minimize(ttLM, details = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 7/11/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV[2]*LIT[1]*IND[1] + DEV[1]*URB[0]*LIT[1]*IND[0] =&gt; SURV[1]
+
+                                inclS  PRI    covS   covU   cases
+---------------------------------------------------------------------------
+1  DEV[2]*LIT[1]*IND[1]         1.000  1.000  0.625  0.625  FR,SE; BE,NL,UK
+2  DEV[1]*URB[0]*LIT[1]*IND[0]  1.000  1.000  0.250  0.250  FI,IE
+---------------------------------------------------------------------------
+   M1                           1.000  1.000  0.875
+
+</div>
+<div class='input'>
+# parsimonious solution, positive output
+minimize(ttLM, include = &quot;?&quot;, details = TRUE, show.cases = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 7/11/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV[2] + DEV[1]*IND[0] =&gt; SURV[1]
+
+                  inclS  PRI    covS   covU   cases
+-------------------------------------------------------------
+1  DEV[2]         1.000  1.000  0.625  0.625  FR,SE; BE,NL,UK
+2  DEV[1]*IND[0]  1.000  1.000  0.250  0.250  FI,IE
+-------------------------------------------------------------
+   M1             1.000  1.000  0.875
+
+</div>
+<div class='input'>
+# negate the outcome
+ttLMn &lt;- truthTable(LM, &quot;~SURV&quot;, conditions = &quot;DEV, URB, LIT, IND&quot;,
+         sort.by = &quot;incl&quot;, show.cases = TRUE)
+
+# conservative solution, negative output
+minimize(ttLMn, details = TRUE, show.cases = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 9/9/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV[0]*URB[0]*IND[0] + DEV[1]*URB[0]*LIT[1]*IND[1] =&gt; ~SURV[1]
+
+                                inclS  PRI    covS   covU   cases
+------------------------------------------------------------------------------------
+1  DEV[0]*URB[0]*IND[0]         1.000  1.000  0.800  0.800  GR,IT,PT,RO,ES; EE,HU,PL
+2  DEV[1]*URB[0]*LIT[1]*IND[1]  1.000  1.000  0.100  0.100  AU
+------------------------------------------------------------------------------------
+   M1                           1.000  1.000  0.900
+
+</div>
+<div class='input'>
+# parsimonious solution, positive output
+minimize(ttLMn, include = &quot;?&quot;, details = TRUE, show.cases = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 9/9/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV[0] + DEV[1]*URB[0]*IND[1] =&gt; ~SURV[1]
+
+                         inclS  PRI    covS   covU   cases
+-----------------------------------------------------------------------------
+1  DEV[0]                1.000  1.000  0.800  0.800  GR,IT,PT,RO,ES; EE,HU,PL
+2  DEV[1]*URB[0]*IND[1]  1.000  1.000  0.100  0.100  AU
+-----------------------------------------------------------------------------
+   M1                    1.000  1.000  0.900
+
+</div>
+<div class='input'>
+
+
+# -----
+# Lipset fuzzy sets data (Ragin 2009, p.112)
+
+ttLF &lt;- truthTable(LF, &quot;SURV&quot;, incl.cut = 0.8, show.cases = TRUE, sort.by=&quot;incl&quot;)
+
+# conservative solution
+minimize(ttLF, details = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 6/12/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV*URB*LIT*IND*STB + DEV*~URB*LIT*~IND*STB =&gt; SURV
+
+                          inclS   PRI   covS   covU   cases
+-----------------------------------------------------------------
+1  DEV*URB*LIT*IND*STB    0.904  0.886  0.454  0.393  BE,CZ,NL,UK
+2  DEV*~URB*LIT*~IND*STB  0.804  0.719  0.265  0.204  FI,IE
+-----------------------------------------------------------------
+   M1                     0.870  0.843  0.658
+
+</div>
+<div class='input'>
+# parsimonious solution
+minimize(ttLF, include = &quot;?&quot;, details = TRUE)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 6/12/0
+  Total      : 18
+
+Number of multiple-covered cases: 0
+
+M1: DEV*~IND + URB*STB =&gt; SURV
+
+             inclS   PRI   covS   covU   cases
+----------------------------------------------------
+1  DEV*~IND  0.815  0.721  0.284  0.194  FI,IE
+2  URB*STB   0.874  0.845  0.520  0.430  BE,CZ,NL,UK
+----------------------------------------------------
+   M1        0.850  0.819  0.714
+
+</div>
+<div class='input'>
+# intermediate solution
+minimize(ttLF, include = &quot;?&quot;, details = TRUE,
+             dir.exp = &quot;DEV, URB, LIT, IND, STB&quot;)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 6/12/0
+  Total      : 18
+
+From C1P1:
+
+Number of multiple-covered cases: 0
+
+M1:    DEV*URB*LIT*STB + DEV*LIT*~IND*STB =&gt; SURV
+
+                     inclS   PRI   covS   covU   cases
+------------------------------------------------------------
+1  DEV*URB*LIT*STB   0.901  0.879  0.468  0.378  BE,CZ,NL,UK
+2  DEV*LIT*~IND*STB  0.814  0.721  0.282  0.191  FI,IE
+------------------------------------------------------------
+   M1                0.866  0.839  0.660
+</div>
+<div class='input'>
+# directional expectations can also be specified using a sequence
+minimize(ttLF, include = &quot;?&quot;, details = TRUE, dir.exp = DEV:STB)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 6/12/0
+  Total      : 18
+
+From C1P1:
+
+Number of multiple-covered cases: 0
+
+M1:    DEV*URB*LIT*STB + DEV*LIT*~IND*STB =&gt; SURV
+
+                     inclS   PRI   covS   covU   cases
+------------------------------------------------------------
+1  DEV*URB*LIT*STB   0.901  0.879  0.468  0.378  BE,CZ,NL,UK
+2  DEV*LIT*~IND*STB  0.814  0.721  0.282  0.191  FI,IE
+------------------------------------------------------------
+   M1                0.866  0.839  0.660
+</div>
+<div class='input'>
+# URB as a don't care condition (left unspecified) and
+# conjunctural directional expectations
+minimize(ttLF, include = &quot;?&quot;, details = TRUE, show.cases = TRUE,
+         dir.exp = &quot;DEV, STB, ~LIT*IND&quot;)
+</div>
+<div class='output'>
+n OUT = 1/0/C: 6/12/0
+  Total      : 18
+
+From C1P1:
+
+Number of multiple-covered cases: 0
+
+M1:    DEV*URB*STB + DEV*~IND*STB =&gt; SURV
+
+                 inclS   PRI   covS   covU   cases
+--------------------------------------------------------
+1  DEV*URB*STB   0.901  0.879  0.468  0.378  BE,CZ,NL,UK
+2  DEV*~IND*STB  0.814  0.721  0.282  0.191  FI,IE
+--------------------------------------------------------
+   M1            0.866  0.839  0.660
+</div>
+<div class='input'>
+
+
+# -----
+# Cebotari &amp; Vink (2013, 2015)
+
+ttCVF &lt;- truthTable(CVF, outcome = &quot;PROTEST&quot;, incl.cut = 0.8,
+	                show.cases = TRUE, sort.by = &quot;incl, n&quot;)
+
+pCVF &lt;- minimize(ttCVF, include = &quot;?&quot;, details = TRUE, show.cases = TRUE)
+pCVF
+</div>
+<div class='output'>
+n OUT = 1/0/C: 13/16/0
+  Total      : 29
+
+Number of multiple-covered cases: 5
+
+
+M1: ~NATPRIDE + DEMOC*GEOCON*POLDIS + (~DEMOC*ETHFRACT*POLDIS + DEMOC*ETHFRACT*GEOCON) =&gt; PROTEST
+M2: ~NATPRIDE + DEMOC*GEOCON*POLDIS + (~DEMOC*ETHFRACT*POLDIS + DEMOC*ETHFRACT*~POLDIS) =&gt; PROTEST
+M3: ~NATPRIDE + DEMOC*GEOCON*POLDIS + (DEMOC*ETHFRACT*GEOCON + ETHFRACT*GEOCON*POLDIS) =&gt; PROTEST
+M4: ~NATPRIDE + DEMOC*GEOCON*POLDIS + (DEMOC*ETHFRACT*~POLDIS + ETHFRACT*GEOCON*POLDIS) =&gt; PROTEST
+
+                                                ---------------------------------
+                           inclS   PRI   covS   covU   (M1)   (M2)   (M3)   (M4)
+---------------------------------------------------------------------------------
+1 ~NATPRIDE               0.899  0.807  0.597  0.121  0.132  0.122  0.136  0.126
+2 DEMOC*GEOCON*POLDIS     0.906  0.805  0.342  0.065  0.065  0.070  0.065  0.065
+---------------------------------------------------------------------------------
+3  ~DEMOC*ETHFRACT*POLDIS  0.842  0.718  0.299  0.000  0.040  0.040
+4  DEMOC*ETHFRACT*GEOCON   0.935  0.826  0.480  0.000  0.085         0.085
+5  DEMOC*ETHFRACT*~POLDIS  0.932  0.773  0.417  0.000         0.085         0.085
+6  ETHFRACT*GEOCON*POLDIS  0.869  0.786  0.365  0.005                0.045  0.045
+---------------------------------------------------------------------------------
+   M1                      0.877  0.777  0.805
+   M2                      0.877  0.777  0.805
+   M3                      0.879  0.782  0.810
+   M4                      0.879  0.782  0.810
+
+                           cases
+--------------------------------
+1  ~NATPRIDE               CrimRussiansUkr,RussiansUkraine; HungariansYugo,KosovoAlbanians; RussiansLatvia;
+                            BasquesSpain; AlbaniansFYROM
+2  DEMOC*GEOCON*POLDIS     HungariansRom,CatholicsNIreland; AlbaniansFYROM; RussiansEstonia
+--------------------------------
+3  ~DEMOC*ETHFRACT*POLDIS  HungariansYugo,KosovoAlbanians; GagauzMoldova
+4  DEMOC*ETHFRACT*GEOCON   BasquesSpain; SerbsFYROM,CatalansSpain; AlbaniansFYROM; RussiansEstonia
+5  DEMOC*ETHFRACT*~POLDIS  BasquesSpain; SerbsFYROM,CatalansSpain
+6  ETHFRACT*GEOCON*POLDIS  HungariansYugo,KosovoAlbanians; GagauzMoldova; AlbaniansFYROM; RussiansEstonia
+--------------------------------
+
+</div>
+<div class='input'>
+# inspect the PI chart
+pCVF$PIchart
+</div>
+<div class='output'>
+                         5  15 16 24 27 29 30 31 32
+~NATPRIDE                x  x  -  -  x  x  -  x  -
+~DEMOC*ETHFRACT*POLDIS   -  x  x  -  -  -  -  -  -
+DEMOC*ETHFRACT*GEOCON    -  -  -  -  -  x  x  x  x
+DEMOC*ETHFRACT*~POLDIS   -  -  -  -  -  x  x  -  -
+DEMOC*GEOCON*POLDIS      -  -  -  x  -  -  -  x  x
+ETHFRACT*GEOCON*POLDIS   -  x  x  -  -  -  -  x  x
+
+</div>
+<div class='input'>
+# DEMOC*ETHFRACT*poldis is dominated by DEMOC*ETHFRACT*GEOCON
+# using row dominance to solve the PI chart
+pCVFrd &lt;- minimize(ttCVF, include = &quot;?&quot;, row.dom = TRUE,
+                details = TRUE, show.cases = TRUE)
+
+# plot the prime implicants on the outcome
+pims &lt;- pCVFrd$pims
+
+par(mfrow = c(2, 2))
+for(i in 1:4) {
+    XYplot(pims[, i], CVF$PROTEST, cex.axis = 0.6)
+}
+</div>
+<p><img src='img/minimize-2.svg' alt='' width='600' height='600'/></p>
+<div class='input'>
+
+# -----
+# temporal QCA (Ragin & Strand 2008) serving the input as a dataset,
+# which will automatically be passed to truthTable() as an intermediary
+# step before the minimization
+
+minimize(RS, outcome = &quot;REC&quot;, details = TRUE)
+</div>
+<div class='output'>
+  OUT: outcome value
+    n: number of cases in configuration
+ incl: sufficiency inclusion score
+
+     P  E  A  EBA S    OUT    n  incl  PRI
+ 5   0  0  0   -  0     0     3  0.000 0.000
+17   0  1  0   -  0     0     1  0.000 0.000
+20   0  1  1   0  1     1     1  1.000 1.000
+29   1  0  0   -  0     0     1  0.000 0.000
+30   1  0  0   -  1     0     3  0.000 0.000
+36   1  0  1   -  1     0     2  0.000 0.000
+42   1  1  0   -  1     1     1  1.000 1.000
+44   1  1  1   0  1     1     1  1.000 1.000
+45   1  1  1   1  0     1     2  1.000 1.000
+46   1  1  1   1  1     1     2  1.000 1.000
+
+n OUT = 1/0/C: 7/10/0
+  Total      : 17
+
+Number of multiple-covered cases: 3
+
+M1: P*E*S + P*E*A*EBA + E*A*~EBA*S &lt;=&gt; REC
+
+               inclS   PRI   covS   covU
+-----------------------------------------
+1  P*E*S       1.000  1.000  0.571  0.143
+2  P*E*A*EBA   1.000  1.000  0.571  0.286
+3  E*A*~EBA*S  1.000  1.000  0.286  0.143
+-----------------------------------------
+   M1          1.000  1.000  1.000
+
+</div>
+<div class='input'>
+
+# -----
+# employ category labels
+
+ttLF <- truthTable(LF, SURV, incl.cut = 0.8, sort.by = &quot;incl&quot;, show.cases = TRUE)
+
+minimize(ttLF, include = &quot;?&quot;, use.labels = TRUE)
+</div>
+<div class='output'>
+
+M1: Developed*Not industrialised + High urbanisation*Stability -> Survival
+
+</div>
+<div class='input'>
+
+# or
+
+ttLF <- truthTable(
+    LF, SURV, incl.cut = 0.8, sort.by = &quot;incl&quot;, show.cases = TRUE,
+    use.labels = TRUE
+)
+
+minimize(ttLF, include = &quot;?&quot;)
+</div>
+<div class='output'>
+
+M1: Developed*Not industrialised + High urbanisation*Stability -> Survival
+
+</div>
+<div class='input'></div></pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>minimize</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+
+    <h2>Author</h2>
+
+Adrian Dusa
+
+    <h2>See also</h2>
+    <b><code><a href='truthTable.html'>truthTable</a></code></b>,
+    <b><code><a href='factorize.html'>factorize</a></code></b>
+
+  </div>
+</div>
+
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

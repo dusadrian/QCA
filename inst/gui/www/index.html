@@ -1,0 +1,75 @@
+<html>
+
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <link rel="stylesheet" type="text/css" href="css/qcagui.css">
+    <link rel="stylesheet" type="text/css" href="lib/smartmenus-1.0.0-beta1/css/sm-core-css.css">
+    <link rel="stylesheet" type="text/css" href="lib/smartmenus-1.0.0-beta1/css/sm-mint/sm-mint.css">
+    <link rel="stylesheet" type="text/css" href="lib/jqueryui/1.12.1/jquery-ui.css">
+    <link rel="stylesheet" type="text/css" href="lib/shiny_1.4.0/shiny.css">
+    
+    <script type="text/javascript" src="lib/jquery-3.3.1.min.js"></script>
+    <script type="text/javascript" src="lib/smartmenus-1.0.0-beta1/jquery.smartmenus.js"></script>
+    <script type="text/javascript" src="lib/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="lib/Raphael/raphael-2.2.0-min.js"></script>
+    <script type="text/javascript" src="lib/Raphael.InlineTextEditing-master/raphael.inline_text_editing.js"></script>
+    <script type="text/javascript" src="lib/raphael-paragraph/raphael-paragraph.js"></script>
+    <script type="text/javascript" src="lib/shiny_1.4.0/shiny.js"></script>
+    <script type="text/javascript" src="lib/jquery.raphael.spinner.js"></script>
+    <script type="text/javascript" src="js/utils.js"></script>
+    <script type="text/javascript" src="js/maincode.js"></script>
+    
+</head>
+
+<body>
+    
+    <div id="menuholder" style="position: relative; z-index: 10000;">
+        <ul id="main_menu" class="sm sm-mint">
+            <li><a><span>File</span></a>
+                <ul>
+                    <li><a id = "menu_load"><span>Load</span></a></li>
+                    <li><a id = "menu_import"><span>Import</span></a></li>
+                    <li><a id = "menu_export"><span>Export</span></a></li>
+                </ul>
+            </li>
+            <li><a><span>Data</span></a>
+                <ul>
+                    <li><a id = "menu_data_editor"><span>Edit</span></a></li>
+                    <li><a id = "menu_calibrate"><span>Calibrate</span></a></li>
+                    <li><a id = "menu_recode"><span>Recode</span></a></li>
+                </ul>
+            </li>
+            <li><a><span>Analyse</span></a>
+                <ul>
+                    <li><a id = "menu_create_tt"><span>Truth table</span></a></li>
+                    <li><a id = "menu_find_rows"><span>Incoherent configurations</span></a></li>
+                    <li><a id = "menu_minimize"><span>Minimization</span></a></li>
+                </ul>
+            </li>
+            <li><a><span>Graphs</span></a>
+                <ul>
+                    <li><a id = "menu_xyplot"><span>XY plot</span></a></li>
+                    <li><a id = "menu_venn"><span>Venn diagram</span></a></li>
+                    <li><a id = "menu_saveRplot"><span>Save R plot window</span></a></li>
+                </ul>
+            </li>
+            <li><a><span>About</span></a>
+                <ul>
+                    <li><a id = "menu_about"><span>This package</span></a></li>
+                    <li><a id = "menu_changes"><span>Latest changes</span></a></li>
+                </ul>
+            </li>
+            <li><a id = "menu_help"><span>Help</span></a></li>
+            <li><a id = "menu_quit"><span>Quit</span></a></li>
+        </ul>
+    </div>
+    
+    
+</body>
+
+</html>
+
+

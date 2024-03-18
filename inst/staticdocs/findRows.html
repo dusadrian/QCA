@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>findRows. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+
+      </header>
+
+      <h1>Find untenable configurations</h1>
+
+<div class="row">
+  <div class="span8">
+
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function takes a truth table as the input, and finds various types of untenable
+assumptions that are usually used in function <b><code><a href='minimize.html'>minimize()</a></code></b> when excluding
+certain remainders or some observed configurations from the minimization process.</p>
+
+    </div>
+
+    <h2>Usage</h2>
+    <pre><div>findRows(expression = &quot;&quot;, obj, observed = FALSE, type = 1, ...)</div></pre>
+
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>expression</code></b></td>
+            <td></td><td></td><td></td>
+            <td>String: a QCA expression written in sum of products form.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>obj</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A truth table (an object of class <code>"QCA_tt"</code>) or a, equivalent numerical matrix.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>observed</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical: also return subset relations for observed configurations,
+        when <b><code>obj</code></b> is a truth table.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>type</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numeric vector, specifying the type(s) of untenable configurations</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Additional arguments to be passed to function <b><code><a href='truthTable.html'>truthTable()</a></code></b>,
+              for the negation of the outcome.</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The primary purpose is to find untenable assumptions to be excluded
+from the Boolean minimization process. For this reason, the input is most of the times
+a truth table, but for demonstration purposes it can also be a simple matrix having
+column names.</p>
+
+      <p>It started as a function to find rows that are subsets of a given SOP expression, and
+it developed to cover even more untenable asumptions.</p>
+
+      <p>Subset rows can be anything, from remainders to the observed configurations: positive
+output, negative output and contradictions). By default, the function returns only the
+subset configurations for the remaiders, but activating the argument <b><code>observed</code></b>
+adds the corresponding observed configurations to the output.</p>
+
+      <p>It might ocasionally find negative output configurations or contradictions, but that
+doesn't have any side effect because they are going to be excluded from the minimization
+anyways, unless contradictions are included in the minimization. The only category that
+really matters if they are identified or not, are the positive output configurations.</p>
+
+      <p>The contradictory simplifying assumptions (CSAs) are those which are used for both
+the presence and the absence of the outcome, while simultaneous subset relations (SSRs)
+when observed configurations are sufficient for both the presence and the absence of
+the outcome. CSAs and SSRs are incoherent conterfactuals, part of a category called
+Untenable Assumptions.</p>
+
+      <p>This function takes does what is normally done with a series of commands, in a
+more integrated and systematic way.</p>
+
+      <p>Providing a truth table is sufficient to perform all these tasks, because a truth
+table already contains all necessary information of how it was produced, most importantly
+the inclusion cut-off(s). By default, it uses the same options to produce a truth table for
+the negation of the outcome (if the input truth table was created for its presence, or the
+other way round), and minimizes both to inspect their simplifying assumptions to
+detect which are contradictory.</p>
+
+      <p>If there are such simplifying assumptions in both parsimonious solutions, it means
+these are contradictory, and if there are observed configurations that are
+sufficient for both the presence and the absence of the outcome, these are also
+incoherent because of the simultaneous subset relations problem.</p>
+
+      <p>The following types of untenable assumptions can be searched for:</p>
+
+<p><table><tr><td>
+<b><code>0</code></b> </td>
+<td> all of them</td>
+</tr><tr><td>
+<b><code>1</code></b> </td>
+<td> subsets of a given <b><code>expression</code></b> (default)</td>
+</tr><tr><td>
+<b><code>2</code></b> </td>
+<td> contradictory simplifying assumptions</td>
+</tr><tr><td>
+<b><code>3</code></b> </td>
+<td> simultaneous subset relations</td>
+</tr></table></p>
+
+      <p>To find contradictory simplifying assumptions, a truth table for the negated outcome is
+constructed, using the <b><code>incl.cut</code></b> argument from the <b><code>obj</code></b>
+input object. If the inclusion cut-off has a single value, the same is used for the negated
+outcome, and if it has two values the second is used.</p>
+</tr></table></p>
+
+      <p>If very specific cutoff values are needed for the negation of the outcome, these can be provided
+via the <b><code>...</code></b> argument, that will be passed to function
+<b><code><a href='truthTable.html'>truthTable()</a></code></b>.</p>
+
+      <p></p>
+
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+      <p><dl>
+A numeric vector of length <b><code>n</code></b>.
+</dl></p>
+
+    </div>
+
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# Lipset's binary crisp version
+ttLC <- truthTable(LC, "SURV", show.cases = TRUE)
+
+findRows(obj = ttLC, "DEV*~IND*STB")
+</div>
+<div class='output'>[1] 18 26 30
+</div>
+<div class='input'>
+
+## all subset rows from the truth table, also for observed configurations
+findRows(obj = ttLC, "DEV*~IND*STB", observed = TRUE)
+</div>
+<div class='output'>[1] 18 22 26 30
+</div>
+
+<div class='input'>
+
+# Lipset's fuzzy version
+ttLF <- truthTable(LF, outcome = "SURV", incl.cut = 0.8)
+
+findRows(obj = ttLF, type = 2) # contradictory simplifying assumptions
+</div>
+<div class='output'>[1] 10 12 14 16 17 21 25 29
+</div>
+
+<div class='input'>
+
+# Contradictory simplifying assumptions using different cutoff values
+# for the _negation_ of the outcome
+
+findRows(obj = ttLF, type = 2, incl.cut = 0.9, pri.cut = 0.7)
+</div>
+<div class='output'>[1] 10 12 17 18 21 25 26 28 29
+</div>
+
+
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>findRows</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+
+    <h2>Author</h2>
+
+Adrian Dusa
+
+    <h2>See also</h2>
+    <b><code><a href='truthTable.html'>truthTable</a></code></b>, <b><code><a href='minimize.html'>minimize</a></code></b>
+
+  </div>
+</div>
+
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

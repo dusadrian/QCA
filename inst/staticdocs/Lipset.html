@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>_Lipset. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Lipset's indicators for the survival of democracy</h1>
+
+<div class="row">
+  <div class="span8">
+    <h2>Usage</h2>
+    <pre><div>data(LR)
+data(LC)
+data(LM)
+data(LF)</div></pre>
+        
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This data set is taken from Lipset (1959), as used by Rihoux and De Meur (2009),
+Cronqvist and Berg-Schlosser (2009) and Ragin (2009).</p>
+  
+    </div>
+
+    <div class="Format">
+      <h2>Format</h2>
+
+      <p>A data frame containing 18 rows and the following 6 columns:</p>
+<p><table>
+    <tr>
+        <td valign="top"><b><code>DEV</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Level of development: it is the GDP per capita (USD) in the raw data, calibrated
+        in the binary crisp version to 0 if below 550 USD and 1 otherwise. For the multi-value
+        crisp version, two thresholds were used: 550 and 850 USD.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>URB</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Level of urbanization: percent of the population in towns with 20,000 or more
+inhabitants, calibrated in the crisp versions to 0 if below 50% and 1 if above.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>LIT</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Level of literacy: percent of the literate population, calibrated
+in the crisp versions to 0 if below 75% and 1 if above.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>IND</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Level of industrialization: percent of the industrial labor force, calibrated
+in the crisp versions to 0 if below 30% and 1 if above.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>STB</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Government stability: a &#147;political-institutional&#148; condition added to the
+previous four &#147;socioeconomic&#148; ones. The raw data has the number of cabinets
+which governed in the period under study, calibrated in the crisp versions to 0 if
+10 or above and 1 if below 10.</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>SURV</code></b></td>
+        <td></td><td></td><td></td>
+        <td>Outcome: survival of democracy during the inter-war period, calibrated to 0 if
+negative, and 1 if positive raw data.</td>
+    </tr>
+</table></p>
+  
+    </div>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>There are four different versions of the Lipset data:</p>
+<p><table>
+    <tr>
+        <td valign="top"><b><code>LR</code></b></td>
+        <td></td><td></td><td></td>
+        <td>contains the raw data</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>LC</code></b></td>
+        <td></td><td></td><td></td>
+        <td>is the same data calibrated to binary crisp sets</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>LM</code></b></td>
+        <td></td><td></td><td></td>
+        <td>calibrated to multi-value sets</td>
+    </tr>
+    <tr>
+        <td valign="top"><b><code>LF</code></b></td>
+        <td></td><td></td><td></td>
+        <td>calibrated to fuzzy-sets</td>
+    </tr>
+</table></p>
+
+  
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Lipset, S. M. (1959) &#147;Some Social Requisites of Democracy: Economic
+Development and Political Legitimacy&#148;, <em>American Political Science Review</em>
+vol.53, pp.69-105.</p>
+  
+      <p>Cronqvist, L.; Berg-Schlosser, D. (2009) &#147;Multi-Value QCA (mvQCA)&#148;, in
+Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods. Qualitative
+Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+  
+      <p>Rihoux, B.; De Meur, G. (2009) &#147;Crisp Sets Qualitative Comparative Analysis
+(mvQCA)&#148;, in Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods.
+Qualitative Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+  
+      <p>Ragin, C. (2009) &#147;Qualitative Comparative Analysis Using Fuzzy-Sets (fsQCA)&#148;,
+in Rihoux, B.; Ragin, C. (eds.) <em>Configurational Comparative Methods.
+Qualitative Comparative Analysis (QCA) and Related Techniques</em>, SAGE.</p>
+  
+    </div>
+      </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>LR</li><li>LC</li><li>LM</li><li>LF</li>
+    </ul>
+    <ul>
+      <li>datasets</li>
+    </ul> -->
+      
+        
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

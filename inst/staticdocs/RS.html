@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>_Ragin and Strand. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>University recognition of a graduate student union</h1>
+
+<div class="row">
+  <div class="span8">
+    <h2>Usage</h2>
+    <pre><div>data(RS)</div></pre>
+        
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>Original data used by Caren and Panofsky (2005), and reanalysed by Ragin 
+and Strand (2008).</p>
+  
+    </div>
+
+    <div class="Format">
+      <h2>Format</h2>
+
+      <p>A data frame containing 17 cases and the following 6 columns:</p>
+  
+      <p><table><tr><td>
+<b><code>P</code></b>   </td>
+</tr><tr><td> Public university               </td>
+</tr><tr><td>
+<b><code>E</code></b>   </td>
+</tr><tr><td> Support of elite allies         </td>
+</tr><tr><td>
+<b><code>A</code></b>   </td>
+</tr><tr><td> National union affiliation      </td>
+</tr><tr><td>
+<b><code>S</code></b>   </td>
+</tr><tr><td> Strike or a strike threat       </td>
+</tr><tr><td>
+<b><code>EBA</code></b> </td>
+</tr><tr><td> <b>E</b> happens before <b>A</b></td>
+</tr><tr><td>
+<b><code>REC</code></b> </td>
+</tr><tr><td> Union recognition               </td>
+</tr></table></p>
+  
+    </div>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The causal conditions are <b><code>P</code></b>, <b><code>E</code></b>, <b><code>A</code></b> and <b><code>S</code></b>.
+All of them are binary crisp with two values: <b><code>0 = No</code></b> and <b><code>1 = Yes</code></b>.</p>
+  
+      <p>The column <b><code>EBA</code></b> is not a causal condition, specifying in which case the
+causal condition <b><code>E</code></b> happens before the causal condition <b><code>A</code></b>. It has
+two values (<b><code>0 = No</code></b> and <b><code>1 = Yes</code></b>) plus the placeholder <b><code>"-"</code></b>
+to signal a &#147;don't care&#148;.</p>
+  
+      <p>The outcome is the union recognition <b><code>EBA</code></b>, also binary crisp with two values:
+<b><code>0 = No</code></b> and <b><code>1 = Yes</code></b>.</p>
+  
+    </div>
+
+    <div class="Source">
+      <h2>Source</h2>
+
+      <p>Caren, N; Panofsky, A. (2005) &#147;TQCA: A Technique for Adding Temporality 
+to Qualitative Comparative Analysis.&#148; <em>Sociological Methods & Research</em>
+vol. 34, no.2, pp.147-172.</p>
+  
+      <p>Ragin, C.C.; Strand, S.I. (2008) &#147;Using Qualitative Comparative 
+Analysis to Study Causal Order: Comment on Caren and Panofsky (2005).&#148; 
+<em>Sociological Methods & Research</em> vol.36, no.4, pp.431-441.</p>
+  
+    </div>
+      </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>RS</li>
+    </ul>
+    <ul>
+      <li>datasets</li>
+    </ul> -->
+      
+        
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>export. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Export a dataframe to a file or a connection</h1>
+
+<div class="row">
+    <div class="span8">
+    
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>This function is a wrapper to <b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b>,
+to overcome possible issues with the row names.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+    <pre><div>export(x, file = &quot;&quot;, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>x</code></b></td>
+            <td></td><td></td><td></td>
+            <td>The object to be written (matrix or dataframe).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>file</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A character string containing the path to the file to be created</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Same arguments that are used in <b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b></td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>The default convention for
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b>
+is to add a blank column name for the row names, but (despite it is the convention used for
+CSV files to be read by spreadsheets) that doesn't always work with all spreadsheets or other
+programs that attempt to import the result of
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b>.</p>
+  
+      <p>This function acts as if
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b>
+was called, with only one difference: if row names are present in the dataframe (i.e. any of
+them should be different from the default row numbers), the final result will display a new
+column called <b><code>cases</code></b> in the first position, except the situation that another
+column called <b><code>cases</code></b> already exists in the data, when the row names will be
+completely ignored.</p>
+  
+      <p>If not otherwise specified, an argument <b><code>sep = ","</code></b> is added by default.</p>
+  
+      <p>The argument <b><code>row.names</code></b> is set to FALSE by default, since a new column is
+added anyways if possible.</p>
+  
+      <p>Since this function pipes everything to
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table()</a></code></b>
+anyway, the argument <b><code>file</code></b> can also be a connection open for writing.
+<b><code>""</code></b> indicates output to the console.</p>
+  
+    </div>
+      </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>export</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+
+    <h2>See also</h2>
+    
+  The &#147;R Data Import/Export&#148; manual.
+
+<b><code><a href='https://stat.ethz.ch/R-manual/R-devel/library/utils/html/write.table.html'>write.table</a></code></b>
+
+    
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>

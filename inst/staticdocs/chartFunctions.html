@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+<title>PI chart functions: makeChart, findmin, solveChart. QCA 2.5</title>version 3.22.1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="
+Adrian Dusa
+">
+
+<link href="css/bootstrap.css" rel="stylesheet">
+<link href="css/bootstrap-responsive.css" rel="stylesheet">
+<link href="css/highlight.css" rel="stylesheet">
+<link href="css/staticdocs.css" rel="stylesheet">
+
+<!--[if lt IE 9]>
+  <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+
+<script type="text/x-mathjax-config">
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+</script>
+<script type="text/javascript"
+  src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+  </head>
+
+  <body>
+    <div class="navbar">
+  <div class="navbar-inner">
+    <div class="container">
+      <a class="brand" href="#">QCA 3.22.1</a>
+      <div class="nav">
+        <ul class="nav">
+          <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="container">
+      <header>
+        
+      </header>
+      
+      <h1>Create and solve a prime implicants chart</h1>
+
+<div class="row">
+  <div class="span8">
+    
+    <div class="Description">
+      <h2>Description</h2>
+
+      <p>These functions help creating a demo for a prime implicant chart, and also
+show how to solve it using a minimum number of prime implicants.</p>
+  
+    </div>
+    
+    <h2>Usage</h2>
+<pre>
+<div>makeChart(primes = &quot;&quot;, configs = &quot;&quot;, snames = &quot;&quot;, mv = FALSE, 
+          collapse = &quot;*&quot;, ...)</div>
+<div>findmin(chart, ...)</div>
+<div>solveChart(chart, row.dom = FALSE, all.sol = FALSE, depth = NULL, max.comb = 0,
+          first.min = FALSE, ...)</div></pre>
+    
+    <h2>Arguments</h2>
+    <table>
+        <tr>
+            <td valign="top"><b><code>primes</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing prime implicants, separated by commas, or a
+        matrix of implicants.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>configs</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing  causal configurations, separated by commas,
+        or a matrix of causal configurations in the implicants space.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>snames</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A string containing the sets' names, separated by commas.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>mv</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, write row and column names in multi-value notation.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>collapse</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Scalar character, how to collapse different parts of the row or
+        column names.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>chart</code></b></td>
+            <td></td><td></td><td></td>
+            <td>An object of class <code>&quot;QCA_pic&quot;</code> or a logical matrix.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>row.dom</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, apply row dominance to eliminate redundant prime implicants.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>all.sol</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Derive all possible solutions, irrespective if the disjunctive number of 
+            prime implicants is minimal or not.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>depth</code></b></td>
+            <td></td><td></td><td></td>
+            <td>A maximum number of prime implicants for any disjunctive solution.</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>max.comb</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Numeric real, to limit the size of the PI chart (see Details).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>first.min</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Logical, to return only the very first minimal solution (see
+                Details).</td>
+        </tr>
+        <tr>
+            <td valign="top"><b><code>...</code></b></td>
+            <td></td><td></td><td></td>
+            <td>Other arguments (mainly for backwards compatibility).</td>
+        </tr>
+    </table>
+
+    <div class="Details">
+      <h2>Details</h2>
+
+      <p>A PI chart, in this package, is a logical matrix (with 
+<b><code>TRUE</b></code>/<b><code>FALSE</b></code> values), containing
+the prime implicants on the rows and the starting configurations of causal conditions,
+on the columns, like the one produced by <b><code><a href=''>makeChart()</a></code></b>.
+It is useful to determine visually which prime implicant (if any) is essential.</p>
+  
+      <p>When <b><code>primes</code></b> and <b><code>configs</code></b> are character,
+the individual sets are identified using the function
+<b><code><a href='SOPexpression.html'>translate()</a></code></b>, using the SOP - Sum Of
+Products form, which needs the set names in the absence of any other information. If
+products are formed using the standard <b><code>*</code></b> operator, specifying the set names
+is not mandatory.</p>
+  
+      <p>When <b><code>primes</code></b> and <b><code>configs</code></b> are matrices, they
+have to be specified at implicants level, where the value <b><code>0</code></b> is interpreted
+as a minimized literal.</p>
+  
+      <p>The chart is subsequently processed algorithmically by
+<b><code><a href=''>solveChart()</a></code></b> to find the absolute minimal number
+<b><code>M</code></b> of rows (prime implicants) necessary to cover all columns, then
+searches through all possible combinations of <b><code>M</code></b> rows, to find those
+which actually cover the columns.</p>
+  
+      <p>The number of all possible combinations of <b><code>M</code></b> rows increases
+exponentially with the number of prime implicants generated by the Quine-McCluskey minimization
+procedure, and the solving time quickly grows towards infinity for large PI charts.</p>
+  
+      <p>To solve the chart in a minimal time, the redundant prime implicants need to first be
+eliminated. This is the purpose of the argument <b><code>row.dom</code></b>. When activated,
+it eliminates the dominated rows (those which cover a smaller number of columns than another,
+dominant prime implicant).</p>
+  
+      <p>The identification of the full model space (including the non-minimal solutions) requires
+the entire PI chart and is guaranteed to consume a lot of time (towards infinity for very large PI
+charts). This is done by activating the argument <b><code>all.sol</code></b>, which automatically
+deactivates the argument <b><code>row.dom</code></b>.</p>
+  
+      <p>The argument <b><code>depth</code></b> is relevant only when the argument
+<b><code>all.sol</code></b> is activated, and it is automatically increased if the minimal number
+of rows <b><code>M</code></b> needed to cover all columns is larger. By default, it bounds the
+disjunctive solutions to at most 5 prime implicants, but this number can be increased to widen
+the search space, with a cost of increasing the search time.</p>
+  
+  <p>The argument <b><code>max.comb</code></b> sets a maximum number of combinations to find solutions.
+It is counted in (fractions of) billions, defaulted at zero to signal searching to the maximum
+possible extent. If too complex, the search is stopped and the algorithm returns all found solutions
+up to that point.</p>
+  
+<p>For extremly difficult PI charts, the argument<b><code>first.min</code></b> controls returning only
+one (the very first found) solution.</p>
+  
+    </div>
+
+    <div class="Value">
+      <h2>Value</h2>
+
+<p>For <b><code>makeChart</code></b>: a logical matrix of class <code>&quot;QCA_pic&quot;</code>.</p>
+  
+<p>For <b><code>findmin</code></b>: a numerical scalar.</p>
+
+<p>For <b><code>solveChart</code></b>: a matrix containing all possible combinations of PI chart rows
+necessary to cover all its columns.</p>
+  
+    </div>
+
+    <div class="References">
+      <h2>References</h2>
+
+      <p>Quine, W.V. (1952) <em>The Problem of Simplifying Truth Functions</em>,
+The American Mathematical Monthly, vol.59, no.8. (Oct., 1952), pp.521-531.</p>
+  
+      <p>Ragin, C.C. (1987) <em>The Comparative Method. Moving beyond qualitative and
+quantitative strategies</em>, Berkeley: University of California Press</p>
+  
+    </div>
+    
+    <h2 id="examples">Examples</h2>
+    <pre class="examples"><div class='input'>
+# non-standard products, it needs the set names
+chart &lt;- makeChart(&quot;a, b, ~c&quot;, &quot;abc, a~b~c, a~bc, ~ab~c&quot;)
+chart
+</div>
+<div class='output'>     abc   a~b~c a~bc  ~ab~c
+a      x     x     x     -  
+b      x     -     -     x  
+~c     -     x     -     x
+</div>
+<div class='input'>
+
+findmin(chart)
+</div>
+<div class='output'>[1] 2
+</div>
+<div class='input'>
+
+solveChart(chart)
+# first and second rows (a + b)
+# and first and third rows (a + ~c)
+# a is an essential prime implicant
+#  a + b  a + ~c
+</div>
+<div class='output'>     [,1]   [,2]
+[1,]    1      1
+[2,]    2      3
+</div>
+<div class='input'>
+
+# using SOP standard product sign
+rows &lt;- &quot;EF, ~GH, IJ&quot;
+cols &lt;- &quot;~EF*~GH*IJ, EF*GH*~IJ, ~EF*GH*IJ, EF*~GH*~IJ&quot;
+chart &lt;- makeChart(rows, cols)
+chart
+</div>
+<div class='output'>    ~EF*~GH*IJ EF*GH*~IJ ~EF*GH*IJ EF*~GH*~IJ
+EF      -          x         -         x     
+~GH     x          -         -         x     
+IJ      x          -         x         -     
+</div>
+<div class='input'>  
+
+solveChart(chart)
+# ~GH is redundant
+#  EF + IJ
+</div>
+<div class='output'>     [,1]
+[1,]    1
+[2,]    3
+</div>
+<div class='input'>
+
+# using implicant matrices
+primes &lt;- matrix(c(2,2,1,0,2,2,0,2,2,2), nrow = 2)
+configs &lt;- matrix(c(2,2,2,1,1,2,2,2,2,1,2,2,2,2,2), nrow = 3)
+colnames(primes) &lt;- colnames(configs) &lt;- letters[1:5]
+
+# the prime implicants: a~bce and acde
+primes
+</div>
+<div class='output'>     a b c d e
+[1,] 2 1 2 0 2
+[2,] 2 0 2 2 2
+</div>
+<div class='input'>
+
+# the initial causal combinations: a~bc~de, a~bcde and abcde
+configs
+</div>
+<div class='output'>     a b c d e
+[1,] 2 1 2 1 2
+[2,] 2 1 2 2 2
+[3,] 2 2 2 2 2
+</div>
+<div class='input'>
+
+chartLC &lt;- makeChart(primes, configs, collapse = &quot;&quot;)
+chartLC
+</div>
+<div class='output'>        a~bc~de a~bcde   abcde  
+a~bce      x       x       -   
+acde       -       x       x  
+</div>
+</pre>
+  </div>
+  <div class="span4">
+    <!-- <ul>
+      <li>makeChart</li><li>solveChart</li>
+    </ul>
+    <ul>
+      <li>functions</li>
+    </ul> -->
+      
+    
+    <h2>Author</h2>
+    
+Adrian Dusa
+
+    
+  </div>
+</div>
+      
+      <footer>
+      <p class="pull-right"><a href="#">Back to top</a></p>
+<p>Built by <a href="https://github.com/hadley/staticdocs">staticdocs</a>. Styled with <a href="https://getbootstrap.com/2.0.4/">bootstrap</a>.</p>
+      </footer>
+    </div>
+  </body>
+</html>
