@@ -1,6 +1,6 @@
 # Copyright (c) 2016 - 2024, Adrian Dusa
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, in whole or in part, are permitted provided that the
 # following conditions are met:
@@ -12,7 +12,7 @@
 #     * The names of its contributors may NOT be used to endorse or promote
 #       products derived from this software without specific prior written
 #       permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -41,6 +41,9 @@
     tildenegated <- badnames <- logical(length(funargs))
     cols <- vector(mode = "list", length = length(funargs))
     for (i in seq(length(funargs))) {
+        if (grepl("\\*|\\+", funargs[i]) {
+            admisc::stopError("Expressions not allowed, there should only be individual conditions.")
+        }
         badnames[i] <- grepl("\\(|:", funargs[i])
         cols[[i]] <- admisc::getName(admisc::notilde(funargs[i]))
         tildenegated[i] <- admisc::tilde1st(funargs[i])
