@@ -157,15 +157,17 @@
     if (is.null(depth)) {
         depth <- nofconditions
     }
-    CMatrix <- .Call("C_superSubset",
-                     as.matrix(infodata$data[, conditions]),
-                     noflevels,
-                     as.numeric(fc),
-                     data[, funargs$outcome],
-                     as.numeric(nec(relation)),
-                     incl.cut,
-                     cov.cut,
-                     depth, PACKAGE = "QCA")
+    CMatrix <- .Call(
+        "C_superSubset",
+        as.matrix(infodata$data[, conditions]),
+        noflevels,
+        as.numeric(fc),
+        data[, funargs$outcome],
+        as.numeric(nec(relation)),
+        incl.cut,
+        cov.cut,
+        depth, PACKAGE = "QCA"
+    )
     if (nec(relation)) {
         admisc::setColnames(CMatrix[[1]], c("inclN", "RoN", "covN"))
         admisc::setColnames(CMatrix[[2]], c("inclN", "RoN", "covN"))
@@ -270,10 +272,12 @@
         )
     }
     if (!is.null(add)) {
-        toadd <- pof(mins,
-                     data[, outcome],
-                     relation = ifelse(nec(relation), "nec", "suf"),
-                     add = add)$incl.cov[, -seq(1, 4), drop = FALSE]
+        toadd <- pof(
+            mins,
+            data[, outcome],
+            relation = ifelse(nec(relation), "nec", "suf"),
+            add = add
+        )$incl.cov[, -seq(1, 4), drop = FALSE]
         if (is.function(add)) {
             if (any(grepl("function", funargs$add))) {
                 funargs$add <- "X"
