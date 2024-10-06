@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.22.4
+Version: 3.22.5
 Title: Qualitative Comparative Analysis
 Authors@R: c(
        person(given = "Adrian", family = "Dusa",
@@ -26,7 +26,7 @@ Authors@R: c(
        )
 URL: https://github.com/dusadrian/QCA
 BugReports: https://github.com/dusadrian/QCA/issues
-Depends: R (>= 3.6.0), admisc (> 0.34)
+Depends: R (>= 3.6.0), admisc (> 0.35)
 LazyData: yes
 Imports: methods, shiny, declared, venn, lpSolve
 Description: An extensive set of functions to perform Qualitative Comparative Analysis:

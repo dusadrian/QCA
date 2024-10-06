@@ -62,7 +62,7 @@ for the Social Sciences: A Guide to Qualitative Comparative Analysis (QCA)}.
 Cambridge: Cambridge University Press.
 }
 
-\seealso{\code{\link{intersection}}, \code{\link{negate}}, \code{\link{pof}}}
+\seealso{\code{\link{intersection}}, \code{\link[admisc]{negate}}, \code{\link{pof}}}
 
 \examples{
 # Lipset fuzzy version data

@@ -151,7 +151,7 @@ void calculate_rows(
     int maxprod
 );
 
-int fillCombinationTasks(
+int fill_combination_tasks(
     const int n,
     int k,
     int (*comb)[3],
@@ -159,10 +159,10 @@ int fillCombinationTasks(
     int* outNumItemsFilled
 );
 
-int GetNextComb(
-    int *arr, 
-    int k, 
-    int n, 
+int get_next_combination(
+    int *arr,
+    int k,
+    int n,
     int indexLimit
 );
 

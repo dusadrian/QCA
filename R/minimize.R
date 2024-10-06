@@ -1,6 +1,6 @@
 # Copyright (c) 2016 - 2024, Adrian Dusa
 # All rights reserved.
-#
+# 
 # Redistribution and use in source and binary forms, with or without
 # modification, in whole or in part, are permitted provided that the
 # following conditions are met:
@@ -12,7 +12,7 @@
 #     * The names of its contributors may NOT be used to endorse or promote
 #       products derived from this software without specific prior written
 #       permission.
-#
+# 
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -31,7 +31,7 @@
 ) {
     metacall <- match.call()
     dots <- as.list(substitute(list(...)))[-1]
-    if (isTRUE(dots$categorical)) {
+    if (isTRUE(dots$categorical)) { 
         use.labels <- TRUE
         dots$categorical <- NULL
     }
@@ -40,7 +40,7 @@
         dots$data <- NULL
     }
     min.pin <- isTRUE(dots$min.pin)
-    enter <- if (is.element("enter", names(dots))) dots$enter else "\n"
+    enter <- if (is.element("enter", names(dots))) dots$enter else "\n" 
     if (missing(input)) {
         admisc::stopError(
             "The input (a truth table or a dataset) is missing.",
@@ -161,7 +161,7 @@
     if (is.character(include) & !identical(include, "")) {
         include <- admisc::splitstr(include)
     }
-    if (ttinput) {
+    if (ttinput) { 
         tt <- input
         ttargs <- setdiff(names(formals(truthTable)), c("show.cases", "use.labels"))
         if (any(is.element(ttargs, names(dots)))) {
@@ -205,7 +205,7 @@
             return(do.call("minimizeLoop", as.list(metacall)[-1], envir = parent.frame()))
         }
         outcome.copy <- outcome.name <- outcome
-        indata <- input
+        indata <- input 
         testoutcome <- admisc::tryCatchWEM(
             trout <- admisc::translate(outcome, data = input)
         )
@@ -248,7 +248,7 @@
     outcome <- colnames(recdata)[ncol(recdata)]
     indata <- tt$initial.data[, match(colnames(recdata), colnames(tt$initial.data)), drop = FALSE]
     use.letters <- tt$options$use.letters
-    show.cases <- show.cases | tt$options$show.cases
+    show.cases <- show.cases | tt$options$show.cases 
     neg.out <- tt$options$neg.out
     output <- list()
     output$tt <- tt
@@ -267,7 +267,7 @@
         x[is.element(x, c("-", "dc"))] <- -1
         return(admisc::asNumeric(x))
     }))
-    pos.incl <- unique(c(explain, include))
+    pos.incl <- unique(c(explain, include)) 
     subset.tt <- ttrownms[is.element(tt$tt[, "OUT"], explain)]
     subset.pos <- is.element(tt$tt[, "OUT"], pos.incl)
     pos.matrix <- as.matrix(tt$tt[subset.pos, seq(length(noflevels))])
@@ -300,7 +300,7 @@
     }
     include <- admisc::trimstr(include)
     incl.rem <- is.element("?", include)
-    if (nrow(neg.matrix) == 0 & incl.rem & !is.element("causalChain", names(dots))) {
+    if (nrow(neg.matrix) == 0 & incl.rem & !is.element("causalChain", names(dots))) { 
         admisc::stopError(
             paste(
                 "All truth table configurations are used, all conditions are minimized.",
@@ -377,7 +377,7 @@
             expressions <- admisc::sortExpressions(getRow(expressions, noflevels + 1))
             admisc::setColnames(expressions, colnames(inputt))
         }
-        else {
+        else { 
             extended.data <- as.matrix(tt$recoded.data)
             if (nrow(excl.matrix) > 0) {
                 extended.data <- rbind(extended.data, cbind(excl.matrix, 0))
@@ -398,7 +398,9 @@
                             fs = tt$fs,
                             max.comb = max.comb,
                             first.min = first.min,
-                            keep.trying = keep.trying),
+                            keep.trying = keep.trying,
+                            gurobi = !isFALSE(dots$gurobi) && eval(parse(text = "requireNamespace('gurobi', quietly = TRUE)")),
+                            solind = !isFALSE(dots$solind)),
                             PACKAGE = "QCA")
         }
         callist$expressions <- expressions

@@ -84,8 +84,8 @@ static R_INLINE Rboolean getpos(SEXP list, const char *str) {
     if (!Rf_isNull(names)) {
         for (int i = 0; i < length(list); i++) {
             if (strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
-               pos = i;
-               break;
+                pos = i;
+                break;
             }
         }
     }
@@ -249,7 +249,7 @@ SEXP C_createMatrix(SEXP input) {
     return(matrix);
 }
 SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
-                 SEXP nec, SEXP inclcut, SEXP covcut, SEXP depth) {
+                    SEXP nec, SEXP inclcut, SEXP covcut, SEXP depth) {
     SEXP usage = PROTECT(allocVector(VECSXP, 19));
     SET_VECTOR_ELT(usage,  0, x         = coerceVector(x, REALSXP));
     SET_VECTOR_ELT(usage,  1, noflevels = coerceVector(noflevels, INTSXP));
@@ -693,7 +693,7 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
     p_tt = INTEGER(tt);
     SET_VECTOR_ELT(usage, 1, noflevels = coerceVector(noflevels, INTSXP));
     p_noflevels = INTEGER(noflevels);
-    int nimplicants = nrows(tt); 
+    int nimplicants = nrows(tt);
     int nconds = ncols(tt);
     SET_VECTOR_ELT(usage, 2, tempmat = allocMatrix(INTSXP, nconds, nimplicants));
     p_tempmat = INTEGER(tempmat);
@@ -871,14 +871,11 @@ SEXP C_removeRedundants(SEXP rowno, SEXP noflevels, SEXP mbase) {
     lrowno = length(rowno);
 	SET_VECTOR_ELT(usage, 3, next = allocVector(INTSXP, lrowno));
 	pointer_next = INTEGER(next);
-	
 	for (i = 0; i < lrowno; i++) {
 	    pointer_next[i] = i + 1;
 	}
-	
 	rn = 0;
 	flag1 = 0;
-	
 	while (rn < lrowno) {
 	    templung = 1;
 	    previous = rn;
@@ -949,7 +946,7 @@ SEXP C_removeRedundants(SEXP rowno, SEXP noflevels, SEXP mbase) {
         while (i < lrowno) {
             pointer_final[j] = pointer_rowno[i];
             i = pointer_next[i];
-            j += 1; 
+            j += 1;
         }
         UNPROTECT(1);
         return(final);
@@ -1322,7 +1319,7 @@ SEXP C_expand(SEXP mat, SEXP noflevels, SEXP partial) {
 }
 SEXP C_simplify(SEXP mat, SEXP noflevels, SEXP partial) {
     SEXP umat = PROTECT(C_expand(mat, noflevels, partial));
-    SEXP simplified = PROTECT(C_QMC(umat, noflevels));    
+    SEXP simplified = PROTECT(C_QMC(umat, noflevels));
     UNPROTECT(2);
     return(simplified);
 }
@@ -1339,6 +1336,8 @@ SEXP C_Cubes(SEXP list) {
     int posmaxcomb =   getpos(list, "max.comb");   
     int pos1stmin =    getpos(list, "first.min");  
     int poskeeptry =   getpos(list, "keep.trying");
+    int posgurobi =    getpos(list, "gurobi");     
+    int posolind =     getpos(list, "solind");     
     SEXP usage = PROTECT(allocVector(VECSXP, 7));
     SEXP   tt, data,    fsconds;
     SET_VECTOR_ELT(usage, 0, tt = coerceVector(VECTOR_ELT(list, 0), INTSXP));
@@ -1358,6 +1357,9 @@ SEXP C_Cubes(SEXP list) {
     Rboolean rowdom = (posrowdom >= 0) ? (LOGICAL(VECTOR_ELT(list, posrowdom))[0]) : FALSE;
     Rboolean minpin = (posminpin >= 0) ? (LOGICAL(VECTOR_ELT(list, posminpin))[0]) : FALSE;
     Rboolean keeptrying = (poskeeptry >= 0) ? (LOGICAL(VECTOR_ELT(list, poskeeptry))[0]) : FALSE;
+    Rboolean firstmin = (pos1stmin >= 0) ? (LOGICAL(VECTOR_ELT(list, pos1stmin))[0]) : FALSE;
+    Rboolean gurobi = (posgurobi >= 0) ? (LOGICAL(VECTOR_ELT(list, posgurobi))[0]) : TRUE;
+    Rboolean solind = (posolind >= 0) ? (LOGICAL(VECTOR_ELT(list, posolind))[0]) : TRUE;
     double picons = (pospicons >= 0) ? (REAL(VECTOR_ELT(list, pospicons))[0]) : 0;
     int pidepth = 0;
     int soldepth = 5; 
@@ -1386,11 +1388,7 @@ SEXP C_Cubes(SEXP list) {
     unsigned int foundPI = 0;
     int solrows = 0;
     int solcols = 0;
-    Rboolean complexpic = false;
-    Rboolean firstmin = false; 
-    if (pos1stmin >= 0) {
-        firstmin = LOGICAL(VECTOR_ELT(list, pos1stmin))[0];
-    }
+    Rboolean complexpic = FALSE;
     double maxcomb = 0;
     if (posmaxcomb > 0) {
         maxcomb = REAL(VECTOR_ELT(list, posmaxcomb))[0]; 
@@ -1398,8 +1396,10 @@ SEXP C_Cubes(SEXP list) {
     CCubes(
         p_tt, ttrows, nconds, p_data, nrdata, allsol, rowdom, minpin, picons, pidepth, p_fsconds, soldepth, solcons, solcov, maxcomb, keeptrying,
         &p_pichart, &p_impmat, &p_models, &foundPI, &solrows, &solcols, &complexpic,
-        firstmin 
-    ); 
+        firstmin,
+        gurobi,
+        solind
+    );
     int posrows = 0;
     for (int r = 0; r < ttrows; r++) {
         posrows += p_tt[nconds * ttrows + r];
@@ -1434,7 +1434,7 @@ SEXP C_Cubes(SEXP list) {
                 SET_STRING_ELT(colnms, i, STRING_ELT(ttcolnms, i));
             }
             SET_VECTOR_ELT(dimnames, 1, colnms); 
-            setAttrib(implicants, R_DimNamesSymbol, dimnames);  
+            setAttrib(implicants, R_DimNamesSymbol, dimnames);
         }
     }
     if (solrows > 0 && solcols > 0) { 

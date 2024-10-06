@@ -61,6 +61,7 @@
         if (any(is.element(type, c(0, 2, 3)))) {
             call <- as.list(obj$call)[-1]
             call$data <- obj$initial.data
+            call$outcome <- obj$options$outcome
             if (admisc::tilde1st(call$outcome)) {
                 call$outcome <- admisc::notilde(call$outcome)
             }

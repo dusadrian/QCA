@@ -43,7 +43,7 @@ void resize(
         *(tmp + i) = *(*array + i);
     }
     R_Free(*array);
-    *array = tmp;   
+    *array = tmp;
 }
 Rboolean too_complex(
     const unsigned int foundPI,
@@ -410,61 +410,57 @@ void calculate_rows(
         }
     }
 }
-int fillCombinationTasks(
-    const int n,
-    int k,
-    int (*comb)[3],
-    const int arrayMaxSize,
-    int* outNumItemsFilled
-) {  
-    *outNumItemsFilled = 0;
-    if (k <= 1)
-    {
-        for (int X = 0; X <= n-k; X++)
+int fill_combination_tasks(
+    const int n, 
+    int k, 
+    int (*comb)[3], 
+    const int arrayMaxSize, 
+    int *numPrefixCombinations
+) {
+    *numPrefixCombinations = 0;
+    if (k <= 1) {
+        for (int x = 0; x <= n-k; x++)
         {
-            comb[*outNumItemsFilled][0] = X;
-            (*outNumItemsFilled)++;
+            comb[*numPrefixCombinations][0] = x;
+            (*numPrefixCombinations)++;
         }
         return 1;
     }
-    else if (k <= 2)
-    {
-        for (int X = 0; X <= n-k; X++)
-            for (int Y = X + 1; Y <= n-k+1; Y++)
+    else if (k <= 2) {
+        for (int x = 0; x <= n - k; x++)
+            for (int y = x + 1; y <= n - k + 1; y++)
             {
-                const int currIndex = *outNumItemsFilled;
-                comb[currIndex][0] = X;
-                comb[currIndex][1] = Y;
-                (*outNumItemsFilled)++;
+                const int currIndex = *numPrefixCombinations;
+                comb[currIndex][0] = x;
+                comb[currIndex][1] = y;
+                (*numPrefixCombinations)++;
             }
         return 2;
-    } 
-    else 
-    {
+    }
+    else { 
         for (int X = 0; X <= n-k; X++)
             for (int Y = X + 1; Y <= n-k+1; Y++)
                 for (int Z = Y + 1; Z <=  n-k+2; Z++)
                 {
-                    const int currIndex = *outNumItemsFilled;
+                    const int currIndex = *numPrefixCombinations;
                     comb[currIndex][0] = X;
                     comb[currIndex][1] = Y;
                     comb[currIndex][2] = Z;
-                    (*outNumItemsFilled)++;
+                    (*numPrefixCombinations)++;
                 }
         return 3;
     }
 }
-int GetNextComb(
-    int *arr,
+int get_next_combination(
+    int *arr,       
     int k,
-    int n,
+    int n,          
     int indexLimit
 ) {
     int i;
-    for (i = k - 1; i >= indexLimit; --i)
-    {
+    for (i = k - 1; i >= indexLimit; --i) {
         arr[i]++;
-        if (arr[i] + (k-i-1) != n)
+        if (arr[i] + (k - i - 1) != n)
             break;
     }
     if (i == indexLimit-1)

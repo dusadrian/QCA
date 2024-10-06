@@ -35,6 +35,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "find_models.h"
 #include "find_consistent_models.h"
 #include "CCubes.h"
+#ifdef _OPENMP
+    #undef match
+    #include <omp.h>
+#endif
 void CCubes(const int p_tt[],       
             const int ttrows,       
             const int nconds,       
@@ -51,14 +55,16 @@ void CCubes(const int p_tt[],
             const double solcov,
             const double maxcomb,
             const Rboolean keeptrying,  
-            int **pichart,          
-            int **implicants,       
-            int **models,           
-            unsigned int *foundPI_, 
-            int *solrows,           
-            int *solcols,           
-            Rboolean *complex,          
-            const Rboolean firstmin     
+            int **pichart,           
+            int **implicants,        
+            int **models,            
+            unsigned int *foundPI_,  
+            int *solrows,            
+            int *solcols,            
+            Rboolean *complex,       
+            const Rboolean firstmin, 
+            const Rboolean gurobi,   
+            const Rboolean solind    
 ) {
     int *p_pichart, *p_implicants, *p_indx, *p_ck;
     int posrows = 0;
@@ -81,6 +87,7 @@ void CCubes(const int p_tt[],
     p_indx = R_Calloc(nconds * estimPI, int);
     p_ck = R_Calloc(estimPI, int);
     Rboolean stop_searching = false;
+    Rboolean solind_failed = false;
     unsigned int prevfoundPI = 0;  
     unsigned int foundPI = 0;
     int prevsolmin = 0;     
@@ -91,7 +98,7 @@ void CCubes(const int p_tt[],
         previndices[i] = 0;
         indices[i] = 0;
     }
-    #ifdef SHOW_DEBUG_PROFILE 
+    #ifdef SHOW_DEBUG_PROFILE
         const double findingPIsStart_time = omp_get_wtime();
     #endif
     Rboolean solution_exists = false;
@@ -100,12 +107,20 @@ void CCubes(const int p_tt[],
     for (k = 1; k <= pidepth; k++) {
         Rboolean foundk = false;
         #ifdef SHOW_DEBUG_OUTPUT
-        #endif 
+        #endif
         const int numMaxCombinations = (nconds*(nconds-1)*(nconds-2))/6 + (nconds*(nconds-1)/2) + nconds;
         int combinationsSetFixedPrefix[numMaxCombinations][3];
         int numPrefixCombinations = 0;
-	    
-        const int INDEX_LIMIT = fillCombinationTasks(nconds, k, combinationsSetFixedPrefix, numMaxCombinations, &numPrefixCombinations);
+        const int INDEX_LIMIT = fill_combination_tasks(
+            nconds,
+            k,
+            combinationsSetFixedPrefix,
+            numMaxCombinations,
+            &numPrefixCombinations
+        );
+        #ifdef _OPENMP
+            #pragma omp parallel for schedule(dynamic)
+        #endif
         for (int taskIter = 0; taskIter < numPrefixCombinations; taskIter++) {
             int tempk[k];
             for (int i = 0; i < INDEX_LIMIT; i++) {
@@ -123,11 +138,11 @@ void CCubes(const int p_tt[],
             mbase[0] = 1; 
             while (!finishedAll) {
                 if (k > INDEX_LIMIT) {
-                    int res = GetNextComb(tempk, k, nconds, INDEX_LIMIT);
+                    int res = get_next_combination(tempk, k, nconds, INDEX_LIMIT);
                     if (!res) {
                         finishedAll = 1;
-                        break; 
-                    }                    
+                        break;
+                    }
                 }
                 else {
                     finishedAll = 1;
@@ -173,6 +188,9 @@ void CCubes(const int p_tt[],
                             tempc[c] = posmat[tempk[c] * posrows + frows[f]] + 1;
                         }
                         if (nonredundant(p_implicants, p_indx, p_ck, tempk, tempc, nconds, k, prevfoundPI)) {
+                            #ifdef _OPENMP
+                                #pragma omp critical
+                            #endif
                             {
                                 push_PI(
                                     p_implicants,
@@ -205,7 +223,7 @@ void CCubes(const int p_tt[],
             }
         }
         if (foundPI > 0) {
-            *complex = too_complex(foundPI, (solmin > 0 ? solmin : k), maxcomb);
+            *complex = !gurobi && too_complex(foundPI, (solmin > 0 ? solmin : k), maxcomb);
             solution_exists = all_covered(p_pichart, posrows, foundPI);
             if (solution_exists) {
                 stop_searching = *complex;
@@ -218,11 +236,30 @@ void CCubes(const int p_tt[],
                 SEXP cpi = PROTECT(allocVector(INTSXP, 1));
                 INTEGER(cpi)[0] = 0;
                 setAttrib(pic, install("C_PI"), cpi);
-                Rf_eval(lang2(Rf_install("library"), mkString("QCA")), R_GlobalEnv);
-                SEXP pkg_env = R_FindNamespace(mkString("QCA"));
-                SEXP findmin = findVarInFrame(pkg_env, Rf_install("findmin"));
-                solmin = INTEGER(R_tryEval(lang2(findmin, pic), pkg_env, NULL))[0];
-                UNPROTECT(2);
+                SEXP gurobipic = PROTECT(allocVector(LGLSXP, 1));
+                LOGICAL(gurobipic)[0] = gurobi;
+                setAttrib(pic, install("gurobi"), gurobipic);
+                SEXP solindpic = PROTECT(allocVector(LGLSXP, 1));
+                LOGICAL(solindpic)[0] = solind;
+                setAttrib(pic, install("solind"), solindpic);
+                R_ParseEvalString("library(QCA)", R_GlobalEnv);
+                SEXP pkg_env = PROTECT(R_FindNamespace(mkString("QCA")));
+                SEXP findmin = PROTECT(Rf_findVarInFrame(pkg_env, Rf_install("findmin")));
+                SEXP evalinR = PROTECT(R_tryEval(Rf_lang2(findmin, pic), pkg_env, NULL));
+                int leneval = length(evalinR);
+                solind_failed = leneval == 1 && TYPEOF(evalinR) == INTSXP;
+                if (solind_failed) { 
+                    solmin = INTEGER(evalinR)[0];
+                } else {
+                    solmin = 0;
+                    for (int i = 0; i < leneval; i++) {
+                        if (REAL(evalinR)[i] > 0) {
+                            indices[solmin] = i;
+                            solmin++;
+                        }
+                    }
+                }
+                UNPROTECT(7);
                 if (solmin == prevsolmin) {
                     if (firstmin || minpin) {
                         for (int i = 0; i < solmin; i++) {
@@ -295,8 +332,19 @@ void CCubes(const int p_tt[],
                 }
             }
             R_Free(p_sorted);
-            if (keeptrying) {
-                find_models(p_tempic, posrows, foundPI, false, k + 1, maxcomb, true, &p_solutions, &nr, &nc);
+            if (keeptrying | solind_failed) {
+                find_models(
+                    p_tempic,
+                    posrows,
+                    foundPI,
+                    false, 
+                    k + 1,
+                    maxcomb,
+                    true, 
+                    &p_solutions,
+                    &nr,
+                    &nc
+                );
             }
         }
     }

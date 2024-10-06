@@ -188,7 +188,7 @@ Qualitative Comparative Analysis (QCA) and Related Techniques}, SAGE.
 
 }
 
-\seealso{\code{\link{truthTable}}, \code{\link{factorize}}}
+\seealso{\code{\link{truthTable}}, \code{\link[admisc]{factorize}}}
 
 \examples{
 \dontrun{
