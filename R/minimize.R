@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2024, Adrian Dusa
+# Copyright (c) 2016 - 2025, Adrian Dusa
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -287,7 +287,7 @@
     inputt <- as.matrix(tt$tt[is.element(ttrownms, subset.tt), seq(length(noflevels)), drop = FALSE])
     rownames(inputt) <- drop(inputt %*% mbase) + 1
     inputt <- inputt + 1
-    inputcases <- tt$cases[is.element(tt$indexes, subset.tt)]
+    inputcases <- tt$cases[seq(length(tt$indexes))][is.element(tt$indexes, subset.tt)]
     nofcases1 <- sum(tt$tt$n[tt$tt$OUT == 1])
     nofcases0 <- sum(tt$tt$n[tt$tt$OUT == 0])
     nofcasesC <- sum(tt$tt$n[tt$tt$OUT == "C"])
