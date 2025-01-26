@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2024, Adrian Dusa
+# Copyright (c) 2016 - 2025, Adrian Dusa
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -143,7 +143,7 @@
     }
     if (length(conditions) > 25) {
         admisc::stopError(
-            "Impossible to run a QCA analysis with so many conditions.",
+            "Running a QCA analysis with so many conditions is difficult.",
             ... = ...
         )
     }
@@ -445,9 +445,10 @@
         }
         else {
             if (nrow(tt) > length(cases)) {
-                cases <- c(cases, rep("", nrow(tt) - length(cases)))
+                tt$cases <- c(cases, rep("", nrow(tt) - length(cases)))
+            } else {
+                tt$cases <- cases
             }
-            tt$cases <- cases
         }
     numerics <- unlist(lapply(initial.data, admisc::possibleNumeric))
     colnames(initial.data)[!numerics] <- initialcols[!numerics]
