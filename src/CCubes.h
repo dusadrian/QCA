@@ -11,7 +11,6 @@ void CCubes(
     const int nrdata,       // number of rows in the raw data
     const Rboolean allsol,      // all solution
     const Rboolean rowdom,      // row dominance
-    const Rboolean minpin,      // minimal number of PIs
     const double picons,    // PI consistency
     const int pidepth,      // depth in number of conditions for each PI
     const int p_fsconds[],  // are conditions fuzzy?

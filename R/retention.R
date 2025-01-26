@@ -1,12 +1,36 @@
+# Copyright (c) 2016 - 2024, Adrian Dusa
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, in whole or in part, are permitted provided that the
+# following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * The names of its contributors may NOT be used to endorse or promote
+#       products derived from this software without specific prior written
+#       permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL ADRIAN DUSA BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 `retention` <- function(
     data, outcome = "", conditions = "", incl.cut = 1, n.cut = 1,
     type = "corruption", dependent = TRUE, p.pert = 0.5, n.pert = 1, ...
 ) {
-    
     outcome <- admisc::recreate(substitute(outcome))
     conditions <- admisc::recreate(substitute(conditions))
     type <- admisc::recreate(substitute(type))
-
     if (
         any(
             grepl(
@@ -19,15 +43,12 @@
             "Only binary data allowed.", ... = ...
         )
     }
-
     nms <- colnames(data)
-
     if (identical(conditions, "")) {
         conditions <- setdiff(nms, outcome)
     }
     else {
         conditions <- admisc::splitstr(conditions)
-        
         if (length(conditions) == 1 & any(grepl(":", conditions))) {
             cs <- unlist(strsplit(conditions, split = ":"))
             if (!all(is.element(conditions, nms))) {
@@ -37,20 +58,17 @@
             }
             conditions <- nms[seq(which(nms == cs[1]), which(nms == cs[2]))]
         }
-
         if (!all(is.element(conditions, nms))) {
             admisc::stopError(
                 "Conditions not found in the data.", ... = ...
             )
         }
     }
-
     if (!is.element(outcome, nms)) {
         admisc::stopError(
             "Outcome not found in the data.", ... = ...
         )
     }
-    
     data <- data[, c(conditions, outcome)]
     udata <- unique(data[, conditions])
     rownames(udata) <- seq(nrow(udata))
@@ -67,13 +85,11 @@
             }
         }
     }
-    
     total <- cpos + cneg
     udata <- udata[total >= n.cut, , drop = FALSE]
     cpos  <- cpos[total >= n.cut]
     cneg  <- cneg[total >= n.cut]
     total <- total[total >= n.cut]
-    
     calculatePairs <- function(x, n.pert, type = "deletion") {
         pairsxl <- admisc::combnk(nrow(udata), min(x, nrow(udata)))
         nofsetsxl <- 0
@@ -117,8 +133,6 @@
         }
         return(nofsetsxl)
     }
-    
-    
     if (dependent) {
         nofsets <- 0
         totalsets <- choose(nrow(data), n.pert)
@@ -128,7 +142,6 @@
                 nofsets <- nofsets + ifelse(i %% 2 == 1, nofsetsxl, -1*nofsetsxl)
             }
         }
-        
         return(as.vector(1 - nofsets/totalsets))
     }
     else {
@@ -167,7 +180,6 @@
                 pfinal <- pfinal*ptmp
             }
         }
-        
         return(pfinal)
     }
 }

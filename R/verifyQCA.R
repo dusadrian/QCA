@@ -1,49 +1,60 @@
+# Copyright (c) 2016 - 2024, Adrian Dusa
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, in whole or in part, are permitted provided that the
+# following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * The names of its contributors may NOT be used to endorse or promote
+#       products derived from this software without specific prior written
+#       permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL ADRIAN DUSA BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 `verify.data` <-
 function(data, outcome = "", conditions = "") {
-    
-     # check if the data is a data.frame
     if (!is.data.frame(data)) {
         admisc::stopError(
             "The input data should be a data frame."
         )
     }
-    
-    
-     # check if the data has column names
     if (is.null(colnames(data))) {
         admisc::stopError(
             "Please specify the column names for your data."
         )
     }
-    
-     # check the outcome specified by the user
-     
     if (identical(outcome, "")) {
         admisc::stopError(
             "The outcome set is not specified."
         )
     }
-    
     testoutcome <- admisc::tryCatchWEM(
         trout <- admisc::translate(outcome, colnames(data))
     )
-
     if (is.element("error", names(testoutcome))) {
         admisc::stopError(
             "Incorrect outcome specification."
         )
     }
-
     testrout <- apply(trout, 2, function(x) {
         all(x != "-1")
     })
-
-
     if (sum(testrout) == 1) {
         outcome <- names(testrout)[testrout]
     }
-    
-    
     if (!identical(conditions, "")) {
         if (any(grepl(":", conditions))) {
             if (length(conditions) > 1) {
@@ -51,20 +62,16 @@ function(data, outcome = "", conditions = "") {
                     "Only one sequence of conditions allowed."
                 )
             }
-
             conditions <- unlist(strsplit(conditions, split = ":"))
-
             nms <- colnames(data)
             cs <- unlist(strsplit(conditions, split = ":"))
             conditions <- nms[seq(which(nms == cs[1]), which(nms == cs[2]))]
-            
             if (is.element(outcome, conditions)) {
                 admisc::stopError(
                     "Outcome found in the sequence of conditions."
                 )
             }
         }
-
         if (is.element(outcome, conditions)) {
             admisc::stopError(
                 paste0(
@@ -74,26 +81,17 @@ function(data, outcome = "", conditions = "") {
                 )
             )
         }
-        
         if (!all(is.element(conditions, names(data)))) {
             admisc::stopError(
                 "Conditions not found in the data."
             )
         }
-        
-        # if (length(conditions) == 1) {
-    
-        #     admisc::stopError("Cannot find a solution with only one causal condition.")
-        # }
-    
         if (any(duplicated(conditions))) {
             admisc::stopError(
                 "Duplicated conditions."
             )
         }
     }
-    
-    # checking for complete data (without missings)
     if (any(is.na(data))) {
         checked <- sapply(data, function(x) any(is.na(x)))
         admisc::stopError(
@@ -107,68 +105,47 @@ function(data, outcome = "", conditions = "") {
             )
         )
     }
-    
 }
-
-
-
 `verify.qca` <-
 function(data, ...) {
-
-    # requireNamespace("QCA") is not needed
-    # because it was already loaded either by minimize() (same for truthTable())
-    
-    # determine if it's a dataframe
-
     dots <- list(...)
     simplify <- isTRUE(dots$simplify)
-    
     if (is.data.frame(data)) {
         if (is.null(colnames(data))) {
             admisc::stopError(
                 "The dataset doesn't have any columns names."
             )
         }
-        
-        # determine if it's a valid QCA dataframe
         checkNumUncal <- lapply(data, function(x) {
-            # making sure it's not a temporal QCA column
             is_x_factor <- is.factor(x)
             is_x_declared <- inherits(x, "declared")
             x <- setdiff(x, c("-", "dc", "?"))
             is_possible_numeric <- admisc::possibleNumeric(x)
-            
             uncal <- mvuncal <- FALSE
-            
             if (is_possible_numeric) {
                 y <- na.omit(admisc::asNumeric(x))
-
                 if (admisc::wholeNumeric(y)) {
                     mvuncal <- length(seq(0, max(y))) > 20 ||
                     (
-                        !simplify && # a call via simplify() from admisc might have a data generated with expand()
-                        any(y > 1) && # to capture mv conditions only
+                        !simplify && 
+                        any(y > 1) && 
                         !setequal(
                             sort(unique(y)),
                             seq(0, max(y))
                         )
                     )
-                    
                 }
                 else {
                     uncal <- any(y > 1)
                 }
             }
-            
             return(c(is_possible_numeric, uncal, mvuncal, is_x_factor, is_x_declared))
         })
-        
         checknumeric <- sapply(checkNumUncal, "[[", 1)
         checkuncal <- sapply(checkNumUncal, "[[", 2)
         checkmvuncal <- sapply(checkNumUncal, "[[", 3)
         checkfactor <- sapply(checkNumUncal, "[[", 4)
         checkdeclared <- sapply(checkNumUncal, "[[", 5)
-        
         if (!all(checknumeric | checkfactor | checkdeclared)) {
             notnumeric <- colnames(data)[!checknumeric]
             errmessage <- paste(
@@ -179,10 +156,8 @@ function(data, ...) {
                 "not numeric or factor.",
                 sep = ""
             )
-            
             admisc::stopError(errmessage)
         }
-        
         if (any(checkuncal)) {
             uncalibrated <- colnames(data)[checkuncal]
             errmessage <- paste0(
@@ -194,17 +169,14 @@ function(data, ...) {
                 ":\n",
                 paste(uncalibrated, collapse = ", ")
             )
-
             admisc::stopError(errmessage)
         }
-        
         if (any(checkmvuncal)) {
             admisc::stopError(paste(
                 "Possibly uncalibrated multivalue conditions. Please check:\n",
                 paste(colnames(data)[checkmvuncal], collapse = ", ")
             ))
         }
-                   
     }
     else if (is.vector(drop(data))) {
         if (!admisc::possibleNumeric(data)) {
@@ -214,13 +186,10 @@ function(data, ...) {
         }
     }
 }
-
-
 `verify.tt` <- function(
     data, outcome = "", conditions = "", complete = FALSE,
     show.cases = FALSE, ic1 = 1, ic0 = 1, inf.test, ...
 ) {
-    
     if (!inherits(data, "data.frame")) {
         cls <- ifelse(methods::is(data, "QCA_sS"), "QCA_sS",
                 ifelse(methods::is(data, "QCA_tt"), "QCA_tt",
@@ -236,26 +205,19 @@ function(data, ...) {
             ifelse(cls == "QCA_pof", ", created by pof()", ""),
             "."
         )
-
         admisc::stopError(errmessage)
     }
-    
     if (methods::is(data, "QCA_tt")) {
         data <- data$initial.data
     }
-    
     if (identical(outcome, "")) {
         admisc::stopError("Incorrect outcome specification.")
     }
-
     testoutcome <- admisc::tryCatchWEM(admisc::translate(outcome, colnames(data)))
-    
     if (is.element("error", names(testoutcome))) {
         admisc::stopError("The outcome is not correct.")
     }
-    
     if (!identical(conditions, "")) {
-        
         if (length(conditions) == 1 & is.character(conditions)) {
             conditions <- admisc::splitstr(conditions)
             if (any(grepl(":", conditions)) & length(conditions) > 1) {
@@ -265,7 +227,6 @@ function(data, ...) {
             }
             conditions <- unlist(strsplit(conditions, split = ":"))
         }
-        
         if (is.element(outcome, conditions)) {
             admisc::stopError(
                 paste0(
@@ -275,18 +236,11 @@ function(data, ...) {
                 )
             )
         }
-        
         if (!all(is.element(conditions, names(data)))) {
             admisc::stopError(
                 "Conditions not found in the data."
             )
         }
-        
-        # if (length(conditions) == 1) {
-    
-        #     admisc::stopError("Cannot find a solution with only one causal condition.")
-        # }
-    
         if (any(duplicated(conditions))) {
             admisc::stopError(
                 "Duplicated conditions."
@@ -297,8 +251,6 @@ function(data, ...) {
         conditions <- colnames(data)
         conditions <- setdiff(conditions, outcome)
     }
-    
-    # checking for complete data (without missings)
     if (any(is.na(data))) {
         checked <- sapply(data, function(x) any(is.na(x)))
         admisc::stopError(
@@ -312,34 +264,21 @@ function(data, ...) {
             )
         )
     }
-    
-    
-    # checking for the two including cut-offs
     if (any(c(ic1, ic0) < 0) | any(c(ic1, ic0) > 1)) {
         admisc::stopError(
             "The inclusion cut-off(s) should be bound to the interval [0, 1]."
         )
     }
-    
-    # if (ic0 > ic1 & ic0 < 1) {
-
-    #     admisc::stopError("ic0 cannot be greater than ic1.")
-    # }
-    
     testoutcome <- admisc::tryCatchWEM(
         trout <- admisc::translate(outcome, colnames(data))
     )
-    
     if (is.element("error", names(testoutcome))) {
         admisc::stopError("Incorrect outcome specification.")
     }
-    
     testrout <- apply(trout, 2, function(x) {
         all(x != "-1")
     })
-
     data <- data[, unique(c(conditions, names(testrout)[testrout]))]
-    
     data[] <- lapply(data, function(x) {
         if (!is.factor(x) & !inherits(x, "declared")) {
             x <- as.character(x)
@@ -350,31 +289,22 @@ function(data, ...) {
         }
         return(x)
     })
-    
     verify.qca(data, ... = ...)
     verify.inf.test(inf.test, data)
 }
-
-
 `verify.minimize` <-
 function(data, outcome = "", conditions = "", explain = "",
          include = "", use.letters = FALSE) {
-    
-     # check if the user specifies something to explain
     if (all(explain == "")) {
         admisc::stopError(
             "You have not specified what to explain."
         )
     }
-    
-     # check if the user specifies something to explain
     if (any(explain == 0)) {
         admisc::stopError(
             "Negative output configurations cannot be explained."
         )
     }
-    
-     # check if the user specifies something to explain
     if (any(include == 0)) {
         admisc::stopError(
             paste(
@@ -383,8 +313,6 @@ function(data, outcome = "", conditions = "", explain = "",
             )
         )
     }
-    
-     # check if the user specifies something to explain
     if (length(setdiff(explain, c(1, "C"))) > 0) {
         admisc::stopError(
             paste(
@@ -393,7 +321,6 @@ function(data, outcome = "", conditions = "", explain = "",
             )
         )
     }
-    
     if (length(setdiff(include, c("?", "C", ""))) > 0) {
         admisc::stopError(
             paste(
@@ -402,21 +329,16 @@ function(data, outcome = "", conditions = "", explain = "",
             )
         )
     }
-    
     if (is.element("C", explain) & is.element("C", include)) {
         admisc::stopError(
             "Contradictions are either explained or included, but not both."
         )
     }
-    
-    # if more than 26 conditions (plus one outcome), we cannot use letters
     if (use.letters & ncol(data) > 27) {
         admisc::stopError(
             "Cannot use letters. There are more than 26 conditions."
         )
     }
-    
-    # checking for complete data (without missings)
     if (any(is.na(data))) {
         checked <- sapply(data, function(x) any(is.na(x)))
         admisc::stopError(
@@ -431,30 +353,21 @@ function(data, outcome = "", conditions = "", explain = "",
         )
     }
 }
-
-
-
 `verify.dir.exp` <- function(
     data, outcome, conditions, noflevels, dir.exp = "", enter = NULL
 ) {
-
     if (is.null(enter)) enter <- "\n"
-    # checking the directional expectations
     if (is.null(dir.exp)) {
         return(dir.exp)
     }
     else {
-
         multivalue <- any(grepl(mvregexp, dir.exp))
-
         if (is.character(dir.exp)) {
             dir.exp <- gsub(paste(admisc::dashes(), collapse = "|"), "-", dir.exp)
         }
-
         if (identical(dir.exp, "")) {
             dir.exp <- paste(rep("-", length(conditions)), collapse = ",")
         }
-        
         direxpsplit <- unlist(
             strsplit(
                 gsub("[-|;|,|[:space:]]", "", dir.exp),
@@ -462,26 +375,20 @@ function(data, outcome = "", conditions = "", explain = "",
             )
         )
         oldway <- admisc::possibleNumeric(direxpsplit) | length(direxpsplit) == 0
-        
         if (oldway) {
             if (length(dir.exp) == 1) {
                 dir.exp <- admisc::splitstr(dir.exp)
             }
-
             expression <- NULL
             if (length(dir.exp) != length(conditions)) {
                 admisc::stopError(
                     "Number of expectations does not match number of conditions."
                 )
             }
-
             if (all(dir.exp == "-")) {
                 return(matrix(0L, ncol = length(conditions)))
             }
-
-            # del means _d_irectional _e_xpectations _l_ist
             del <- strsplit(as.character(dir.exp), split = ";")
-            
             if (is.null(names(dir.exp))) {
                 names(del) <- conditions
             }
@@ -496,18 +403,13 @@ function(data, outcome = "", conditions = "", explain = "",
                         "Incorect names of the directional expectations."
                     )
                 }
-
                 names(del) <- names(dir.exp)
                 del <- del[conditions]
             }
-                
             for (i in seq(length(del))) {
                 values <- del[[i]]
-                
                 if (any(values != "-")) {
                     values <- admisc::asNumeric(setdiff(values, "-"))
-                    
-                    # if (length(setdiff(values, seq(length(baselist[[i]])) - 1) > 0)) {
                     if (length(setdiff(values, seq(noflevels[i]) - 1)) > 0) {
                         errmessage <- paste0(
                             'Values specified in the directional expectations ',
@@ -515,11 +417,9 @@ function(data, outcome = "", conditions = "", explain = "",
                             conditions[i],
                             '".'
                         )
-
                         admisc::stopError(errmessage)
                     }
                     else {
-                        # delc[[1]][[i]][values + 1] <- TRUE
                         expression <- c(
                             expression,
                             paste0(conditions[i], "[", values, "]")
@@ -527,7 +427,6 @@ function(data, outcome = "", conditions = "", explain = "",
                     }
                 }
             }
-
             multivalue <- TRUE
             dir.exp <- expression
         }
@@ -551,9 +450,7 @@ function(data, outcome = "", conditions = "", explain = "",
                 }
             }
         }
-        
-        dir.exp <- paste(dir.exp, collapse = "+") # just in case it's a vector
-        
+        dir.exp <- paste(dir.exp, collapse = "+") 
         if (!multivalue) {
             if (any(noflevels > 2)) {
                 admisc::stopError(
@@ -564,9 +461,7 @@ function(data, outcome = "", conditions = "", explain = "",
                 )
             }
         }
-
         if (!oldway) {
-            # return(list(expression = dir.exp, snames = conditions, noflevels = noflevels, dir.exp = TRUE))
             dir.exp <- tryCatch(
                 admisc::simplify(
                     expression = dir.exp,
@@ -578,41 +473,29 @@ function(data, outcome = "", conditions = "", explain = "",
                 warning = function(w) w
             )
         }
-        
         if (length(dir.exp) > 1) {
             admisc::stopError(
                 "Ambiguous directional expectations."
             )
         }
-
         if (identical(dir.exp, "")) {
             admisc::stopError(
                 "Directional expectations cancel each other out to an empty set."
             )
         }
-        
         dir.exp <- admisc::translate(
             dir.exp,
             snames = conditions,
             noflevels = noflevels
         )
-        
         return(matrix(as.integer(dir.exp) + 1L, ncol = ncol(dir.exp)))
-        
     }
 }
-
-
-
-
-
 `verify.mqca` <-
 function(allargs) {
     data <- allargs$input
-    
     outcome <- admisc::splitstr(allargs$outcome)
-    mvoutcome <- grepl(mvregexp, outcome) # there is a "{" sign in the outcome names
-    
+    mvoutcome <- grepl(mvregexp, outcome) 
     if (any(mvoutcome)) {
         if (any(grepl("\\{", outcome))) {
             outcome.value <- admisc::curlyBrackets(outcome)
@@ -622,7 +505,6 @@ function(allargs) {
             outcome.value <- admisc::squareBrackets(outcome)
             outcome <- admisc::squareBrackets(outcome, outside = TRUE)
         }
-
         if (length(setdiff(outcome, names(data))) > 0) {
             outcome <- setdiff(outcome, names(data))
             errmessage <- paste0(
@@ -632,14 +514,12 @@ function(allargs) {
             )
             admisc::stopError(errmessage)
         }
-        
         for (i in seq(length(outcome))) {
             if (mvoutcome[i]) {
                 mvnot <- setdiff(
                     admisc::splitstr(outcome.value[i]),
                     unique(data[, outcome[i]])
                 )
-
                 if (length(mvnot) > 0) {
                     admisc::stopError(
                         sprintf(
@@ -648,13 +528,11 @@ function(allargs) {
                             outcome[i]
                         )
                     )
-                    
                 }
             }
         }
     }
     else {
-        
         if (length(setdiff(outcome, names(data))) > 0) {
             outcome <- setdiff(outcome, names(data))
             admisc::stopError(
@@ -665,17 +543,13 @@ function(allargs) {
                 )
             )
         }
-        
         fuzzy.outcome <- apply(
             data[, outcome, drop=FALSE],
             2,
             function(x) any(x %% 1 > 0)
         )
-        
-        # Test if outcomes are in fact multi-valent, even if the user did not specify that 
         if (any(!fuzzy.outcome)) {
             outcome.copy <- outcome[!fuzzy.outcome]
-            
             for (i in outcome.copy) {
                 valents <- unique(data[, i])
                 if (!all(valents %in% c(0, 1))) {
@@ -690,17 +564,13 @@ function(allargs) {
             }
         }
     }
-    
-    
     conditions <- allargs$conditions
-    
     if (is.null(conditions)) {
         conditions <- names(data)
     }
     else {
         conditions <- admisc::splitstr(conditions)
     }
-    
     if (length(setdiff(outcome, conditions)) > 0) {
         outcome <- setdiff(outcome, conditions)
         admisc::stopError(
@@ -711,14 +581,7 @@ function(allargs) {
             )
         )
     }
-    
-    # return(outcome)
-    
 }
-
-
-
-
 `verify.inf.test` <- function(inf.test, data) {
     if (all(inf.test != "")) {
         if (inf.test[1] != "binom") {
@@ -734,7 +597,6 @@ function(allargs) {
                 )
             }
         }
-        
         if (length(inf.test) > 1) {
             alpha <- as.numeric(inf.test[2])
             if (is.na(alpha) | alpha < 0 | alpha > 1) {
