@@ -3,11 +3,16 @@ Version 3.23
       use the Gurobi optimizer for the fastest solving of the PI chart
     o New: multi-value outcome can be negated with a tilde in function
       truthTable()
+    o Fixed: bug affecting minimize() using a truth table and excluding
+      untenable configurations (thanks to Ian Greener for the report)
     o Fixed: bug affecting findRows() when the outcome was defined as
       an object containing the name of the column of interest
-      (thanks to Philipp Sekol for the report)
+      (thanks to Philipp Sekol and Ian Greener for the report)
     o Fixed: bug affecting selection of PIs based on consistency level
       (thanks to Sophie Delede for the report)
+    o Fixed: bug displaying inclusion for necessity instead of sufficiency
+      for the minimization object, when condition names contain a minus sign
+      (thanks to Philipp Sekol for the report)
 
 Version 3.22
     o New: package "declared" is now imported by default

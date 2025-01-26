@@ -29,6 +29,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <R_ext/RS.h> 
 #include <R_ext/Boolean.h>
 #include "find_models.h"
+#ifdef _OPENMP
+    #undef match
+    #include <omp.h>
+#endif
 void find_models(
     const int p_pichart[],
     const int pirows,
@@ -188,13 +192,15 @@ void find_models(
                 r++;
             }
             if (allrows) {
-                for (int c = 0; c < k; c++) {
-                    p_temp1[solfound * k + c] = tempk[c] + 1; 
-                }
-                solfound++;
-                if (solfound == estimsol) {
-                    estimsol += 100;
-                    resize(&p_temp1, k, estimsol, solfound);
+                {
+                    for (int c = 0; c < k; c++) {
+                        p_temp1[solfound * k + c] = tempk[c] + 1; 
+                    }
+                    solfound++;
+                    if (solfound == estimsol) {
+                        estimsol += 100;
+                        resize(&p_temp1, k, estimsol, solfound);
+                    }
                 }
             }
             if (firstmin && solfound > 0) {

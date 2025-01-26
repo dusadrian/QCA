@@ -39,32 +39,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     #undef match
     #include <omp.h>
 #endif
-void CCubes(const int p_tt[],       
-            const int ttrows,       
-            const int nconds,       
-            const double p_data[],  
-            const int nrdata,       
-            const Rboolean allsol,      
-            const Rboolean rowdom,      
-            const Rboolean minpin,      
-            const double picons,    
-            const int pidepth,      
-            const int p_fsconds[],  
-            const int soldepth,     
+void CCubes(const int p_tt[],          
+            const int ttrows,          
+            const int nconds,          
+            const double p_data[],     
+            const int nrdata,          
+            const Rboolean allsol,     
+            const Rboolean rowdom,     
+            const double picons,       
+            const int pidepth,         
+            const int p_fsconds[],     
+            const int soldepth,        
             const double solcons,
             const double solcov,
             const double maxcomb,
-            const Rboolean keeptrying,  
-            int **pichart,           
-            int **implicants,        
-            int **models,            
-            unsigned int *foundPI_,  
-            int *solrows,            
-            int *solcols,            
-            Rboolean *complex,       
-            const Rboolean firstmin, 
-            const Rboolean gurobi,   
-            const Rboolean solind    
+            const Rboolean keeptrying, 
+            int **pichart,             
+            int **implicants,          
+            int **models,              
+            unsigned int *foundPI_,    
+            int *solrows,              
+            int *solcols,              
+            Rboolean *complex,         
+            const Rboolean firstmin,   
+            const Rboolean gurobi,     
+            const Rboolean solind      
 ) {
     int *p_pichart, *p_implicants, *p_indx, *p_ck;
     int posrows = 0;
@@ -261,10 +260,11 @@ void CCubes(const int p_tt[],
                 }
                 UNPROTECT(7);
                 if (solmin == prevsolmin) {
-                    if (firstmin || minpin) {
-                        for (int i = 0; i < solmin; i++) {
-                            indices[i] = previndices[i];
-                        }
+                    for (int i = 0; i < solmin; i++) {
+                        indices[i] = previndices[i];
+                    }
+                    if (firstmin) {
+                        counter += 1;
                     }
                 }
                 else {
@@ -272,12 +272,15 @@ void CCubes(const int p_tt[],
                     for (int i = 0; i < solmin; i++) {
                         previndices[i] = indices[i];
                     }
+                    counter = 0; 
                 }
-                if (foundk) {
-                    counter = 0;
-                }
-                else {
-                    counter += 1;
+                if (!firstmin) {
+                    if (foundk) {
+                        counter = 0;
+                    }
+                    else {
+                        counter += 1;
+                    }
                 }
             }
             prevfoundPI = foundPI;
@@ -332,7 +335,7 @@ void CCubes(const int p_tt[],
                 }
             }
             R_Free(p_sorted);
-            if (keeptrying | solind_failed) {
+            if (keeptrying && solind_failed) {
                 find_models(
                     p_tempic,
                     posrows,
@@ -402,7 +405,18 @@ void CCubes(const int p_tt[],
         }
         else if (solmin > 0) {
             nr = solmin;
-            find_models(p_tempic, posrows, foundPI, allsol, solmin, maxcomb, false, &p_solutions, &nr, &nc);
+            find_models(
+                p_tempic,
+                posrows,
+                foundPI,
+                allsol,
+                solmin,
+                maxcomb,
+                false, 
+                &p_solutions,
+                &nr,
+                &nc
+            );
         }
         R_Free(p_sorted);
     }

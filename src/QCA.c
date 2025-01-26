@@ -1327,7 +1327,6 @@ SEXP C_Cubes(SEXP list) {
     int posdata =      getpos(list, "data");       
     int posallsol =    getpos(list, "all.sol");    
     int posrowdom =    getpos(list, "row.dom");    
-    int posminpin =    getpos(list, "min.pin");    
     int pospicons =    getpos(list, "pi.cons");    
     int posdepth =     getpos(list, "depth");      
     int posolcons =    getpos(list, "sol.cons");   
@@ -1355,7 +1354,6 @@ SEXP C_Cubes(SEXP list) {
     int nconds = ncols(tt) - 1; 
     Rboolean allsol = (posallsol >= 0) ? (LOGICAL(VECTOR_ELT(list, posallsol))[0]) : FALSE;
     Rboolean rowdom = (posrowdom >= 0) ? (LOGICAL(VECTOR_ELT(list, posrowdom))[0]) : FALSE;
-    Rboolean minpin = (posminpin >= 0) ? (LOGICAL(VECTOR_ELT(list, posminpin))[0]) : FALSE;
     Rboolean keeptrying = (poskeeptry >= 0) ? (LOGICAL(VECTOR_ELT(list, poskeeptry))[0]) : FALSE;
     Rboolean firstmin = (pos1stmin >= 0) ? (LOGICAL(VECTOR_ELT(list, pos1stmin))[0]) : FALSE;
     Rboolean gurobi = (posgurobi >= 0) ? (LOGICAL(VECTOR_ELT(list, posgurobi))[0]) : TRUE;
@@ -1394,7 +1392,7 @@ SEXP C_Cubes(SEXP list) {
         maxcomb = REAL(VECTOR_ELT(list, posmaxcomb))[0]; 
     }
     CCubes(
-        p_tt, ttrows, nconds, p_data, nrdata, allsol, rowdom, minpin, picons, pidepth, p_fsconds, soldepth, solcons, solcov, maxcomb, keeptrying,
+        p_tt, ttrows, nconds, p_data, nrdata, allsol, rowdom, picons, pidepth, p_fsconds, soldepth, solcons, solcov, maxcomb, keeptrying,
         &p_pichart, &p_impmat, &p_models, &foundPI, &solrows, &solcols, &complexpic,
         firstmin,
         gurobi,
