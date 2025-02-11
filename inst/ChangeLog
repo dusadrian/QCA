@@ -1,3 +1,7 @@
+Version 3.24
+    o Fixed: bug printing row numbers for very large solutions
+      (thanks to Andreas Corcaci for the report)
+
 Version 3.23
     o New: academic users having a valid (free) Gurobi license can now
       use the Gurobi optimizer for the fastest solving of the PI chart
