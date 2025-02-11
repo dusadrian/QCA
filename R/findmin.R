@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2024, Adrian Dusa
+# Copyright (c) 2016 - 2025, Adrian Dusa
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -78,7 +78,6 @@
                     )
                 }
             }
-            gurobi <- is.null(tc)
         }
         if (!gurobi) {
             solution <- lpSolve::lp(
