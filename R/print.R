@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2024, Adrian Dusa
+# Copyright (c) 2016 - 2025, Adrian Dusa
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -702,7 +702,7 @@
             )
         }
         chunks <- ceiling(ncol(incl.cov)/ncols)
-        colsplits <- seq(1, ncol(incl.cov), by=ncols)
+        colsplits <- seq(1, ncol(incl.cov), by = ncols)
         for (chunk in seq(chunks)) {
             sel.cols <- seq(
                 colsplits[chunk],
@@ -955,7 +955,7 @@
                         cat(sep.row, "\n")
                         if (essentials) {
                             for (i in seq(nrow(incl.cov.e.temp))) {
-                                cat(paste(prettyNums[i], paste(rownames(incl.cov.e.temp)[i], " "), sep = "  "))
+                                cat(paste(prettyNums.e[i], paste(rownames(incl.cov.e.temp)[i], " "), sep = "  "))
                                 cases <- unlist(strsplit(incl.cov.e.cases[i], split = "; ", useBytes = TRUE))
                                 cat(
                                     admisc::prettyString(
