@@ -135,8 +135,8 @@
             }
         }
         intersections <- rep("", 4)
-        negtheory <- negate(theory, snames = snames, noflevels = noflevels)[[1]][1]
-        negexp <- negate(expression, snames = snames, noflevels = noflevels)[[1]][1]
+        negtheory <- invert(theory, snames = snames, noflevels = noflevels)[[1]][1]
+        negexp <- invert(expression, snames = snames, noflevels = noflevels)[[1]][1]
         intersections[1] <- do.call(
             admisc::intersection,
             c(

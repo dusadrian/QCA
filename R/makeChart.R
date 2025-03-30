@@ -77,14 +77,14 @@
             else {
                 mtrx <- t(mtrx)
             }
-            rownames(mtrx) <- admisc::writePrimeimp(
+            rownames(mtrx) <- admisc::writePIs(
                 primes,
                 mv = mv,
                 collapse = collapse,
                 curly = curly
             )
         }
-        colnames(mtrx) <- admisc::writePrimeimp(
+        colnames(mtrx) <- admisc::writePIs(
             configs,
             mv = mv,
             collapse = collapse,
