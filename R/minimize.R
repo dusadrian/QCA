@@ -336,7 +336,7 @@
     admisc::setColnames(pos.matrix, colnms)
     admisc::setColnames(neg.matrix, colnms)
     rownames(neg.matrix) <- (neg.matrix - 1) %*% mbase + 1
-    output$initials <- admisc::writePrimeimp(
+    output$initials <- admisc::writePIs(
         impmat = inputt,
         mv = mv,
         collapse = collapse,
@@ -431,7 +431,7 @@
     output$options$curly       <- curly
     output$options$use.labels  <- use.labels
     expr.cases <- rep(NA, nrow(p.sol$reduced$expressions))
-    tt.rows <- admisc::writePrimeimp(
+    tt.rows <- admisc::writePIs(
         impmat = inputt,
         mv = mv,
         collapse = collapse
@@ -634,7 +634,7 @@
                 isols <- result[[2]]
                 intsel <- result[[3]]
             }
-            tt.rows <- admisc::writePrimeimp(
+            tt.rows <- admisc::writePIs(
                 impmat = inputt,
                 mv = mv,
                 collapse = collapse

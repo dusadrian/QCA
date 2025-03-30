@@ -152,10 +152,10 @@
             snames <- colnames(data)
         }
         if (identical(substring(x[1], 1, 2), "1-")) {
-            x[1] <- negate(gsub("1-", "", x[1]), snames = snames)
+            x[1] <- invert(gsub("1-", "", x[1]), snames = snames)
         }
         if (identical(substring(x[2], 1, 2), "1-")) {
-            x[2] <- negate(gsub("1-", "", x[2]), snames = snames)
+            x[2] <- invert(gsub("1-", "", x[2]), snames = snames)
         }
         outmtrx <- NA
         if (length(x) > 1) {
@@ -353,6 +353,9 @@
     if (identical(substr(funargs$setms, 1, 2), "1-")) {
         condnegated <- !condnegated
     }
+    if (inherits(setms, "declared")) {
+        attributes(setms) <- NULL
+    }
     if (is.vector(setms)) {
         setms <- data.frame(setms)
         conditions <- admisc::notilde(gsub("1-", "", funargs$setms))
@@ -402,7 +405,7 @@
                 colnames(setms) <- paste("~", colnames(setms), sep = "")
             }
             else {
-                colnames(setms) <- gsub("[[:space:]]", "", admisc::negate(colnames(setms), snames = conditions))
+                colnames(setms) <- gsub("[[:space:]]", "", admisc::invert(colnames(setms), snames = conditions))
             }
         }
     }

@@ -183,7 +183,7 @@
         rownames(result.matrix) <- expressions <- seq(lexpressions)
         admisc::setColnames(result.matrix, conditions)
         prev.result <- TRUE
-        row_names <- admisc::writePrimeimp(
+        row_names <- admisc::writePIs(
             impmat = result.matrix,
             mv = mv,
             collapse = "*"
@@ -207,7 +207,7 @@
             result.matrix2 <- CMatrix[[4]]
             rownames(result.matrix2) <- seq(lexprnec) + lexpressions
             admisc::setColnames(result.matrix2, conditions)
-            row_names2 <- admisc::writePrimeimp(
+            row_names2 <- admisc::writePIs(
                 impmat = result.matrix2,
                 mv = mv,
                 collapse = " + "

@@ -89,7 +89,7 @@
             }
         }
     }
-    PI <- admisc::writePrimeimp(
+    PI <- admisc::writePIs(
         impmat = expressions,
         mv = mv,
         collapse = collapse,
