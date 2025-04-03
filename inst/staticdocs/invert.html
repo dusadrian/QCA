@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-<title>negate. QCA 2.5</title>version 3.23</title>
+<title>invert. QCA 2.5</title>version 3.23.3</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="
 Adrian Dusa
@@ -34,7 +34,7 @@ Adrian Dusa
     <div class="navbar">
   <div class="navbar-inner">
     <div class="container">
-      <a class="brand" href="#">QCA 3.23</a>
+      <a class="brand" href="#">QCA 3.23.3</a>
       <div class="nav">
         <ul class="nav">
           <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
@@ -49,7 +49,7 @@ Adrian Dusa
         
       </header>
       
-      <h1>Negate Boolean expressions</h1>
+      <h1>Invert Boolean expressions</h1>
 
 <div class="row">
   <div class="span8">
@@ -57,12 +57,12 @@ Adrian Dusa
     <div class="Description">
       <h2>Description</h2>
 
-      <p>Functions to negate a DNF/SOP expression, or to invert SOP to POS or POS to SOP.</p>
+      <p>Functions to invert a DNF/SOP expression, or to invert SOP to POS or POS to SOP.</p>
   
     </div>
     
     <h2>Usage</h2>
-<pre><div>negate(input, snames = "", noflevels, simplify = TRUE)</div>
+<pre><div>invert(input, snames = "", noflevels, simplify = TRUE)</div>
 <div>invert(input, snames = "", noflevels)</div></pre>
     
     <h2>Arguments</h2>
@@ -112,7 +112,7 @@ mathematician Augustus De Morgan. These rules state that:</p>
       <p>Based on these two laws, any Boolean expression written in disjunctive normal form
 can be transformed into its negation.</p>
   
-      <p>It is also possible to negate all models and solutions from the result of a
+      <p>It is also possible to invert all models and solutions from the result of a
 Boolean minimization from function <b><code><a href='minimize.html'>minimize()</a></code></b>.
 The resulting object, of class <code>&quot;qca&quot;</code>, is automatically recognised by this
 function.</p>
@@ -121,7 +121,7 @@ function.</p>
 <b><code>*</code></b> sign, otherwise the sets' names will be considered the individual
 letters in alphabetical order, unless they are specified via <b><code>snames</code></b>.</p>
   
-      <p>To negate multilevel expressions, the argument <b><code>noflevels</code></b> is required.</p>
+      <p>To invert multilevel expressions, the argument <b><code>noflevels</code></b> is required.</p>
   
       <p>It is entirely possible to obtain multiple negations of a single expression, since the
           result of the negation is passed to function <b><code><a href='SOPexpression.html'>simplify()</a></code></b>.</p>
@@ -151,7 +151,7 @@ and Quantitative Strategies</em>. Berkeley: University of California Press.</p>
 <pre class="examples">
 
 <div class='input'># example from Ragin (1987, p.99)
-negate(&quot;AC + B~C&quot;, simplify = FALSE)
+invert(&quot;AC + B~C&quot;, simplify = FALSE)
 </div>
 <div class='output'>
 N1: ~A~B + ~AC + ~B~C
@@ -159,7 +159,7 @@ N1: ~A~B + ~AC + ~B~C
 
 
 <div class='input'># the simplified, logically equivalent negation
-  negate(&quot;AC + B~C&quot;)
+  invert(&quot;AC + B~C&quot;)
 </div>
 <div class='output'>
 N1: ~AC + ~B~C
@@ -167,7 +167,7 @@ N1: ~AC + ~B~C
 
 <div class='input'>
 # with different intersection operators
-negate(&quot;AB*EF + ~CD*EF&quot;)
+invert(&quot;AB*EF + ~CD*EF&quot;)
 </div>
 <div class='output'>
 N1: ~EF + ~AB*CD 
@@ -187,7 +187,7 @@ N1: (~a + ~b)*(c + ~d)
 # using an object of class &quot;qca&quot; produced with minimize()
 cLC &lt;- minimize(LC, outcome = &quot;SURV&quot;)
 
-negate(cLC)
+invert(cLC)
 </div>
 <div class='output'>
 M1: DEV*~URB*LIT*STB + DEV*LIT*IND*STB 
@@ -199,7 +199,7 @@ M1: DEV*~URB*LIT*STB + DEV*LIT*IND*STB
 # parsimonious solution
 pLC &lt;- minimize(LC, outcome = &quot;SURV&quot;, include = &quot;?&quot;)
 
-negate(pLC)
+invert(pLC)
 </div>
 <div class='output'>
 M1: DEV*STB
@@ -209,7 +209,7 @@ M1: DEV*STB
   </div>
   <div class="span4">
     <!-- <ul>
-      <li>negate</li>
+      <li>invert</li>
     </ul>
     <ul>
       <li>functions</li>
