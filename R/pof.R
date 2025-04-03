@@ -29,6 +29,7 @@
     use.labels = FALSE, inf.test = "", incl.cut = c(0.75, 0.5), add = NULL, ...
 ) {
     outcome <- admisc::recreate(substitute(outcome), snames = names(data))
+    setms <- admisc::recreate(substitute(setms), snames = names(data))
     if (is.null(setms) & !is.null(data)) {
         return(pofind(
             data = data,
@@ -38,7 +39,6 @@
             ... = ...
         ))
     }
-    setms <- admisc::recreate(substitute(setms), snames = names(data))
     if (inherits(outcome, "declared")) {
         attributes(outcome) <- NULL
     }
