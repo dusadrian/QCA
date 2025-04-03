@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-<title>intersection. QCA 2.5</title>version 3.23</title>
+<title>intersection. QCA 2.5</title>version 3.23.3</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="
 Adrian Dusa
@@ -34,7 +34,7 @@ Adrian Dusa
     <div class="navbar">
   <div class="navbar-inner">
     <div class="container">
-      <a class="brand" href="#">QCA 3.23</a>
+      <a class="brand" href="#">QCA 3.23.3</a>
       <div class="nav">
         <ul class="nav">
           <li><a href="index.html"><i class="icon-home icon-white"></i> Index</a></li>
@@ -144,7 +144,7 @@ intersection(pLF, &quot;DEV*STB&quot;)
 </div>
 
 <div class='input'># negating the model
-intersection(negate(pLF), &quot;DEV*STB&quot;)
+intersection(invert(pLF), &quot;DEV*STB&quot;)
 </div>
 <div class='output'>E1: (~DEV*~URB + ~DEV*~STB + ~URB*IND + IND*~STB)*DEV*STB
   I1: DEV*IND*STB*~URB
@@ -188,7 +188,7 @@ intersection(&quot;L~G&quot;, &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quo
 # not hypothesized by any of the three theories (page 147)
 # ~H = ~(~L~W + SW + L~G)
 
-intersection(negate(&quot;~L~W + SW + L~G&quot;), &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
+intersection(invert(&quot;~L~W + SW + L~G&quot;), &quot;SG + LW&quot;, snames = &quot;S, L, W, G&quot;)
 </div>
 <div class='output'>E1: (GL~S + GL~W + ~L~SW)(SG + LW)
   I1: ~SLWG + SL~WG
