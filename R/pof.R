@@ -28,6 +28,14 @@
     setms = NULL, outcome = NULL, data = NULL, relation = "necessity",
     use.labels = FALSE, inf.test = "", incl.cut = c(0.75, 0.5), add = NULL, ...
 ) {
+    if (is.null(data)) {
+        syscalls <- as.character(sys.calls())
+        usingwith <- "admisc::using\\(|using\\(|with\\("
+        if (any(usingdata <- grepl(usingwith, syscalls))) {
+            dataname <- unlist(strsplit(gsub(usingwith, "", syscalls), split = ","))[1]
+            data <- eval.parent(parse(text = dataname, n = 1))
+        }
+    }
     outcome <- admisc::recreate(substitute(outcome), snames = names(data))
     setms <- admisc::recreate(substitute(setms), snames = names(data))
     if (is.null(setms) & !is.null(data)) {
@@ -161,7 +169,7 @@
         if (length(x) > 1) {
             outmtrx <- validateNames(x[2], snames = snames, data = data)
         }
-        if (!is.na(outmtrx)) {
+        if (!identical(outmtrx, NA)) {
             if (!multivalue) {
                 rownames(outmtrx) <- xcopy[2]
             }
@@ -187,7 +195,7 @@
     checkoutcome <- TRUE
     addexpression <- FALSE
     if (is.element("character", class(setms))) {
-        if (missing(data)) {
+        if (is.null(data)) {
             admisc::stopError(
                 "The data argument is missing, with no default.", ... = ...
             )
@@ -202,7 +210,7 @@
             relation <- toverify$relation
         }
         conditions <- colnames(toverify$condmtrx)
-        if (is.na(toverify$outmtrx)) {
+        if (identical(toverify$outmtrx, NA)) {
             if (missing(outcome)) {
                 admisc::stopError(
                     "Expression without outcome.", ... = ...
@@ -549,51 +557,44 @@
     }
     result.list$categories <- categories
     if (!is.null(add)) {
-        if (!(is.list(add) | is.function(add))) {
-            admisc::stopError(
-                "The argument <add> should be a function or a list of functions.",
-                ... = ...
-            )
-        }
-        if (is.list(add)) {
-            if (!all(unlist(lapply(add, is.function)))) {
+        if (!is.list(add)) {
+            if (!is.function(add)) {
                 admisc::stopError(
-                    "Components from the list argument <add> should be functions.",
+                    "The argument <add> should be a function or a list of functions.",
                     ... = ...
                 )
             }
-            toadd <- matrix(nrow = nrow(incl.cov), ncol = length(add))
-            if (is.null(names(add))) {
-                names(add) <- paste0("X", seq(length(add)))
-            }
-            if (any(duplicated(substr(names(add), 1, 5)))) {
-                names(add) <- paste0("X", seq(length(add)))
-            }
-            colnames(toadd) <- substr(names(add), 1, 5)
-            for (i in seq(length(add))) {
-                coltoadd <- apply(
-                    cbind(setms, fuzzyor(setms)),
-                    2,
-                    add[[i]],
-                    outcome
-                )
-                if (ncol(setms) == 1) {
-                    coltoadd <- coltoadd[1]
-                }
-                toadd[, i] <- coltoadd
-            }
-        }
-        else {
-            toadd <- matrix(nrow = nrow(incl.cov), ncol = 1)
-            coltoadd <- apply(cbind(setms, fuzzyor(setms)), 2, add, outcome)
-            if (ncol(setms) == 1) {
-                coltoadd <- coltoadd[1]
-            }
-            toadd[, 1] <- coltoadd
             if (any(grepl("function", funargs$add))) {
                 funargs$add <- "X"
             }
-            colnames(toadd) <- substr(funargs$add, 1, 5)
+            add <- list(add)
+            names(add) <- substr(funargs$add, 1, 5)
+        }
+        if (!all(unlist(lapply(add, is.function)))) {
+            admisc::stopError(
+                "Components from the list argument <add> should be functions.",
+                ... = ...
+            )
+        }
+        toadd <- matrix(nrow = nrow(result.list$incl.cov), ncol = length(add))
+        if (is.null(names(add))) {
+            names(add) <- paste0("X", seq(length(add)))
+        }
+        if (any(duplicated(substr(names(add), 1, 5)))) {
+            names(add) <- paste0("X", seq(length(add)))
+        }
+        colnames(toadd) <- substr(names(add), 1, 5)
+        for (i in seq(length(add))) {
+            coltoadd <- apply(
+                cbind(setms, fuzzyor(setms)),
+                2,
+                add[[i]],
+                outcome
+            )
+            if (ncol(setms) == 1) {
+                coltoadd <- coltoadd[1]
+            }
+            toadd[, i] <- coltoadd
         }
         result.list$incl.cov <- cbind(result.list$incl.cov, toadd)
     }
