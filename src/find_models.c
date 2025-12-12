@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ void find_models(
     int *nr,
     int *nc) {
     if (k == picols) {
-        int* p_temp = R_Calloc(k, int);
+        int *p_temp = (int *) R_Calloc(k, int);
         for (int i = 0; i < k; i++) {
             p_temp[i] = i + 1;
         }
@@ -55,8 +55,8 @@ void find_models(
         *nc = 1;
         return;
     }
-    int *p_temp1 = R_Calloc(1, int);
-    int *p_temp2 = R_Calloc(1, int);
+    int *p_temp1 = (int *) R_Calloc(1, int);
+    int *p_temp2 = (int *) R_Calloc(1, int);
     if (allsol) {
         int indmat[picols * pirows];
         int mintpis[pirows];
@@ -70,15 +70,15 @@ void find_models(
             }
         }
         R_Free(p_temp2);
-        p_temp2 = R_Calloc(picols * mintpis[0], int);
-        int *p_cols = R_Calloc(1, int); 
+        p_temp2 = (int *) R_Calloc(picols * mintpis[0], int);
+        int *p_cols = (int *) R_Calloc(1, int); 
         for (int i = 0; i < mintpis[0]; i++) {
             p_temp2[i * picols + indmat[i]] = 1;
         }
         unsigned int tempcols = mintpis[0];
         for (int i = 1; i < pirows; i++) {
             R_Free(p_temp1);
-            p_temp1 = R_Calloc(picols * tempcols * mintpis[i], int);
+            p_temp1 = (int *) R_Calloc(picols * tempcols * mintpis[i], int);
             for (int j = 0; j < mintpis[i]; j++) {
                 Memcpy(&p_temp1[j * tempcols * picols], p_temp2, tempcols * picols);
                 for (unsigned int tc = 0; tc < tempcols; tc++) {
@@ -87,21 +87,21 @@ void find_models(
             }
             unsigned int temp2cols = tempcols * mintpis[i];
             R_Free(p_cols);
-            p_cols = R_Calloc(temp2cols, int);
+            p_cols = (int *) R_Calloc(temp2cols, int);
             for (unsigned int i = 0; i < temp2cols; i++) {
                 p_cols[i] = true;
             }
             unsigned int survcols = temp2cols;
             super_rows(p_temp1, picols, &survcols, p_cols);
             R_Free(p_temp2);
-            p_temp2 = R_Calloc(picols * survcols, int);
+            p_temp2 = (int *) R_Calloc(picols * survcols, int);
             Memcpy(p_temp2, p_temp1, picols * survcols);
             tempcols = survcols;
         }
         R_Free(p_temp1);
-        p_temp1 = R_Calloc(picols * tempcols, int);
+        p_temp1 = (int *) R_Calloc(picols * tempcols, int);
         R_Free(p_cols);
-        p_cols = R_Calloc(tempcols, int);
+        p_cols = (int *) R_Calloc(tempcols, int);
         int maxr = 0;
         for (int c = 0; c < tempcols; c++) {
             for (unsigned int r = 0; r < picols; r++) {
@@ -115,7 +115,7 @@ void find_models(
             }
         }
         R_Free(p_temp2);
-        p_temp2 = R_Calloc(maxr * tempcols, int);
+        p_temp2 = (int *) R_Calloc(maxr * tempcols, int);
         for (unsigned int c = 0; c < tempcols; c++) {
             for (int r = 0; r < maxr; r++) {
                 p_temp2[c * maxr + r] = p_temp1[c * picols + r];
@@ -152,7 +152,7 @@ void find_models(
         }
         R_Free(p_cols);
         R_Free(p_temp1);
-        p_temp1 = R_Calloc(maxr * tempcols, int);
+        p_temp1 = (int *) R_Calloc(maxr * tempcols, int);
         for (unsigned int c = 0; c < tempcols; c++) {
             for (int r = 0; r < maxr; r++) {
                 p_temp1[c * maxr + r] = p_temp2[order[c] * maxr + r];
@@ -165,7 +165,7 @@ void find_models(
         unsigned int solfound = 0;
         unsigned int estimsol = 100;
         R_Free(p_temp1);
-        p_temp1 = R_Calloc(k * estimsol, int);
+        p_temp1 = (int *) R_Calloc(k * estimsol, int);
         int tempk[k];
         for (int i = 0; i < k; i++) {
             tempk[i] = i; 
@@ -198,8 +198,8 @@ void find_models(
                     }
                     solfound++;
                     if (solfound == estimsol) {
+                        resize((void**)&p_temp1, 1, 100, estimsol, k);
                         estimsol += 100;
-                        resize(&p_temp1, k, estimsol, solfound);
                     }
                 }
             }
@@ -214,11 +214,11 @@ void find_models(
             }
         }
         if (solfound > 0) {
-            p_temp1 = R_Realloc(p_temp1, k * solfound, int);
+            p_temp1 = (int *) R_Realloc(p_temp1, k * solfound, int);
         }
         else {
             R_Free(p_temp1);
-            p_temp1 = R_Calloc(1, int);
+            p_temp1 = (int *) R_Calloc(1, int);
         }
         *nr = k;
         *nc = solfound;

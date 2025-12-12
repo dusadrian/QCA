@@ -5,11 +5,16 @@
 // void printfarray3(int* arr, int nr, int nc);
 // void printfarray4(double* arr, int nr, int nc);
 
+int compute_value_bit_width(
+    int max_value
+);
+
 void resize(
-    int **array,
-    const int rows,
-    const unsigned int newcols,
-    const unsigned int oldcols
+    void **array,
+    int type, // 1 = int, 2 = unsigned int
+    int increase,
+    int size,
+    int nrows
 );
 
 Rboolean too_complex(
@@ -35,31 +40,14 @@ Rboolean agteb(
     double b
 );
 
-Rboolean nonredundant(
-    const int p_implicants[],
-    const int p_indx[],
-    const int p_ck[],
-    const int tempk[],
-    const int tempc[],
-    const int nconds,
-    const int k,
-    const unsigned int prevfoundPI
-);
-
-void push_PI(
-    int p_implicants[],
-    int p_indx[],
-    int p_ck[],
-    int p_pichart[],
-    const int tempk[],
-    const int tempc[],
-    const int nconds,
-    const int k,
-    const int f,
-    const int decpos[],
-    const int frows[],
-    const int posrows,
-    const unsigned int foundPI
+Rboolean redundant(
+    unsigned int p_implicants_pos[],
+    unsigned int p_implicants_val[],
+    int implicant_words,
+    unsigned int fixed_bits[],
+    unsigned int value_bits[],
+    unsigned int prevfoundPI,
+    bool debug
 );
 
 void increment(
@@ -79,7 +67,8 @@ void populate_posneg(
     int posrows,
     const int p_tt[],
     int posmat[],
-    int negmat[]
+    int negmat[],
+    int *max_value
 );
 
 void get_noflevels(
@@ -87,13 +76,6 @@ void get_noflevels(
     const int p_tt[],
     int nconds,
     int ttrows
-);
-
-void fill_mbase(
-    int mbase[],
-    const int tempk[],
-    const int noflevels[],
-    const int k
 );
 
 void get_decimals(
@@ -151,23 +133,13 @@ void calculate_rows(
     int maxprod
 );
 
-int fill_combination_tasks(
-    const int n,
-    int k,
-    int (*comb)[3],
-    const int arrayMaxSize,
-    int* outNumItemsFilled
-);
-
-int get_next_combination(
-    int *arr,
-    int k,
-    int n,
-    int indexLimit
-);
-
 Rboolean all_covered(
     const int p_pichart[],
     const int pirows,
     const unsigned int picols
+);
+
+long long unsigned int nchoosek(
+    int n,
+    int k
 );

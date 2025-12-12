@@ -1287,7 +1287,7 @@ function console_command(type) {
                 }
             }
             if (type == "recode") {
-                var col = (getKeys(colclicks).indexOf("recode") >= 0)?getTrueKeys(colclicks.recode.x):"";
+                var col = (getKeys(colclicks).indexOf("recode") >= 0) ? getTrueKeys(colclicks.recode.x) : "";
                 var uniques = unique(commobj.recode.newv);
                 if (col.length > 0) {
                     if (!commobj.recode.same && commobj.recode.newvar != "") {
@@ -7087,11 +7087,9 @@ $("#menu_about").click(function() {
     else {
         createDialog(settings["about"]);
         var messages = [
-            "R package: QCA, version 3.23.3",
+            "R package: QCA, version 3.23.6",
             "",
             "Author: Adrian Dușa (dusa.adrian@unibuc.ro)",
-            "Former coauthors:",
-            "        Alrik Thiem (package QCA version 1.0-0 up to version 1.1-3)",
             "",
             "Contributors:",
             "            jQuery Foundation  (jQuery library and jQuery UI library)",
@@ -7100,6 +7098,8 @@ $("#menu_about").click(function() {
             "            Dmitry Baranovskiy (raphael.js library)",
             "            Emmanuel Quentin (raphael.inline_text_editing.js library)",
             "            Jimmy Breck-McKye (raphael-paragraph.js library)",
+            "Former coauthors:",
+            "        Alrik Thiem (package QCA version 1.0-0 up to version 1.1-3)",
             "",
             "An extensive set of functions to perform Qualitative Comparative",
             "Analysis: crisp sets ('csQCA'), temporal ('tQCA'), multivalue ('mvQCA')",

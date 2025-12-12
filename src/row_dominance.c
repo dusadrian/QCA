@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@ void row_dominance(
     int p_implicants[],
     int *p_ck,
     int pirows,
-    unsigned int *foundPI,
+    int *foundPI,
     int nconds
 ) {
     unsigned int picols = *foundPI;

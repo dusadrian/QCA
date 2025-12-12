@@ -5,6 +5,6 @@ void row_dominance(
     int p_implicants[],
     int *p_ck,
     int pirows,
-    unsigned int *foundPI,
+    int *foundPI,
     int nconds
 );

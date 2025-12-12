@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -30,15 +30,20 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <R_ext/RS.h> 
 #include <R_ext/Boolean.h>
 #include <Rinternals.h>
-#include <math.h>
-#include "consistency.h"
-#include "find_models.h"
-#include "find_consistent_models.h"
+#include <Rmath.h>
 #include "CCubes.h"
 #ifdef _OPENMP
     #undef match
     #include <omp.h>
+    #define OMP_NUM_PROCS omp_get_num_procs()
+    #define OMP_THREAD_LIMIT omp_get_thread_limit()
+    #define OMP_MAX_THREADS omp_get_max_threads()
+#else
+    #define OMP_NUM_PROCS 1
+    #define OMP_THREAD_LIMIT 1
+    #define OMP_MAX_THREADS 1
 #endif
+#define BITS_PER_WORD 32
 void CCubes(const int p_tt[],          
             const int ttrows,          
             const int nconds,          
@@ -65,30 +70,34 @@ void CCubes(const int p_tt[],
             const Rboolean gurobi,     
             const Rboolean solind      
 ) {
-    int *p_pichart, *p_implicants, *p_indx, *p_ck;
     int posrows = 0;
     for (int r = 0; r < ttrows; r++) {
         posrows += p_tt[nconds * ttrows + r];
     }
     int negrows = ttrows - posrows;
     int posmat[posrows * nconds];
-    int negmat[nconds * ((negrows > 0) ? negrows : 1)]; 
+    int negmat[nconds * negrows];
     int rowpos = 0, rowneg = 0;
-    populate_posneg(&rowpos, &rowneg, nconds, ttrows, posrows, p_tt, posmat, negmat);
+    int max_value = 0;
+    populate_posneg(&rowpos, &rowneg, nconds, ttrows, posrows, p_tt, posmat, negmat, &max_value);
+    int value_bit_width = compute_value_bit_width(max_value + 1); 
     int noflevels[nconds];
-    for (int i = 0; i < nconds; i++) {
-        noflevels[i] = 2; 
-    }
     get_noflevels(noflevels, p_tt, nconds, ttrows);
-    unsigned int estimPI = 10000;
-    p_pichart = R_Calloc(posrows * estimPI, int);
-    p_implicants = R_Calloc(nconds * estimPI, int);
-    p_indx = R_Calloc(nconds * estimPI, int);
-    p_ck = R_Calloc(estimPI, int);
+    int estimPI = 25000;
+    int increase = 25000; 
+    int *p_pichart = (int *) R_Calloc(posrows * estimPI, int);
+    int *p_indx = (int *) R_Calloc(nconds * estimPI, int);
+    int *p_implicants = (int *) R_Calloc(nconds * estimPI, int);
+    int pichart_words = (posrows + BITS_PER_WORD - 1) / BITS_PER_WORD; 
+    unsigned int *p_pichart_pos = (unsigned int *) R_Calloc(estimPI * pichart_words, unsigned int);
+    int implicant_words = (nconds + BITS_PER_WORD - 1) / BITS_PER_WORD; 
+    unsigned int *p_implicants_pos = (unsigned int *) R_Calloc(estimPI * implicant_words, unsigned int);
+    unsigned int *p_implicants_val = (unsigned int *) R_Calloc(estimPI * implicant_words, unsigned int);
+    int *p_ck = (int *) R_Calloc(estimPI, int);
     Rboolean stop_searching = false;
     Rboolean solind_failed = false;
-    unsigned int prevfoundPI = 0;  
-    unsigned int foundPI = 0;
+    int prevfoundPI = 0;  
+    int foundPI = 0;
     int prevsolmin = 0;     
     int solmin = 0;
     int previndices[posrows];
@@ -105,117 +114,138 @@ void CCubes(const int p_tt[],
     int k;
     for (k = 1; k <= pidepth; k++) {
         Rboolean foundk = false;
-        #ifdef SHOW_DEBUG_OUTPUT
-        #endif
-        const int numMaxCombinations = (nconds*(nconds-1)*(nconds-2))/6 + (nconds*(nconds-1)/2) + nconds;
-        int combinationsSetFixedPrefix[numMaxCombinations][3];
-        int numPrefixCombinations = 0;
-        const int INDEX_LIMIT = fill_combination_tasks(
-            nconds,
-            k,
-            combinationsSetFixedPrefix,
-            numMaxCombinations,
-            &numPrefixCombinations
-        );
+        unsigned long long int maxtasks = nchoosek(nconds, k);
+        if (maxtasks == 0) {
+        }
         #ifdef _OPENMP
-            #pragma omp parallel for schedule(dynamic)
+            #pragma omp parallel for schedule(static, 1)
         #endif
-        for (int taskIter = 0; taskIter < numPrefixCombinations; taskIter++) {
+        for (unsigned long long int task = 0; task < maxtasks; task++) {
             int tempk[k];
-            for (int i = 0; i < INDEX_LIMIT; i++) {
-                tempk[i] = combinationsSetFixedPrefix[taskIter][i];
+            int x = 0;
+            int combination = task;
+            for (int i = 0; i < k; i++) {
+                while (nchoosek(nconds - (x + 1), k - (i + 1)) <= combination) {
+                    combination -= nchoosek(nconds - (x + 1), k - (i + 1));
+                    x++;
+                }
+                tempk[i] = x;
+                x++;
             }
-            for (int i = INDEX_LIMIT; i < k; i++) {
-                tempk[i] = tempk[i - 1] + 1;
-            }
-            if (k > INDEX_LIMIT)
-                tempk[k - 1]--; 
             int decpos[posrows];
-            int decneg[(negrows > 0) ? negrows : 1]; 
-            int finishedAll = 0;
+            int decneg[negrows];
             int mbase[k];
             mbase[0] = 1; 
-            while (!finishedAll) {
-                if (k > INDEX_LIMIT) {
-                    int res = get_next_combination(tempk, k, nconds, INDEX_LIMIT);
-                    if (!res) {
-                        finishedAll = 1;
-                        break;
+            #ifdef SHOW_DEBUG_OUTPUT
+                #pragma omp critical
+                {
+                    int threadid = omp_get_thread_num();
+                }
+            #endif
+            for (int c = 1; c < k; c++) {
+                mbase[c] = mbase[c - 1] * noflevels[tempk[c - 1]];
+            }
+            get_decimals(posrows, negrows, k, decpos, decneg, posmat, negmat, tempk, mbase);
+            int possiblePIrows[posrows];
+            possiblePIrows[0] = 0; 
+            Rboolean possiblePI[posrows];
+            possiblePI[0] = true; 
+            int found = 1;
+            get_uniques(posrows, &found, decpos, possiblePI, possiblePIrows);
+            int compare = found;
+            if (picons > 0) {
+                int val[k];
+                int fuzzy[k];
+                for (int i = 0; i < compare; i++) {
+                    for (int c = 0; c < k; c++) {
+                        val[c] = posmat[tempk[c] * posrows + possiblePIrows[i]];
+                        fuzzy[c] = p_fsconds[tempk[c]] * 1;
+                    }
+                    if (altb(consistency(p_data, nrdata, nconds, k, tempk, val, fuzzy), picons)) {
+                        possiblePI[i] = false;
+                        found--;
                     }
                 }
-                else {
-                    finishedAll = 1;
-                }
-                #ifdef SHOW_DEBUG_OUTPUT
-                    #pragma omp critical
+            }
+            else if (negrows > 0) {
+                verify_possible_PI(compare, negrows, &found, possiblePI, possiblePIrows, decpos, decneg);
+            }
+            if (found > 0) {
+                int frows[found];
+                get_frows(frows, possiblePI, possiblePIrows, compare);
+                for (int f = 0; f < found; f++) {
+                    int tempc[k];
+                    unsigned int fixed_bits[implicant_words];
+                    unsigned int value_bits[implicant_words];
+                    for (int i = 0; i < implicant_words; i++) {
+                        fixed_bits[i] = 0U;
+                        value_bits[i] = 0U;
+                    }
+                    for (int c = 0; c < k; c++) {
+                        int value = posmat[tempk[c] * posrows + frows[f]];
+                        tempc[c] = value + 1;
+                        int word_index = tempk[c] / (BITS_PER_WORD / value_bit_width);
+                        int bit_index = (tempk[c] % (BITS_PER_WORD / value_bit_width)) * value_bit_width;
+                        fixed_bits[word_index] |= (((1 << value_bit_width) - 1) << bit_index);
+                        value_bits[word_index] |= ((unsigned int)tempc[c] << bit_index);
+                    }
+                    Rboolean debug = false;
+                    if (redundant(
+                        p_implicants_pos,
+                        p_implicants_val,
+                        implicant_words,
+                        fixed_bits,
+                        value_bits,
+                        prevfoundPI,
+                        debug
+                    )) {
+                        continue;
+                    }
+                    Rboolean coverage[posrows];
+                    unsigned int pichart_values[pichart_words];
+                    for (int w = 0; w < pichart_words; w++) {
+                        pichart_values[w] = 0U;
+                    }
+                    for (int r = 0; r < posrows; r++) {
+                        coverage[r] = decpos[r] == decpos[frows[f]];
+                        if (coverage[r]) {
+                            int word_index = r / BITS_PER_WORD;
+                            int bit_index = r % BITS_PER_WORD;
+                            pichart_values[word_index] |= (1U << bit_index);
+                        }
+                    }
+                    #ifdef _OPENMP
+                        #pragma omp critical
+                    #endif
                     {
-                        int threadid = omp_get_thread_num();
-                    }
-                #endif
-                fill_mbase(mbase, tempk, noflevels, k);
-                get_decimals(posrows, negrows, k, decpos, decneg, posmat, negmat, tempk, mbase);
-                int possiblePIrows[posrows];
-                possiblePIrows[0] = 0; 
-                Rboolean possiblePI[posrows];
-                possiblePI[0] = true; 
-                int found = 1;
-                get_uniques(posrows, &found, decpos, possiblePI, possiblePIrows);
-                int compare = found;
-                if (picons > 0) {
-                    int val[k];
-                    int fuzzy[k];
-                    for (int i = 0; i < compare; i++) {
                         for (int c = 0; c < k; c++) {
-                            val[c] = posmat[tempk[c] * posrows + possiblePIrows[i]];
-                            fuzzy[c] = p_fsconds[tempk[c]] * 1;
+                            p_implicants[nconds * foundPI + tempk[c]] = tempc[c];
                         }
-                        if (altb(consistency(p_data, nrdata, nconds, k, tempk, val, fuzzy), picons)) {
-                            possiblePI[i] = false;
-                            found -= 1;
-                        }
-                    }
-                }
-                else if (negrows > 0) {
-                    verify_possible_PI(compare, negrows, &found, possiblePI, possiblePIrows, decpos, decneg);
-                }
-                if (found) { 
-                    int frows[found];
-                    get_frows(frows, possiblePI, possiblePIrows, compare);
-                    for (int f = 0; f < found; f++) {
-                        int tempc[k];
+                        p_ck[foundPI] = k;
                         for (int c = 0; c < k; c++) {
-                            tempc[c] = posmat[tempk[c] * posrows + frows[f]] + 1;
+                            p_indx[nconds * foundPI + c] = tempk[c] + 1;
                         }
-                        if (nonredundant(p_implicants, p_indx, p_ck, tempk, tempc, nconds, k, prevfoundPI)) {
-                            #ifdef _OPENMP
-                                #pragma omp critical
-                            #endif
-                            {
-                                push_PI(
-                                    p_implicants,
-                                    p_indx,
-                                    p_ck,
-                                    p_pichart,
-                                    tempk,
-                                    tempc,
-                                    nconds,
-                                    k,
-                                    f,
-                                    decpos,
-                                    frows,
-                                    posrows,
-                                    foundPI
-                                );
-                                ++foundPI;
-                                foundk = true;
-                                if (foundPI / estimPI > 0.9) {
-                                    estimPI += 10000;
-                                    resize(&p_pichart,    posrows, estimPI, foundPI);
-                                    resize(&p_implicants, nconds,  estimPI, foundPI);
-                                    resize(&p_indx,       nconds,  estimPI, foundPI);
-                                    resize(&p_ck,         1,       estimPI, foundPI);
-                                }
+                        for (int w = 0; w < implicant_words; w++) {
+                            p_implicants_pos[implicant_words * foundPI + w] = fixed_bits[w];
+                            p_implicants_val[implicant_words * foundPI] = value_bits[w];
+                        }
+                        for (int r = 0; r < posrows; r++) {
+                            for (int w = 0; w < pichart_words; w++) {
+                                p_pichart_pos[foundPI * pichart_words + w] = pichart_values[w];
                             }
+                            p_pichart[posrows * foundPI + r] = coverage[r];
+                        }
+                        ++foundPI;
+                        foundk = true;
+                        if ((double)foundPI / (double)estimPI > 0.9) {
+                            resize((void**)&p_pichart,        1, increase, estimPI, posrows);
+                            resize((void**)&p_implicants,     1, increase, estimPI, nconds);
+                            resize((void**)&p_indx,           1, increase, estimPI, nconds);
+                            resize((void**)&p_implicants_val, 2, increase, estimPI, implicant_words);
+                            resize((void**)&p_implicants_pos, 2, increase, estimPI, implicant_words);
+                            resize((void**)&p_ck,             1, increase, estimPI, 1);
+                            resize((void**)&p_pichart_pos,    2, increase, estimPI, pichart_words);
+                            estimPI += increase;
                         }
                     }
                 }
@@ -373,7 +403,8 @@ void CCubes(const int p_tt[],
             }
         }
         if (solcons > 0) {
-            int *p_tempindx = R_Calloc(posrows * foundPI, int);
+            int max_dim = (nconds > posrows) ? nconds : posrows;
+            int *p_tempindx = R_Calloc(max_dim * foundPI, int);
             int *p_tempck = R_Calloc(foundPI, int);
             for (unsigned int c = 0; c < foundPI; c++) {
                 for (int r = 0; r < nconds; r++) {
