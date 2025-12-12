@@ -369,7 +369,12 @@
     if (incl.rem) {
         pos.matrix <- inputt
         if (method == "QMC") {
-            expressions <- .Call("C_QMC", createMatrix(noflevels)[-output$negatives, , drop = FALSE] + 1, noflevels, PACKAGE = "QCA")
+            expressions <- .Call(
+                "C_QMC",
+                createMatrix(noflevels)[-output$negatives, , drop = FALSE] + 1,
+                noflevels,
+                PACKAGE = "QCA"
+            )
             admisc::setColnames(expressions, colnames(inputt))
         }
         else if (method == "eQMC") {

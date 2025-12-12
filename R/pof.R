@@ -232,7 +232,9 @@
                 separate = TRUE
             )
             if (!toverify$multivalue & is.data.frame(setms)) {
-                colnames(setms) <- admisc::trimstr(unlist(strsplit(toverify$oexpr, split = "\\+")))
+                colnames(setms) <- admisc::trimstr(
+                    unlist(strsplit(toverify$oexpr, split = "\\+"))
+                )
             }
             funargs$setms <- toverify$expression
         }
@@ -248,9 +250,12 @@
                 )
             )
             verify.qca(temp)
-            setms <- admisc::compute(toverify$expression, data = temp, separate = TRUE)
+            expression <- toverify$expression
+            setms <- admisc::compute(expression, data = temp, separate = TRUE)
             if (!toverify$multivalue & is.data.frame(setms)) {
-                colnames(setms) <- admisc::trimstr(unlist(strsplit(toverify$oexpr, split = "\\+")))
+                colnames(setms) <- admisc::trimstr(
+                    unlist(strsplit(toverify$oexpr, split = "\\+"))
+                )
             }
             funargs$setms <- paste(
                 paste(
@@ -264,10 +269,8 @@
                 ),
                 rownames(toverify$outmtrx)
             )
-            outcome <- admisc::compute(
-                rownames(toverify$outmtrx)[1], 
-                data = temp
-            )
+            expression <- rownames(toverify$outmtrx)[1]  
+            outcome <- admisc::compute(expression, data = temp)
             checkoutcome <- FALSE
         }
         if (is.vector(setms)) {

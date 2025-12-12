@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -26,6 +26,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <R.h>
 #include <R_ext/RS.h>
 #include <R_ext/Boolean.h>
 #include <math.h>
@@ -46,17 +47,27 @@ Rboolean consistent_solution(
     const double solcov) {
     int cindx, val;
     double *p_y = R_Calloc(1, double);
-    double ymat[nrdata * k];
+    double *ymat = R_Calloc(nrdata * k, double);
     double sumy = 0;
     for (int r = 0; r < nrdata; r++) {
         sumy += p_data[nconds * nrdata + r];
     }
     for (int i = 0; i < k; i++) { 
         int k2 = ck[tempk[i]];
+        if (k2 <= 0) {
+            R_Free(p_y);
+            R_Free(ymat);
+            return FALSE;
+        }
         R_Free(p_y);
         p_y = R_Calloc(nrdata * k2, double);
         for (int c = 0; c < k2; c++) {
             cindx = indx[tempk[i] * nconds + c] - 1;
+            if (cindx < 0 || cindx >= nconds) {
+                R_Free(p_y);
+                R_Free(ymat);
+                return FALSE;
+            }
             val = p_implicants[tempk[i] * nconds + cindx] - 1;
             if (p_fsconds[cindx]) {
                 Rboolean negation = val == 0;
@@ -93,6 +104,12 @@ Rboolean consistent_solution(
         sumx += pmaxx;
         sumxy += ((pmaxx < p_data[nconds * nrdata + r]) ? pmaxx: p_data[nconds * nrdata + r]);
     }
+    if (sumx <= 0 || sumy <= 0) {
+        R_Free(p_y);
+        R_Free(ymat);
+        return FALSE;
+    }
     R_Free(p_y);
+    R_Free(ymat);
     return(agteb(sumxy / sumx, solcons) && agteb(sumxy / sumy, solcov));
 }

@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -26,21 +26,49 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <R.h>
 #include <R_ext/RS.h>
 #include <R_ext/Boolean.h>
 #include <float.h> 
 #include <math.h>
+#include <limits.h>
 #include "utils.h"
-void resize(
-    int **array,
-    const int rows,
-    const unsigned int newcols,
-    const unsigned int oldcols
+int compute_value_bit_width(
+    int max_value
 ) {
-    int* tmp = R_Calloc(rows * newcols, int);
-    unsigned int cols = (newcols > oldcols) ? oldcols : newcols;
-    for (unsigned int i = 0; i < rows * cols; i++) {
-        *(tmp + i) = *(*array + i);
+    if (max_value < 2) {
+        return 1;  
+    }
+    int bits_needed = ceil(log2(max_value + 1));  
+    int power_of_2 = 1;
+    while (power_of_2 < bits_needed) {
+        power_of_2 *= 2;  
+    }
+    return power_of_2;
+}
+void resize(
+    void **array,
+    int type,
+    int increase,
+    int size,
+    int nrows
+) {
+    if (type != 1 && type != 2) {
+        error("Invalid type for resizing.");
+    }
+    void *tmp = NULL;
+    if (type == 1) { 
+        tmp = (int *)R_Calloc((size + increase) * nrows, int);
+    } else if (type == 2) { 
+        tmp = (unsigned int *)R_Calloc((size + increase) * nrows, unsigned int);
+    }
+    if (tmp == NULL) {
+        error("Memory allocation failed during resize.");
+    }
+    if (type == 1) { 
+        memcpy(tmp, *array, size * nrows * sizeof(int));
+    } else if (type == 2) { 
+        memcpy(tmp, *array, size * nrows * sizeof(unsigned int));
     }
     R_Free(*array);
     *array = tmp;
@@ -107,63 +135,37 @@ Rboolean altb(double a, double b) {
 Rboolean agteb(double a, double b) {
     return((a > b) || (fabs(a - b) <= DBL_EPSILON));
 }
-Rboolean nonredundant(
-    const int p_implicants[],
-    const int p_indx[],
-    const int p_ck[],
-    const int tempk[],
-    const int tempc[],
-    const int nconds,
-    const int k,
-    const unsigned int prevfoundPI
+Rboolean redundant(
+    unsigned int p_implicants_pos[],
+    unsigned int p_implicants_val[],
+    int implicant_words,
+    unsigned int fixed_bits[],
+    unsigned int value_bits[],
+    unsigned int prevfoundPI,
+    bool debug
 ) {
-    Rboolean nonred = true;
-    if (prevfoundPI > 0) {
-        unsigned int i = 0;
-        while (i < prevfoundPI && nonred) {
-            int sumeq = 0;
-            int v = 0;
-            while (sumeq == v && v < p_ck[i]) {
-                for (int c = 0; c < k; c++) {
-                    if (p_indx[i * nconds + v] == tempk[c] + 1) { 
-                        sumeq += (p_implicants[i * nconds + p_indx[i * nconds + v] - 1] == tempc[c]);
-                    }
-                }
-                v += 1;
+    Rboolean redundant = false;
+    if (debug) {
+        Rprintf("implicant_words: %d\n", implicant_words);
+    }
+    unsigned int i = 0;
+    while (i < prevfoundPI && !redundant) {
+        Rboolean is_subset = true; 
+        for (int w = 0; w < implicant_words; w++) {
+            unsigned int pos_mask = p_implicants_pos[i * implicant_words + w];
+            if ((fixed_bits[w] & pos_mask) != pos_mask) {
+                is_subset = false;
+                break;
             }
-            if (sumeq == v) { 
-                nonred = false; 
+            if ((value_bits[w] & pos_mask) != (p_implicants_val[i * implicant_words + w] & pos_mask)) {
+                is_subset = false;
+                break;
             }
-            i += 1;
         }
+        redundant = is_subset;
+        i++;
     }
-    return(nonred);
-}
-void push_PI(
-    int p_implicants[],
-    int p_indx[],
-    int p_ck[],
-    int p_pichart[],
-    const int tempk[],
-    const int tempc[],
-    const int nconds,
-    const int k,
-    const int f,
-    const int decpos[],
-    const int frows[],
-    const int posrows,
-    const unsigned int foundPI
-) {
-    for (int c = 0; c < k; c++) {
-        p_implicants[nconds * foundPI + tempk[c]] = tempc[c];
-    }
-    for (int c = 0; c < k; c++) {
-        p_indx[nconds * foundPI + c] = tempk[c] + 1; 
-    }
-    p_ck[foundPI] = k;
-    for (int r = 0; r < posrows; r++) {
-        p_pichart[posrows * foundPI + r] = decpos[r] == decpos[frows[f]];
-    }
+    return(redundant);
 }
 void increment(
     int k,
@@ -210,19 +212,28 @@ void populate_posneg(
     int posrows,
     const int p_tt[],
     int posmat[],
-    int negmat[]
+    int negmat[],
+    int *max_value
 ) {
     int negrows = ttrows - posrows;
     for (int r = 0; r < ttrows; r++) {
         if (p_tt[nconds * ttrows + r] == 1) { 
             for (int c = 0; c < nconds; c++) {
+                int value = p_tt[c * ttrows + r];
                 posmat[c * posrows + *rowpos] = p_tt[c * ttrows + r];
+                if (value > *max_value) {
+                    *max_value = value;
+                }
             }
             *rowpos += 1; 
         }
         else { 
             for (int c = 0; c < nconds; c++) {
+                int value = p_tt[c * ttrows + r];
                 negmat[c * negrows + *rowneg] = p_tt[c * ttrows + r];
+                if (value > *max_value) {
+                    *max_value = value;
+                }
             }
             *rowneg += 1; 
         }
@@ -237,26 +248,17 @@ void get_noflevels(
 ) {
     for (int c = 0; c < nconds; c++) {
         noflevels[c] = 0; 
-    }
-    for (int c = 0; c < nconds; c++) {
         for (int r = 0; r < ttrows; r++) {
             if (noflevels[c] < p_tt[c * ttrows + r]) {
                 noflevels[c] = p_tt[c * ttrows + r];
             }
         }
         noflevels[c] += 1; 
+        if (noflevels[c] == 1) {
+            noflevels[c] = 2;
+        }
     }
     return;
-}
-void fill_mbase(
-    int mbase[],
-    const int tempk[],
-    const int noflevels[],
-    const int k
-) {
-    for (int c = 1; c < k; c++) {
-        mbase[c] = mbase[c - 1] * noflevels[tempk[c - 1]];
-    }
 }
 void get_decimals(
     const int posrows,
@@ -294,12 +296,12 @@ void get_uniques(
         Rboolean unique = true; 
         while (prev < *found && unique) {
             unique = decpos[possiblePIrows[prev]] != decpos[r];
-            prev += 1;
+            prev++;
         }
         if (unique) {
             possiblePIrows[*found] = r;
             possiblePI[*found] = true;
-            *found += 1;
+            (*found)++;
         }
     }
 }
@@ -317,9 +319,9 @@ void verify_possible_PI(
         while (j < negrows && possiblePI[i]) {
             if (decpos[possiblePIrows[i]] == decneg[j]) {
                 possiblePI[i] = false;
-                *found -= 1;
+                (*found)--;
             }
-            j += 1;
+            j++;
         }
     }
 }
@@ -333,7 +335,7 @@ void get_frows(
     for (int i = 0; i < compare; i++) {
         if (possiblePI[i]) {
             frows[pos] = possiblePIrows[i];
-            pos += 1;
+            pos++;
         }
     }
 }
@@ -410,65 +412,6 @@ void calculate_rows(
         }
     }
 }
-int fill_combination_tasks(
-    const int n, 
-    int k, 
-    int (*comb)[3], 
-    const int arrayMaxSize, 
-    int *numPrefixCombinations
-) {
-    *numPrefixCombinations = 0;
-    if (k <= 1) {
-        for (int x = 0; x <= n-k; x++)
-        {
-            comb[*numPrefixCombinations][0] = x;
-            (*numPrefixCombinations)++;
-        }
-        return 1;
-    }
-    else if (k <= 2) {
-        for (int x = 0; x <= n - k; x++)
-            for (int y = x + 1; y <= n - k + 1; y++)
-            {
-                const int currIndex = *numPrefixCombinations;
-                comb[currIndex][0] = x;
-                comb[currIndex][1] = y;
-                (*numPrefixCombinations)++;
-            }
-        return 2;
-    }
-    else { 
-        for (int X = 0; X <= n-k; X++)
-            for (int Y = X + 1; Y <= n-k+1; Y++)
-                for (int Z = Y + 1; Z <=  n-k+2; Z++)
-                {
-                    const int currIndex = *numPrefixCombinations;
-                    comb[currIndex][0] = X;
-                    comb[currIndex][1] = Y;
-                    comb[currIndex][2] = Z;
-                    (*numPrefixCombinations)++;
-                }
-        return 3;
-    }
-}
-int get_next_combination(
-    int *arr,       
-    int k,
-    int n,          
-    int indexLimit
-) {
-    int i;
-    for (i = k - 1; i >= indexLimit; --i) {
-        arr[i]++;
-        if (arr[i] + (k - i - 1) != n)
-            break;
-    }
-    if (i == indexLimit-1)
-        return 0;
-    for (int j = i + 1; j < k; j++)
-        arr[j] = arr[j-1] + 1;
-    return 1;
-}
 Rboolean all_covered(
     const int p_pichart[],
     const int pirows,
@@ -487,4 +430,23 @@ Rboolean all_covered(
         r++;
     }
     return(allrows);
+}
+unsigned long long int nchoosek(int n, int k) {
+    if (k > n) return 0;
+    if (k == 0 || k == n) return 1;
+    unsigned long long int result = 1;
+    if (k > n - k) {
+        k = n - k;
+    }
+    for (int i = 0; i < k; i++) {
+        if (result > ULLONG_MAX / (n - i)) {
+            return 0; 
+        }
+        result *= (n - i);
+        if (result % (i + 1) != 0) {
+            return 0; 
+        }
+        result /= (i + 1);
+    }
+    return result;
 }

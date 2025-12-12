@@ -1,6 +1,8 @@
-
 #include <R_ext/Boolean.h>
 #include <math.h>
+#include "consistency.h"
+#include "find_models.h"
+#include "find_consistent_models.h"
 #include "utils.h"
 
 void CCubes(

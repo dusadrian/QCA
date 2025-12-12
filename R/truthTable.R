@@ -239,10 +239,18 @@
     tt <- condata[uniq, , drop = FALSE]
     rownstt <- sort(line.data)[uniq]
     rownames(tt) <- rownstt
+    if (
+        is.atomic(outcome) && is.character(outcome) && length(outcome) == 1 &&
+        is.element(outcome, colnames(data))
+    ) {
+        vo <- data[, outcome]
+    } else {
+        vo <- admisc::compute(outcome, data)
+    }
     ipc <- .Call(
         "C_truthTable",
         as.matrix(data[, conditions]),
-        admisc::compute(outcome, data),
+        vo,
         as.matrix(tt),
         as.numeric(fuzzy.cc),
         PACKAGE = "QCA"

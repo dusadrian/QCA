@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2016 - 2024, Adrian Dusa
+Copyright (c) 2016 - 2025, Adrian Dusa
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -26,6 +26,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <R.h>
 #include <R_ext/RS.h>
 #include <R_ext/Boolean.h>
 #include <math.h>
@@ -64,9 +65,18 @@ void find_consistent_models(
     unsigned int prevfound = 0;
     Rboolean keep_searching = true;
     int k = 1;
-    double counter = 1;
+    double counter = 0; 
+    if (maxk == 0 || foundPI == 0) {
+        R_Free(*solutions);
+        *solutions = R_Calloc(1, int);
+        *nr = 0;
+        *nc = 0;
+        R_Free(p_sol);
+        R_Free(cksol);
+        return;
+    }
     while (keep_searching && k <= maxk) {
-            int tempk[k];
+            int *tempk = R_Calloc(k, int);
             for (int i = 0; i < k; i++) {
                 tempk[i] = i; 
             }
@@ -103,25 +113,31 @@ void find_consistent_models(
                     cksol[solfound] = k;
                     solfound++;
                     if (solfound == estimsol) {
+                        resize((void**)&p_sol, 1, 1000, estimsol, maxk);
+                        resize((void**)&cksol, 1, 1000, estimsol, 1);
                         estimsol += 1000;
-                        resize(&p_sol,  maxk,  estimsol, solfound);
-                        resize(&cksol,   1,  estimsol, solfound);
                     }
                 }
             }
             if (maxcomb > 0) {
-                counter++;
-                if ((counter / 1000000000) >= maxcomb) {
+                counter += 1.0;
+                if ((counter / 1000000000.0) >= maxcomb) {
                     keep_searching = false;
                 }
             }
         }
+        R_Free(tempk);
         prevfound = solfound;
         k += 1;
     }
     int *p_tempmat = R_Calloc(1, int);
     if (solfound > 0) {
-        int finalrows = cksol[solfound - 1];
+        int finalrows = cksol[0];
+        for (unsigned int i = 1; i < solfound; i++) {
+            if (cksol[i] > finalrows) {
+                finalrows = cksol[i];
+            }
+        }
         R_Free(p_tempmat);
         p_tempmat = R_Calloc(finalrows * solfound, int);
         for (int c = 0; c < solfound; c++) {
@@ -131,6 +147,10 @@ void find_consistent_models(
         }
         *nr = finalrows;
         *nc = solfound;
+    }
+    else {
+        *nr = 0;
+        *nc = 0;
     }
     R_Free(p_sol);
     R_Free(cksol);
