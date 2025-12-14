@@ -118,6 +118,11 @@ levels of complexity, when the PI chart was still not too complex.
 
 In the extreme situation even this is not feasible, the argument \bold{\code{first.min}}
 controls returning only one (the very first found) minimal model, if at all possible.
+
+The arguments \bold{\code{pi.cons}} and \bold{\code{sol.cons}} are not specific to the
+traditional QCA minimization, that uses crisp (truth table) values of 0s and 1s. They
+mimic a CNA-style search with granular consistency levels for both prime implicants
+and / or solution models.
 }
 
 \value{

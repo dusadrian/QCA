@@ -38,18 +38,54 @@
             )
         )
     ]
-    sol.cons <- 1
-    if (is.element("sol.cons", names(allargs))) {
-        sol.cons <- allargs$sol.cons
-    }
-    sol.cons <- ifelse(sol.cons > 0 & sol.cons < 1, sol.cons, 1)
-    pi.cons <- 1
-    if (is.element("pi.cons", names(allargs))) {
-        pi.cons <- allargs$pi.cons
+    if (
+        is.element(c("pi.cons"), names(allargs)) && (
+            is.null(pi.cons) ||
+            !is.atomic(pi.cons) ||
+            !is.numeric(pi.cons) ||
+            length(pi.cons) != 1 ||
+            is.na(pi.cons) ||
+            pi.cons < 0 || pi.cons > 1
+        )
+    ) {
+        admisc::stopError(
+            "Argument <pi.cons> must be a single numeric value between 0 and 1.",
+            ... = ...
+        )
     }
     if (
-        any(c(pi.cons, sol.cons) < 1) & 
-        !is.element("incl.cut", names(allargs))
+        is.element(c("sol.cons"), names(allargs)) && (
+            is.null(sol.cons) ||
+            !is.atomic(sol.cons) ||
+            !is.numeric(sol.cons) ||
+            length(sol.cons) != 1 ||
+            is.na(sol.cons) ||
+            sol.cons < 0 || sol.cons > 1
+        )
+    ) {
+        admisc::stopError(
+            "Argument <sol.cons> must be a single numeric value between 0 and 1.",
+            ... = ...
+        )
+    }
+    if (
+        is.element(c("sol.cov"), names(allargs)) && (
+            is.null(sol.cov) ||
+            !is.atomic(sol.cov) ||
+            !is.numeric(sol.cov) ||
+            length(sol.cov) != 1 ||
+            is.na(sol.cov) ||
+            sol.cov < 0 || sol.cov > 1
+        )
+    ) {
+        admisc::stopError(
+            "Argument <sol.cov> must be a single numeric value between 0 and 1.",
+            ... = ...
+        )
+    }
+    if (
+        !is.element("incl.cut", names(allargs)) &&
+        any(c(pi.cons, sol.cons) > 0)
     ) {
         allargs$incl.cut <- 0.5
     }

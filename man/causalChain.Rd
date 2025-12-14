@@ -146,8 +146,8 @@ the argument \bold{\code{sol.depth}} the function \bold{\code{causalChain()}} si
 sets a complexity level of 7 prime implicants per model.
 
 When minimizing a dataset instead of a truth table, unless otherwise specified, the 
-argument \bold{\code{incl.cut}} is automatically set to the minimum value between
-\bold{\code{pi.cons}} and \bold{\code{sol.cons}}, then passed to the function
+argument \bold{\code{incl.cut}} is automatically set to 0.5 whenever \bold{\code{pi.cons}}
+and/or \bold{\code{sol.cons}} are used, then passed to the function
 \bold{\code{truthTable()}}.
 }
 
