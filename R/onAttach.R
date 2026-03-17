@@ -1,4 +1,4 @@
-# Copyright (c) 2016 - 2025, Adrian Dusa
+# Copyright (c) 2016 - 2026, Adrian Dusa
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -29,10 +29,8 @@
         "  Dusa, Adrian (2019) QCA with R. A Comprehensive Resource.",
         "\n",
         "  Springer International Publishing.",
-        "\n\n",
-        "To run the graphical user interface, use: runGUI()",
         "\n",
         sep = ""
     )
-    packageStartupMessage("\nTo cite package QCA in publications, please use:\n", msg, "\n")
+    packageStartupMessage("\nTo cite package QCA in publications, please use:\n", msg)
 }
