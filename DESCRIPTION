@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.23.7
+Version: 3.23.8
 Title: Qualitative Comparative Analysis
 Authors@R: c(
        person(given = "Adrian", family = "Dusa",
