@@ -3,6 +3,14 @@ Version 3.24
       (thanks to Andreas Corcaci for the report)
     o Fixed: C level bug finding models against a too high coverage
       (thanks to Michael Baumgartner for the report)
+    o Improved: C level minimizaton code now uses bit-shifting
+    o Improved: more functions (e.g. superSubset) are now running parallel
+      code so theoretically they should be faster when using OpenMP
+    o Improved: solving a PI chart using Gurobi does not require the R
+      package gurobi, anymore (it only needs Gurobi installed)
+    o New: argument "type" in findmin() allowing to chose between the
+      "exact" solving (the default) and the quicker heuristic using
+      Lagrangian relaxation
 
 Version 3.23
     o New: academic users having a valid (free) Gurobi license can now
