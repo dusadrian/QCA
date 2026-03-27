@@ -1,0 +1,63 @@
+#!/bin/sh
+
+set -e
+
+src_dir="src"
+template="tools/Makevars.win.in"
+output="${src_dir}/Makevars.win"
+
+gurobi_cppflags=""
+gurobi_libs=""
+
+if [ -n "${GUROBI_HOME}" ]; then
+    gurobi_home="${GUROBI_HOME}"
+else
+    gurobi_home=""
+    for dir in /c/gurobi*/win64; do
+        if [ -d "${dir}" ]; then
+            gurobi_home="${dir}"
+            break
+        fi
+    done
+fi
+
+if [ -n "${gurobi_home}" ]; then
+    if command -v cygpath >/dev/null 2>&1; then
+        gurobi_home_win=`cygpath -m "${gurobi_home}"`
+    else
+        gurobi_home_win="${gurobi_home}"
+    fi
+
+    if [ -f "${gurobi_home}/include/gurobi_c.h" ] || [ -f "${gurobi_home_win}/include/gurobi_c.h" ]; then
+        gurobi_libfile=""
+
+        for lib in "${gurobi_home}"/lib/gurobi*.lib "${gurobi_home_win}"/lib/gurobi*.lib; do
+            case "${lib}" in
+                *\**)
+                    continue
+                    ;;
+                *_light.*)
+                    continue
+                    ;;
+            esac
+
+            if [ -f "${lib}" ]; then
+                gurobi_libfile="${lib}"
+                break
+            fi
+        done
+
+        if [ -n "${gurobi_libfile}" ]; then
+            gurobi_libname=`basename "${gurobi_libfile}"`
+            gurobi_libname=${gurobi_libname%.lib}
+            gurobi_cppflags="-DHAVE_GUROBI -I\"${gurobi_home_win}/include\""
+            gurobi_libs="-L\"${gurobi_home_win}/lib\" -l${gurobi_libname}"
+            echo "configure.win: using Gurobi from ${gurobi_home_win}"
+        fi
+    fi
+fi
+
+sed \
+    -e "s|@QCA_GUROBI_CPPFLAGS@|${gurobi_cppflags}|" \
+    -e "s|@QCA_GUROBI_LIBS@|${gurobi_libs}|" \
+    "${template}" > "${output}"

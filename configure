@@ -1,0 +1,56 @@
+#!/bin/sh
+
+set -e
+
+src_dir="src"
+template="tools/Makevars.in"
+output="${src_dir}/Makevars"
+
+gurobi_cppflags=""
+gurobi_libs=""
+
+if [ -n "${GUROBI_HOME}" ]; then
+    gurobi_home="${GUROBI_HOME}"
+else
+    gurobi_home=""
+    for dir in /Library/gurobi*/macos_universal2 /opt/gurobi*/linux64 /opt/gurobi*/linux64*; do
+        if [ -d "${dir}" ]; then
+            gurobi_home="${dir}"
+            break
+        fi
+    done
+fi
+
+if [ -n "${gurobi_home}" ] && [ -f "${gurobi_home}/include/gurobi_c.h" ]; then
+    gurobi_libfile=""
+
+    for lib in "${gurobi_home}"/lib/libgurobi*.dylib "${gurobi_home}"/lib/libgurobi*.so; do
+        case "${lib}" in
+            *\**)
+                continue
+                ;;
+            *_light.*)
+                continue
+                ;;
+        esac
+
+        if [ -f "${lib}" ]; then
+            gurobi_libfile="${lib}"
+            break
+        fi
+    done
+
+    if [ -n "${gurobi_libfile}" ]; then
+        gurobi_libname=`basename "${gurobi_libfile}"`
+        gurobi_libname=${gurobi_libname#lib}
+        gurobi_libname=${gurobi_libname%.*}
+        gurobi_cppflags="-DHAVE_GUROBI -I${gurobi_home}/include"
+        gurobi_libs="-L${gurobi_home}/lib -l${gurobi_libname}"
+        echo "configure: using Gurobi from ${gurobi_home}"
+    fi
+fi
+
+sed \
+    -e "s|@QCA_GUROBI_CPPFLAGS@|${gurobi_cppflags}|" \
+    -e "s|@QCA_GUROBI_LIBS@|${gurobi_libs}|" \
+    "${template}" > "${output}"
