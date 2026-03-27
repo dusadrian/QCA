@@ -44,8 +44,8 @@ to categorical data.
     \tabular{ll}{
     Package: \tab QCA\cr
     Type:    \tab Package\cr
-    Version: \tab 3.23.8\cr
-    Date:    \tab 2026-03-17\cr
+    Version: \tab 3.24\cr
+    Date:    \tab 2026-03-27\cr
     License: \tab GPL (>= 3)\cr
     }
 }
@@ -74,7 +74,7 @@ Dusa, A. (2007a) \dQuote{User manual for the QCA(GUI) package in R}.
 \doi{10.1016/j.jbusres.2007.01.002}
 
 Dusa, A. (2007b) \emph{Enhancing Quine-McCluskey}.
-WP 2007-49, \href{https://compasss.org/working-papers-series/}{COMPASSS Working Papers series}.
+WP 2007-49, \href{https://www.zotero.org/groups/611034/compasss_working_papers/}{COMPASSS Working Papers series}.
 
 Dusa, A. (2010) \dQuote{A Mathematical Approach to the Boolean Minimization
 Problem.} \emph{Quality & Quantity} vol.44, no.1, pp.99-113,
