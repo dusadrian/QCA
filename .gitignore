@@ -1,0 +1,17 @@
+*.js~
+*.json
+*.marks
+*.history
+*.o
+*.so
+*.Rproj
+*.Rproj.user
+*.Rhistory
+*.RData
+*.Ruserdata
+*.DS_Store
+src/*.DS_Store
+src/*.a
+.Rproj.user
+*.txt
+*.md
