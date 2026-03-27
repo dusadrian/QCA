@@ -166,7 +166,7 @@ configurational analysis of ethnic protest in Europe}, Harvard Dataverse, V2,
 \doi{10.7910/DVN/PT2IB9}.
 
 Dusa, A. (2007b) \emph{Enhancing Quine-McCluskey}.
-WP 2007-49, \href{https://compasss.org/working-papers-series/}{COMPASSS Working Papers series}.
+WP 2007-49, \href{https://www.zotero.org/groups/611034/compasss_working_papers/}{COMPASSS Working Papers series}.
 
 Dusa, Adrian (2010) \dQuote{A Mathematical Approach to the Boolean Minimization 
 Problem.} \emph{Quality & Quantity} vol.44, no.1, pp.99-113, \doi{10.1007/s11135-008-9183-x}.

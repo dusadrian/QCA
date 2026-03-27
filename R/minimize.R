@@ -396,6 +396,16 @@
             if (sol.cons > 0 & all.sol & sol.depth == 0) {
                 sol.depth <- 7
             }
+            use_native_gurobi <- FALSE
+            lagrangian <- isTRUE(dots$lagrangian)
+            if (!isFALSE(dots$gurobi) && !lagrangian) {
+                native_gurobi_available <- getOption("native.gurobi.available", NULL)
+                if (is.null(native_gurobi_available) || !is.logical(native_gurobi_available)) {
+                    native_gurobi_available <- isTRUE(.Call("C_gurobiRuntimeAvailable", PACKAGE = "QCA"))
+                    options(native.gurobi.available = native_gurobi_available)
+                }
+                use_native_gurobi <- isTRUE(native_gurobi_available)
+            }
             expressions <- .Call("C_Cubes", list(
                             tt = cbind(rbind(pos.matrix, neg.matrix) - 1, rep(c(1, 0), c(nrow(pos.matrix), nrow(neg.matrix)))),
                             data = extended.data,
@@ -410,7 +420,8 @@
                             max.comb = max.comb,
                             first.min = first.min,
                             keep.trying = keep.trying,
-                            gurobi = !isFALSE(dots$gurobi) && eval(parse(text = "requireNamespace('gurobi', quietly = TRUE)")),
+                            lagrangian = lagrangian,
+                            gurobi = use_native_gurobi,
                             solind = !isFALSE(dots$solind)),
                             PACKAGE = "QCA")
         }

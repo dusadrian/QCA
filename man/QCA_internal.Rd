@@ -3,7 +3,6 @@
 \alias{.onAttach}
 
 \alias{as.panel}
-\alias{combint}
 \alias{minimizeLoop}
 \alias{print.aE}
 \alias{print.chain}

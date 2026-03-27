@@ -28,11 +28,14 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <R_ext/RS.h> 
 #include <R_ext/Boolean.h>
+#include <R_ext/Utils.h>
+#include <stdlib.h>
 #include "find_models.h"
 #ifdef _OPENMP
     #undef match
     #include <omp.h>
 #endif
+#define INTERRUPT_EVERY 1024
 void find_models(
     const int p_pichart[],
     const int pirows,
@@ -44,6 +47,11 @@ void find_models(
     int **solutions,
     int *nr,
     int *nc) {
+    if (pirows <= 0 || picols == 0) {
+        *nr = 0;
+        *nc = 0;
+        return;
+    }
     if (k == picols) {
         int *p_temp = (int *) R_Calloc(k, int);
         for (int i = 0; i < k; i++) {
@@ -59,9 +67,11 @@ void find_models(
     int *p_temp2 = (int *) R_Calloc(1, int);
     if (allsol) {
         int indmat[picols * pirows];
-        int mintpis[pirows];
+        int *mintpis = (int *) R_Calloc(pirows, int);
         for (int r = 0; r < pirows; r++) {
-            mintpis[r] = 0;
+            if (r > 0 && r % INTERRUPT_EVERY == 0) {
+                R_CheckUserInterrupt();
+            }
             for (unsigned int c = 0; c < picols; c++) {
                 if (p_pichart[c * pirows + r]) {
                     indmat[r * picols + mintpis[r]] = c;
@@ -77,6 +87,9 @@ void find_models(
         }
         unsigned int tempcols = mintpis[0];
         for (int i = 1; i < pirows; i++) {
+            if (i > 0 && i % INTERRUPT_EVERY == 0) {
+                R_CheckUserInterrupt();
+            }
             R_Free(p_temp1);
             p_temp1 = (int *) R_Calloc(picols * tempcols * mintpis[i], int);
             for (int j = 0; j < mintpis[i]; j++) {
@@ -98,6 +111,7 @@ void find_models(
             Memcpy(p_temp2, p_temp1, picols * survcols);
             tempcols = survcols;
         }
+        R_Free(mintpis);
         R_Free(p_temp1);
         p_temp1 = (int *) R_Calloc(picols * tempcols, int);
         R_Free(p_cols);
@@ -163,36 +177,137 @@ void find_models(
     }
     else {
         unsigned int solfound = 0;
-        unsigned int estimsol = 100;
-        R_Free(p_temp1);
-        p_temp1 = (int *) R_Calloc(k * estimsol, int);
-        int tempk[k];
-        for (int i = 0; i < k; i++) {
-            tempk[i] = i; 
-        }
-        tempk[k - 1] -= 1; 
-        int e = 0;
-        int h = k;
-        Rboolean keep_searching = true;
-        Rboolean last = (picols == k);
-        double counter = 1;
-        while (keep_searching && ((tempk[0] != picols - k) || last)) {
-            increment(k, &e, &h, picols + last, tempk, 0);
-            last = false;
-            Rboolean allrows = true;
-            int r = 0;
-            while (r < pirows && allrows) {
-                Rboolean covered = false;
-                int c = 0;
-                while (c < k && !covered) {
-                    covered = p_pichart[tempk[c] * pirows + r];
-                    c++;
+        if (!firstmin && maxcomb <= 0) {
+            unsigned long long int maxtasks = nchoosek(picols, k);
+            unsigned char *valid = (unsigned char *) R_Calloc(maxtasks, unsigned char);
+            #ifdef _OPENMP
+                #pragma omp parallel for schedule(static, 1) reduction(+:solfound)
+            #endif
+            for (unsigned long long int task = 0; task < maxtasks; task++) {
+                int tempk[k];
+                unsigned long long int combination = task;
+                int x = 0;
+                for (int i = 0; i < k; i++) {
+                    while (1) {
+                        unsigned long long int cval = nchoosek(picols - (x + 1), k - (i + 1));
+                        if (cval == 0 || cval > combination) {
+                            break;
+                        }
+                        combination -= cval;
+                        x++;
+                    }
+                    if (x < 0) {
+                        x = 0;
+                    }
+                    if (x >= (int) picols) {
+                        x = (int) picols - 1;
+                    }
+                    tempk[i] = x;
+                    x++;
                 }
-                allrows = covered;
-                r++;
+                Rboolean allrows = true;
+                int r = 0;
+                while (r < pirows && allrows) {
+                    Rboolean covered = false;
+                    int c = 0;
+                    while (c < k && !covered) {
+                        covered = p_pichart[tempk[c] * pirows + r];
+                        c++;
+                    }
+                    allrows = covered;
+                    r++;
+                }
+                if (allrows) {
+                    valid[task] = 1;
+                    solfound++;
+                }
             }
-            if (allrows) {
-                {
+            R_CheckUserInterrupt();
+            if (solfound > 0) {
+                R_Free(p_temp1);
+                p_temp1 = (int *) R_Calloc(k * solfound, int);
+                unsigned int sol_index = 0;
+                for (unsigned long long int task = 0; task < maxtasks; task++) {
+                    if (task > 0 && task % INTERRUPT_EVERY == 0) {
+                        R_CheckUserInterrupt();
+                    }
+                    if (!valid[task]) {
+                        continue;
+                    }
+                    unsigned long long int combination = task;
+                    int x = 0;
+                    for (int i = 0; i < k; i++) {
+                        while (1) {
+                            unsigned long long int cval = nchoosek(picols - (x + 1), k - (i + 1));
+                            if (cval == 0 || cval > combination) {
+                                break;
+                            }
+                            combination -= cval;
+                            x++;
+                        }
+                        if (x < 0) {
+                            x = 0;
+                        }
+                        if (x >= (int) picols) {
+                            x = (int) picols - 1;
+                        }
+                        p_temp1[sol_index * k + i] = x + 1;
+                        x++;
+                    }
+                    sol_index++;
+                }
+            }
+            else {
+                R_Free(p_temp1);
+                p_temp1 = (int *) R_Calloc(1, int);
+            }
+            R_Free(valid);
+        }
+        else {
+            unsigned int estimsol = 100;
+            R_Free(p_temp1);
+            p_temp1 = (int *) R_Calloc(k * estimsol, int);
+            Rboolean keep_searching = true;
+            unsigned long long int maxtasks = nchoosek(picols, k);
+            unsigned long long int counter = 0;
+            for (unsigned long long int task = 0; keep_searching && task < maxtasks; task++) {
+                if (task > 0 && task % INTERRUPT_EVERY == 0) {
+                    R_CheckUserInterrupt();
+                }
+                int tempk[k];
+                unsigned long long int combination = task;
+                int x = 0;
+                for (int i = 0; i < k; i++) {
+                    while (1) {
+                        unsigned long long int cval = nchoosek(picols - (x + 1), k - (i + 1));
+                        if (cval == 0 || cval > combination) {
+                            break;
+                        }
+                        combination -= cval;
+                        x++;
+                    }
+                    if (x < 0) {
+                        x = 0;
+                    }
+                    if (x >= (int) picols) {
+                        x = (int) picols - 1;
+                    }
+                    tempk[i] = x;
+                    x++;
+                }
+                Rboolean allrows = true;
+                int r = 0;
+                while (r < pirows && allrows) {
+                    Rboolean covered = false;
+                    int c = 0;
+                    while (c < k && !covered) {
+                        covered = p_pichart[tempk[c] * pirows + r];
+                        c++;
+                    }
+                    allrows = covered;
+                    r++;
+                }
+                if (allrows) {
                     for (int c = 0; c < k; c++) {
                         p_temp1[solfound * k + c] = tempk[c] + 1; 
                     }
@@ -202,23 +317,23 @@ void find_models(
                         estimsol += 100;
                     }
                 }
-            }
-            if (firstmin && solfound > 0) {
-                keep_searching = false;
-            }
-            if (maxcomb > 0) {
-                counter++;
-                if ((counter / 1000000000) >= maxcomb) {
+                if (firstmin && solfound > 0) {
                     keep_searching = false;
                 }
+                if (maxcomb > 0) {
+                    counter++;
+                    if (((double) counter / 1000000000.0) >= maxcomb) {
+                        keep_searching = false;
+                    }
+                }
+            }            
+            if (solfound > 0) {
+                p_temp1 = (int *) R_Realloc(p_temp1, k * solfound, int);
             }
-        }
-        if (solfound > 0) {
-            p_temp1 = (int *) R_Realloc(p_temp1, k * solfound, int);
-        }
-        else {
-            R_Free(p_temp1);
-            p_temp1 = (int *) R_Calloc(1, int);
+            else {
+                R_Free(p_temp1);
+                p_temp1 = (int *) R_Calloc(1, int);
+            }
         }
         *nr = k;
         *nc = solfound;

@@ -24,9 +24,16 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-`findmin` <- function(chart, ...) {
+`findmin` <- function(chart, type = c("exact", "lagrangian"), ...) {
     dots <- list(...)
     verbose <- isTRUE(dots$verbose)
+    if (missing(type) || is.null(type)) {
+        type <- attr(chart, "type")
+    }
+    if (is.null(type)) {
+        type <- "exact"
+    }
+    type <- match.arg(type, c("exact", "lagrangian"))
     if (!methods::is(chart, "QCA_pic")) {
         if (!is.matrix(chart) | (!is.logical(chart) & length(setdiff(chart, 0:1)) > 0)) {
             admisc::stopError(
@@ -40,53 +47,38 @@
         chart <- t(chart)
     }
     if (all(colSums(chart) > 0)) {
-        gurobi <- !isFALSE(attr(chart, "gurobi")) &&
-                !isFALSE(dots$gurobi) &&
-                eval(parse(
-                    text = "requireNamespace('gurobi', quietly = TRUE)"
-                ))
         just_minima <- !isTRUE(attr(chart, "solind")) && !isTRUE(dots$solind)
-        if (gurobi) {
-            chart <- matrix(as.numeric(chart), nrow = nrow(chart))
-            model <- list(
-                A = chart,
-                obj = rep(1, ncol(chart)),
-                modelsense = "min",
-                rhs = rep(1, nrow(chart)),
-                sense = rep(">=", nrow(chart)),
-                vtype = "B"
+        gurobi <- !isFALSE(attr(chart, "gurobi")) && !isFALSE(dots$gurobi)
+        solution <- NULL
+        if (identical(type, "lagrangian")) {
+            solution <- .Call(
+                "C_findminLagrangian",
+                matrix(as.logical(chart), nrow = nrow(chart)),
+                PACKAGE = "QCA"
             )
-            params <- list(
-                OutputFlag = verbose * 1,
-                LogToConsole = verbose * 1
-            )
-            tc <- admisc::tryCatchWEM(
-                solution <- eval(parse(text = "gurobi::gurobi(model, params)"))$x
-            )
-            if (!is.null(tc$error)) {
-                gurobi <- FALSE
-                if (cpi) {
-                    message(
-                        sprintf(
-                            "%s, using lpSolve instead.",
-                            ifelse(
-                                grepl("license", tc$error),
-                                "No valid Gurobi license found",
-                                "Gurobi threw an error"
-                            )
-                        )
-                    )
-                }
+        } else if (gurobi) {
+            native_gurobi_available <- getOption("native.gurobi.available", NULL)
+            if (is.null(native_gurobi_available)) {
+                native_gurobi_available <- isTRUE(.Call("C_gurobiRuntimeAvailable", PACKAGE = "QCA"))
+                options(native.gurobi.available = native_gurobi_available)
+            }
+            if (isTRUE(native_gurobi_available)) {
+                solution <- .Call(
+                    "C_findminExact",
+                    matrix(as.logical(chart), nrow = nrow(chart)),
+                    PACKAGE = "QCA"
+                )
+            } else if (verbose) {
+                message("Gurobi not available, falling back to lpSolve.")
             }
         }
-        if (!gurobi) {
+        if (is.null(solution)) {
             solution <- lpSolve::lp(
-                "min",
-                rep(1, ncol(chart)),
-                chart,
-                ">=",
-                1,
-                int.vec = seq(nrow(chart)),
+                direction = "min",
+                objective.in = rep(1, ncol(chart)),
+                const.mat = chart,
+                const.dir = rep(">=", nrow(chart)),
+                const.rhs = rep(1, nrow(chart)),
                 all.bin = TRUE
             )$solution
         }

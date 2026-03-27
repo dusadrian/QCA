@@ -142,6 +142,8 @@ Rboolean redundant(
     unsigned int fixed_bits[],
     unsigned int value_bits[],
     unsigned int prevfoundPI,
+    const int covered[],
+    unsigned int covered_limit,
     bool debug
 ) {
     Rboolean redundant = false;
@@ -149,15 +151,17 @@ Rboolean redundant(
         Rprintf("implicant_words: %d\n", implicant_words);
     }
     unsigned int i = 0;
-    while (i < prevfoundPI && !redundant) {
+    unsigned int limit = (covered != NULL) ? covered_limit : prevfoundPI;
+    while (i < limit && !redundant) {
+        unsigned int pi_index = (covered != NULL) ? (unsigned int) covered[i] : i;
         Rboolean is_subset = true; 
         for (int w = 0; w < implicant_words; w++) {
-            unsigned int pos_mask = p_implicants_pos[i * implicant_words + w];
+            unsigned int pos_mask = p_implicants_pos[pi_index * implicant_words + w];
             if ((fixed_bits[w] & pos_mask) != pos_mask) {
                 is_subset = false;
                 break;
             }
-            if ((value_bits[w] & pos_mask) != (p_implicants_val[i * implicant_words + w] & pos_mask)) {
+            if ((value_bits[w] & pos_mask) != (p_implicants_val[pi_index * implicant_words + w] & pos_mask)) {
                 is_subset = false;
                 break;
             }
