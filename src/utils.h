@@ -47,6 +47,8 @@ Rboolean redundant(
     unsigned int fixed_bits[],
     unsigned int value_bits[],
     unsigned int prevfoundPI,
+    const int covered[],
+    unsigned int covered_limit,
     bool debug
 );
 

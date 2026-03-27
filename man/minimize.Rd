@@ -7,13 +7,13 @@
 
 \description{
 This function performs the QCA minimization of an input truth table, or if the
-input is a dataset the minimization it minimizes a set of causal conditions with
+input is a dataset it minimizes a set of causal conditions with
 respect to an outcome. Three minimization methods are available: the classical
 Quine-McCluskey, the enhanced Quine-McCluskey and the latest Consistency Cubes
 algorithm that is built for performance.
 
 All algorithms return the same, exact solutions, see
-\href{https://journal.r-project.org/archive/2018/RJ-2018-080/}{Dusa (2018)}
+\href{https://journal.r-project.org/articles/RJ-2018-080/}{Dusa (2018)}
 and \href{https://www.tandfonline.com/doi/full/10.1080/0022250X.2014.897949}{Dusa and Thiem (2015)}.
 }
 
@@ -176,7 +176,7 @@ Springer International Publishing, \doi{10.1007/978-3-319-75668-4}.
 
 Ragin, C. (2003) \emph{Recent Advances in Fuzzy-Set Methods and Their Application to
 Policy Questions}. WP 2003-9,
-\href{https://compasss.org/working-papers-series/}{COMPASSS Working Papers series}.
+\href{https://www.zotero.org/groups/611034/compasss_working_papers/}{COMPASSS Working Papers series}.
 
 Ragin, C. (2009) \dQuote{Qualitative Comparative Analysis Using Fuzzy-Sets (fsQCA)},
 in Rihoux, B.; Ragin, C. (eds.) \emph{Configurational Comparative Methods.

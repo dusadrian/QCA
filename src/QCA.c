@@ -30,6 +30,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <R_ext/Boolean.h>
 #include <float.h>
 #include <stdlib.h>
+#include <string.h>
 #include <R.h>
 #include <Rinternals.h>
 #include <Rmath.h>
@@ -39,6 +40,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "generate_matrix.h"
 #include "sort_matrix.h"
 #include "CCubes.h"
+#ifdef _OPENMP
+    #undef match
+    #include <omp.h>
+#endif
 static R_INLINE SEXP Rtranspose(SEXP matrix) {
     SEXPTYPE type = TYPEOF(matrix);
     int nr = nrows(matrix);
@@ -297,10 +302,9 @@ SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
     int    *p_indx_disj  = INTEGER(indx_disj);
     int    *p_ck_conj    = INTEGER(ck_conj);
     int    *p_ck_disj    = INTEGER(ck_disj);
-    double copyline[nconds], minx[xrows], maxx[xrows];
+    double minx[xrows], maxx[xrows];
     double incovpron[6];
     double so = 0.0,
-           min, max,
            sum_minx,
            sum_maxx,
            sum_1_minx,
@@ -330,18 +334,32 @@ SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
             foundk = 0;
         }
         int klnofl[k];
-        int tempk[k];
-        for (int i = 0; i < k; i++) {
-            tempk[i] = i;
-        }
-        int e = 0;
-        int h = k;
-        int kmatcol = 0;
-        while (tempk[0] != nconds - k || !kmatcol) {
-            if (kmatcol) {
-                increment(k, &e, &h, nconds, tempk, 0);
+        unsigned long long int maxtasks = nchoosek(nconds, k);
+        for (unsigned long long int task = 0; task < maxtasks; task++) {
+            if (task > 0 && task % 1024 == 0) {
+                R_CheckUserInterrupt();
             }
-            kmatcol = 1;
+            int tempk[k];
+            unsigned long long int combination = task;
+            int x = 0;
+            for (int i = 0; i < k; i++) {
+                while (1) {
+                    unsigned long long int cval = nchoosek(nconds - (x + 1), k - (i + 1));
+                    if (cval == 0 || cval > combination) {
+                        break;
+                    }
+                    combination -= cval;
+                    x++;
+                }
+                if (x < 0) {
+                    x = 0;
+                }
+                if (x >= nconds) {
+                    x = nconds - 1;
+                }
+                tempk[i] = x;
+                x++;
+            }
             int klcols[k];
             int klrows = 1;
             for (int j = 0; j < k; j++) {
@@ -369,52 +387,55 @@ SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
                 sum_1_min_y_minx = 0; 
                 sum_1_maxx = 0;       
                 sum_1_min_y_maxx = 0; 
+                #ifdef _OPENMP
+                    #pragma omp parallel for schedule(static) reduction(+:sum_minx,sum_maxx,sum_min_y_minx,sum_min_y_maxx,prisum_minx,prisum_maxx,sum_1_minx,sum_1_maxx,sum_1_min_y_minx,sum_1_min_y_maxx)
+                #endif
                 for (int r = 0; r < xrows; r++) { 
-                    min = 1000000;        
-                    max = 0;
+                    double min_local = 1000000;
+                    double max_local = 0;
                     for (int c = 0; c < xcols; c++) { 
-                        copyline[c] = p_x[c * xrows + r];
+                        double value = p_x[c * xrows + r];
                         if (p_fuz[c]) { 
                             if (chkred[c] == 1) {
-                                copyline[c] = 1 - copyline[c];
+                                value = 1 - value;
                             }
                         }
                         else {
-                            if (chkred[c] == (copyline[c] + 1)) {
-                                copyline[c] = 1; 
+                            if (chkred[c] == (value + 1)) {
+                                value = 1; 
                             }
                             else {
-                                copyline[c] = 0; 
+                                value = 0; 
                             }
                         }
                         if (chkred[c] != 0) {
-                            if (copyline[c] < min) {
-                                min = copyline[c]; 
+                            if (value < min_local) {
+                                min_local = value;
                             }
-                            if (copyline[c] > max) {
-                                max = copyline[c]; 
+                            if (value > max_local) {
+                                max_local = value;
                             }
                         }
                     } 
-                    minx[r] = min;   
-                    maxx[r] = max;   
-                    sum_minx += min; 
-                    sum_maxx += max; 
-                    sum_min_y_minx += (min < p_vo[r])?min:p_vo[r];
-                    sum_min_y_maxx += (max < p_vo[r])?max:p_vo[r];
+                    minx[r] = min_local;   
+                    maxx[r] = max_local;   
+                    sum_minx += min_local; 
+                    sum_maxx += max_local; 
+                    sum_min_y_minx += (min_local < p_vo[r]) ? min_local : p_vo[r];
+                    sum_min_y_maxx += (max_local < p_vo[r]) ? max_local : p_vo[r];
                     if (p_nec[0]) {  
-                        sum_1_minx += 1 - min;                                  
-                        sum_1_maxx += 1 - max;                                  
-                        sum_1_min_y_minx += 1 - ((min < p_vo[r])?min:p_vo[r]);  
-                        sum_1_min_y_maxx += 1 - ((max < p_vo[r])?max:p_vo[r]);  
+                        sum_1_minx += 1 - min_local;
+                        sum_1_maxx += 1 - max_local;
+                        sum_1_min_y_minx += 1 - ((min_local < p_vo[r]) ? min_local : p_vo[r]);
+                        sum_1_min_y_maxx += 1 - ((max_local < p_vo[r]) ? max_local : p_vo[r]);
                     }
                     else {           
-                        tmpv11 = (min < p_vo[r])?min:p_vo[r];
-                        tmpv12 = p_nec[0]?(1 - min):(1 - p_vo[r]);
-                        prisum_minx += (tmpv11 < tmpv12)?tmpv11:tmpv12;
-                        tmpv21 = (max < p_vo[r])?max:p_vo[r];
-                        tmpv22 = 1 - max;
-                        prisum_maxx += (tmpv21 < tmpv22)?tmpv21:tmpv22;
+                        double tmpv11_local = (min_local < p_vo[r]) ? min_local : p_vo[r];
+                        double tmpv12_local = 1 - p_vo[r];
+                        prisum_minx += (tmpv11_local < tmpv12_local) ? tmpv11_local : tmpv12_local;
+                        double tmpv21_local = (max_local < p_vo[r]) ? max_local : p_vo[r];
+                        double tmpv22_local = 1 - max_local;
+                        prisum_maxx += (tmpv21_local < tmpv22_local) ? tmpv21_local : tmpv22_local;
                     }
                 } 
                 incovpron[0] = (sum_min_y_minx == 0 && sum_minx == 0)?0:(sum_min_y_minx/sum_minx);
@@ -703,9 +724,6 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
         }
     }
     int found = 1;
-    int temp[nconds];
-    int combs[2];
-    int e, h;
     while (found > 0 && nimplicants > 1) {
         found = 0;
         SET_VECTOR_ELT(usage, 3, minimized = allocVector(LGLSXP, nimplicants));
@@ -714,48 +732,67 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
         int estimpi = 10000;
         SET_VECTOR_ELT(usage, 4, pimat = allocMatrix(INTSXP, nconds, estimpi));
         p_pimat = INTEGER(pimat);
-        combs[0] = 0;
-        combs[1] = 0;
-        e = 0;
-        h = 2; 
-        Rboolean last = (nimplicants == 2);
-        while (combs[0] != nimplicants - 2 || last) { 
-            if (nimplicants == 2) {
-                combs[1] = 1;
+        unsigned long long int maxtasks = nchoosek(nimplicants, 2);
+        #ifdef _OPENMP
+            #pragma omp parallel for schedule(static, 1)
+        #endif
+        for (unsigned long long int task = 0; task < maxtasks; task++) {
+            #ifndef _OPENMP
+                if (task > 0 && task % 1024 == 0) {
+                    R_CheckUserInterrupt();
+                }
+            #endif
+            int combs_local[2];
+            unsigned long long int combination = task;
+            int x = 0;
+            for (int i = 0; i < 2; i++) {
+                while (1) {
+                    unsigned long long int cval = nchoosek(nimplicants - (x + 1), 2 - (i + 1));
+                    if (cval == 0 || cval > combination) {
+                        break;
+                    }
+                    combination -= cval;
+                    x++;
+                }
+                if (x < 0) {
+                    x = 0;
+                }
+                if (x >= nimplicants) {
+                    x = nimplicants - 1;
+                }
+                combs_local[i] = x;
+                x++;
             }
-            else {
-                increment(2, &e, &h, nimplicants, combs, 0);
-            }
-            last = FALSE;
+            int temp_local[nconds];
             int r = 0;
             int diffs = 0;
             int which = 0;
             Rboolean comparable = TRUE;
             while (diffs < 2 && r < nconds && comparable) {
-                temp[r] = p_tempmat[combs[0] * nconds + r];
-                if (temp[r] != p_tempmat[combs[1] * nconds + r]) {
-                    comparable = temp[r] > 0 && p_tempmat[combs[1] * nconds + r] > 0;
+                temp_local[r] = p_tempmat[combs_local[0] * nconds + r];
+                if (temp_local[r] != p_tempmat[combs_local[1] * nconds + r]) {
+                    comparable = temp_local[r] > 0 && p_tempmat[combs_local[1] * nconds + r] > 0;
                     diffs++;
                     which = r;
-                    temp[r] = 0;
+                    temp_local[r] = 0;
                 }
                 r++;
             }
             if (diffs == 1 && comparable) {
                 int minrows[p_noflevels[which]];
-                minrows[0] = combs[0];
-                minrows[1] = combs[1];
+                minrows[0] = combs_local[0];
+                minrows[1] = combs_local[1];
                 int tominimize = 2;
                 int c = 0;
                 while (c < nimplicants && tominimize < p_noflevels[which]) {
-                    if (c != combs[0] && c != combs[1]) {
+                    if (c != combs_local[0] && c != combs_local[1]) {
                         Rboolean equal = TRUE;
-                        int r = 0;
-                        while (r < nconds && equal) {
-                            if (r != which) {
-                                equal = temp[r] == p_tempmat[c * nconds + r];
+                        int rr = 0;
+                        while (rr < nconds && equal) {
+                            if (rr != which) {
+                                equal = temp_local[rr] == p_tempmat[c * nconds + rr];
                             }
-                            r++;
+                            rr++;
                         }
                         if (equal) {
                             minrows[tominimize] = c;
@@ -765,44 +802,50 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
                     c++;
                 }
                 if (tominimize == p_noflevels[which]) {
-                    for (int i = 0; i < tominimize; i++) {
-                        p_minimized[minrows[i]] = TRUE;
-                    }
-                    int f = 0;
-                    Rboolean Runique = TRUE;
-                    while (f < found && Runique) {
-                        Rboolean equal = TRUE;
-                        int r = 0;
-                        while (r < nconds && equal) {
-                            equal = temp[r] == p_pimat[f * nconds + r];
-                            r++;
+                    #ifdef _OPENMP
+                        #pragma omp critical
+                    #endif
+                    {
+                        for (int i = 0; i < tominimize; i++) {
+                            p_minimized[minrows[i]] = TRUE;
                         }
-                        Runique = !equal;
-                        f++;
-                    }
-                    if (Runique) {
-                        for (int r = 0; r < nconds; r++) {
-                            p_pimat[found * nconds + r] = temp[r];
+                        int f = 0;
+                        Rboolean Runique = TRUE;
+                        while (f < found && Runique) {
+                            Rboolean equal = TRUE;
+                            int rr = 0;
+                            while (rr < nconds && equal) {
+                                equal = temp_local[rr] == p_pimat[f * nconds + rr];
+                                rr++;
+                            }
+                            Runique = !equal;
+                            f++;
                         }
-                        found++;
+                        if (Runique) {
+                            if (found == estimpi) {
+                                estimpi *= 2;
+                                int totlent = found * nconds;
+                                SET_VECTOR_ELT(usage, 5, copymat = allocVector(INTSXP, totlent));
+                                p_copymat = INTEGER(copymat);
+                                for (int i = 0; i < totlent; i++) {
+                                    p_copymat[i] = p_pimat[i];
+                                }
+                                SET_VECTOR_ELT(usage, 4, pimat = allocMatrix(INTSXP, nconds, estimpi));
+                                p_pimat = INTEGER(pimat);
+                                for (int i = 0; i < totlent; i++) {
+                                    p_pimat[i] = p_copymat[i];
+                                }
+                            }
+                            for (int rr = 0; rr < nconds; rr++) {
+                                p_pimat[found * nconds + rr] = temp_local[rr];
+                            }
+                            found++;
+                        }
                     }
-                }
-            }
-            if (found == estimpi) {
-                estimpi *= 2;
-                int totlent = found * nconds;
-                SET_VECTOR_ELT(usage, 5, copymat = allocVector(INTSXP, totlent));
-                p_copymat = INTEGER(copymat);
-                for (int i = 0; i < totlent; i++) {
-                    p_copymat[i] = p_pimat[i];
-                }
-                SET_VECTOR_ELT(usage, 4, pimat = allocMatrix(INTSXP, nconds, estimpi));
-                p_pimat = INTEGER(pimat);
-                for (int i = 0; i < totlent; i++) {
-                    p_pimat[i] = p_copymat[i];
                 }
             }
         }
+        R_CheckUserInterrupt();
         int nonmin = 0;
         for (int i = 0; i < nimplicants; i++) {
             nonmin += !p_minimized[i];
@@ -1102,74 +1145,47 @@ SEXP C_pof(SEXP x, SEXP y, SEXP nec) {
     UNPROTECT(1);
     return(inclcov);
 }
-SEXP C_ombnk(SEXP list) {
-    int nconds, k, ogte, zerobased;
-    nconds = INTEGER(VECTOR_ELT(list, 0))[0];
-    k = INTEGER(VECTOR_ELT(list, 1))[0];
-    ogte = INTEGER(VECTOR_ELT(list, 2))[0] - 1;
-    zerobased = INTEGER(VECTOR_ELT(list, 3))[0];
-    int nck = 1;
-    for (int i = 1; i <= k; i++) {
-        nck *= nconds - (k - i);
-        nck /=  i;
-    }
-    SEXP usage = PROTECT(allocVector(VECSXP, 2));
-    SEXP out;
-    SET_VECTOR_ELT(usage, 0, out = allocMatrix(INTSXP, k, nck));
-    int *p_out = INTEGER(out);
-    int tempk[k];
-    for (int i = 0; i < k; i++) {
-        tempk[i] = i;
-    }
-    tempk[k - 1] -= 1;
-    int e = 0;
-    int h = k;
-    Rboolean last = (k == nconds);
-    int found = 0;
-    while ((tempk[0] != nconds - k) || last) {
-        increment(k, &e, &h, nconds + last, tempk, ogte);
-        last = FALSE;
-        for (int i = 0; i < k; i++) {
-            p_out[found * k + i] = tempk[i] + 1 - zerobased;
-        }
-        found += 1;
-    }
-    if (found < nck) {
-        SEXP copy;
-        SET_VECTOR_ELT(usage, 1, copy = duplicate(out));
-        int *p_copy = INTEGER(copy);
-        SET_VECTOR_ELT(usage, 0, out = allocMatrix(INTSXP, k, found));
-        p_out = INTEGER(out);
-        for (int i = 0; i < found * k; i++) {
-            p_out[i] = p_copy[i];
-        }
-    }
-    UNPROTECT(1);
-    return(out);
-}
 SEXP C_omplexity(SEXP list) {
     int nconds = INTEGER(VECTOR_ELT(list, 0))[0];
     int lk = length(VECTOR_ELT(list, 1));
     int *p_k = INTEGER(VECTOR_ELT(list, 1));
     int *p_noflevels = INTEGER(VECTOR_ELT(list, 2));
     SEXP result = PROTECT(allocVector(INTSXP, lk));
-    int resum = 0;
-    int prod = 1;
+    #ifdef _OPENMP
+        #pragma omp parallel for schedule(static)
+    #endif
     for (int ck = 0; ck < lk; ck++) {
-        resum = 0;
+        #ifndef _OPENMP
+            if (ck > 0 && ck % 1024 == 0) {
+                R_CheckUserInterrupt();
+            }
+        #endif
+        int resum = 0;
         int k = p_k[ck];
-        int tempk[k];
-        for (int i = 0; i < k; i++) {
-            tempk[i] = i;
-        }
-        tempk[k - 1] -= 1;
-        int e = 0;
-        int h = k;
-        Rboolean last = (nconds == k);
-        while ((tempk[0] != nconds - k) || last) {
-            increment(k, &e, &h, nconds + last, tempk, 0);
-            last = FALSE;
-            prod = 1;
+        unsigned long long int maxtasks = nchoosek(nconds, k);
+        for (unsigned long long int task = 0; task < maxtasks; task++) {
+            int tempk[k];
+            unsigned long long int combination = task;
+            int x = 0;
+            for (int i = 0; i < k; i++) {
+                while (1) {
+                    unsigned long long int cval = nchoosek(nconds - (x + 1), k - (i + 1));
+                    if (cval == 0 || cval > combination) {
+                        break;
+                    }
+                    combination -= cval;
+                    x++;
+                }
+                if (x < 0) {
+                    x = 0;
+                }
+                if (x >= nconds) {
+                    x = nconds - 1;
+                }
+                tempk[i] = x;
+                x++;
+            }
+            int prod = 1;
             for (int i = 0; i < k; i++) {
                 prod *= p_noflevels[tempk[i]];
             }
@@ -1177,6 +1193,7 @@ SEXP C_omplexity(SEXP list) {
         }
         INTEGER(result)[ck] = resum;
     }
+    R_CheckUserInterrupt();
     UNPROTECT(1);
     return(result);
 }
@@ -1243,17 +1260,32 @@ SEXP C_expand(SEXP mat, SEXP noflevels, SEXP partial) {
             k = k - rmin;
         }
         if (k > 0) {
-            int tempk[k];
-            for (int i = 0; i < k; i++) {
-                tempk[i] = i;
-            }
-            tempk[k - 1] -= 1;
-            int e = 0;
-            int h = k;
-            Rboolean last = (k == rxi[ri]);
-            while ((tempk[0] != rxi[ri] - k) || last) {
-                increment(k, &e, &h, rxi[ri] + last, tempk, 0);
-                last = FALSE;
+            unsigned long long int maxtasks = nchoosek(rxi[ri], k);
+            for (unsigned long long int task = 0; task < maxtasks; task++) {
+                if (task > 0 && task % 1024 == 0) {
+                    R_CheckUserInterrupt();
+                }
+                int tempk[k];
+                unsigned long long int combination = task;
+                int x = 0;
+                for (int i = 0; i < k; i++) {
+                    while (1) {
+                        unsigned long long int cval = nchoosek(rxi[ri] - (x + 1), k - (i + 1));
+                        if (cval == 0 || cval > combination) {
+                            break;
+                        }
+                        combination -= cval;
+                        x++;
+                    }
+                    if (x < 0) {
+                        x = 0;
+                    }
+                    if (x >= rxi[ri]) {
+                        x = rxi[ri] - 1;
+                    }
+                    tempk[i] = x;
+                    x++;
+                }
                 int nofl[k];
                 for (int i = 0; i < k; i++) {
                    nofl[i] = p_noflevels[wxim[tempk[i] * nimp + ri]];
@@ -1337,6 +1369,7 @@ SEXP C_Cubes(SEXP list) {
     int poskeeptry =   getpos(list, "keep.trying");
     int posgurobi =    getpos(list, "gurobi");     
     int posolind =     getpos(list, "solind");     
+    int poslagrangian = getpos(list, "lagrangian");
     SEXP usage = PROTECT(allocVector(VECSXP, 7));
     SEXP   tt, data,    fsconds;
     SET_VECTOR_ELT(usage, 0, tt = coerceVector(VECTOR_ELT(list, 0), INTSXP));
@@ -1358,6 +1391,7 @@ SEXP C_Cubes(SEXP list) {
     Rboolean firstmin = (pos1stmin >= 0) ? (LOGICAL(VECTOR_ELT(list, pos1stmin))[0]) : FALSE;
     Rboolean gurobi = (posgurobi >= 0) ? (LOGICAL(VECTOR_ELT(list, posgurobi))[0]) : TRUE;
     Rboolean solind = (posolind >= 0) ? (LOGICAL(VECTOR_ELT(list, posolind))[0]) : TRUE;
+    Rboolean lagrangian = (poslagrangian >= 0) ? (LOGICAL(VECTOR_ELT(list, poslagrangian))[0]) : FALSE;
     double picons = (pospicons >= 0) ? (REAL(VECTOR_ELT(list, pospicons))[0]) : 0;
     int pidepth = 0;
     int soldepth = 5; 
@@ -1395,6 +1429,7 @@ SEXP C_Cubes(SEXP list) {
         p_tt, ttrows, nconds, p_data, nrdata, allsol, rowdom, picons, pidepth, p_fsconds, soldepth, solcons, solcov, maxcomb, keeptrying,
         &p_pichart, &p_impmat, &p_models, &foundPI, &solrows, &solcols, &complexpic,
         firstmin,
+        lagrangian,
         gurobi,
         solind
     );

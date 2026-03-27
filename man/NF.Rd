@@ -49,7 +49,7 @@ Nieuwbeerta, P. (1995) \emph{The Democratic Class Struggle in Twenty Countries: 
 Amsterdam: Thesis Publishers.
 
 Ragin, C.C. (2005) \dQuote{From fuzzy sets to crisp truth tables}.
-WP 2004-28, \href{https://compasss.org/working-papers-series/}{COMPASSS Working Papers series}.
+WP 2004-28, \href{https://www.zotero.org/groups/611034/compasss_working_papers/}{COMPASSS Working Papers series}.
 
 Ragin, C.C. (2008) \emph{Redesigning Social Inquiry: Fuzzy Sets and Beyond}. 
 Chicago: University of Chicago Press.

@@ -108,7 +108,7 @@ Adrian Dusa
 
 \references{
 Dusa, A. (2007b) \emph{Enhancing Quine-McCluskey}.
-WP 2007-49, \href{https://compasss.org/working-papers-series/}{COMPASSS Working Papers series}.
+WP 2007-49, \href{https://www.zotero.org/groups/611034/compasss_working_papers/}{COMPASSS Working Papers series}.
 
 Dusa, Adrian. 2010. \dQuote{A Mathematical Approach to the Boolean Minimization 
 Problem.} \emph{Quality & Quantity} vol.44, no.1, pp.99-113.
