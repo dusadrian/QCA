@@ -1,29 +1,3 @@
-# Copyright (c) 2016 - 2026, Adrian Dusa
-# All rights reserved.
-# 
-# Redistribution and use in source and binary forms, with or without
-# modification, in whole or in part, are permitted provided that the
-# following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * The names of its contributors may NOT be used to endorse or promote
-#       products derived from this software without specific prior written
-#       permission.
-# 
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL ADRIAN DUSA BE LIABLE FOR ANY
-# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 `print.QCA_aE` <- function(x, ...) {
     rownames(x) <- format(seq.nrow <- seq(nrow(x)))
     if (attr(x, "raw")) {
@@ -32,28 +6,40 @@
     else {
         x[x < 0] <- " "
     }
+
     cat("\n")
     for (i in seq.nrow) {
         cat(paste(c(rownames(x)[i], x[i, ]), collapse = ifelse(attr(x, "raw"), "   ", "    ")), "\n")
     }
     cat("\n")
 }
+
 `print.QCA_chain` <- function(x, ...) {
     dots <- list(...)
+
     line.length <- getOption("width")
+
     if (any(names(x) == "via.web")) {
         line.length <- 10000
     }
+
     cat("\n")
     x <- lapply(x, function(x) {
+
         toreturn <- FALSE
+
         if (!identical(x, NA)) {
             sol.cons <- x$options$sol.cons
             sol.cov <- x$options$sol.cov
+
             if (!identical(x, NULL)) {
                 outcome <- x$tt$options$outcome
+
                 if (grepl(mvregexp, outcome)) {
+
                     if (x$options$neg.out) {
+                        # just to make sure it _does_ contain a tilde, the only way to
+                        # display a negated multivalue outcome
                         outcome <- paste("~", admisc::notilde(outcome), sep = "")
                     }
                 }
@@ -62,8 +48,10 @@
                         outcome <- paste("~", admisc::notilde(outcome), sep = "")
                     }
                 }
+
                 if (is.element("i.sol", names(x))) {
                     sufnec <- logical(length(x$i.sol))
+
                     for (i in seq(length(x$i.sol))) {
                         if (is.element("overall", names(x$i.sol[[i]]$IC))) {
                             sufnec[i] <- all(admisc::agteb(x$i.sol[[i]]$IC$overall$sol.incl.cov[c(1, 3)], c(sol.cons, sol.cov)))
@@ -72,93 +60,133 @@
                             sufnec[i] <- all(admisc::agteb(x$i.sol[[i]]$IC$sol.incl.cov[c(1, 3)], c(sol.cons, sol.cov)))
                         }
                     }
+
                     if (any(sufnec)) {
+                        # x$i.sol <- x$i.sol[sufnec]
+
+                        # count the number of sufnec solutions
+                        # total <- sum(unlist(lapply(x$i.sol, function(x) length(x$solution))))
+                        # prettyNums <- formatC(seq(total), digits = nchar(total) - 1, flag = 0)
+
+                        # solcount <- 1
                         for (i in seq(length(x$i.sol))) {
+
                             if (sufnec[i]) {
+
                                 prettyNums <- formatC(seq(length(x$solution)), digits = nchar(length(x$solution)) - 1, flag = 0)
+
                                 for (sol in seq(length(x$i.sol[[i]]$solution))) {
+                                    # preamble <- sprintf("M%s:", prettyNums[solcount])
+                                    # solcount <- solcount + 1
                                     preamble <- sprintf("M%s-%s:", i, sol)
                                     preamble <- paste(preamble, paste(rep(" ", 7 - nchar(preamble)), collapse = ""), sep = "")
                                     cat(preamble)
                                     cat(admisc::prettyString(x$i.sol[[i]]$solution[[sol]], line.length - 7, 7, "+", "<->", outcome), "\n")
                                 }
+
                             }
                         }
+
                         toreturn <- TRUE
                     }
+
                 }
                 else {
                     sufnec <- logical(length(x$solution))
+
                     if (length(x$solution) == 1) {
+
                         sufnec <- all(admisc::agteb(x$IC$sol.incl.cov[c(1, 3)], c(sol.cons, sol.cov)))
                         if (is.na(sufnec)) sufnec <- FALSE
+
                         if (sufnec) {
                             cat(paste("M1: ", admisc::prettyString(x$solution[[1]], line.length - 4, 4, "+", "<->", outcome), "\n", sep = ""))
                             toreturn <- TRUE
                         }
+
                     }
                     else {
                         for (i in seq(length(x$solution))) {
                             sufnec[i] <- all(admisc::agteb(x$IC$individual[[i]]$sol.incl.cov[c(1, 3)], c(sol.cons, sol.cov)))
                             if (is.na(sufnec[i])) sufnec[i] <- FALSE
                         }
+
                         if (any(sufnec)) {
+                            # x$solution <- x$solution[sufnec]
                             prettyNums <- formatC(seq(length(x$solution)), digits = nchar(length(x$solution)) - 1, flag = 0)
+
                             for (i in seq(length(x$solution))) {
                                 if (sufnec[i]) {
                                     cat(paste("M", prettyNums[i], ": ", sep = ""))
+                                    # cat(admisc::prettyString(x$solution[[i]], line.length - nchar(prettyNums[i]) - 3, nchar(prettyNums[i]) + 3, "+", "<->", outcome), "\n")
                                     cat(sprintf("%s <-> %s\n", paste(x$solution[[i]], collapse = " + "), outcome))
                                 }
                             }
+
                             toreturn <- TRUE
                         }
                     }
                 }
             }
+
             if (toreturn) {
                 cat("\n")
             }
         }
+
         return(toreturn)
     })
+
+
     if (all(!unlist(x))) {
         cat("There are no causal chains in this data.\n\n")
     }
+
 }
+
 `print.QCA_findmin` <- function(x, ...) {
     attr(x, "solution") <- NULL
     print(unclass(x))
 }
+
 `print.QCA_fuzzy` <- function(x, ...) {
     attr(x, "name") <- NULL
     print(unclass(x))
     cat("\n")
 }
+
 `print.QCA_modelFit` <- function(x, ...) {
+
     for (i in seq(length(x))) {
         print(x[[i]])
     }
+
 }
+
 `print.QCA_loopmin` <- function(x, ...) {
     cat("\n")
     for (i in seq(length(x))) {
         print.QCA_min(x[[i]], details = FALSE, mqca = TRUE)
     }
 }
+
 `print.QCA_panel` <- function(x, ...) {
     dots <- list(...)
+
     quote <- FALSE
     if (is.element("quote", names(dots))) {
         if (is.logical(dots$quote)) {
             quote <- dots$quote[1]
         }
     }
+
     right <- TRUE
     if (is.element("right", names(dots))) {
         if (is.logical(dots$right)) {
             right <- dots$right[1]
         }
     }
+
     n <- length(row.names(x))
     if (length(x) == 0L) {
         cat(sprintf(ngettext(n, "cluster data frame with 0 columns and %d row",
@@ -177,6 +205,7 @@
         print(x, quote = quote, right = right)
     }
 }
+
 `print.QCA_pic` <- function(x, ...) {
     if (all(dim(x) > 0)) {
         rownms  <- rownames(x)
@@ -192,12 +221,15 @@
     print(admisc::prettyTable(x))
     cat("\n")
 }
+
 `print.QCA_pof` <- function(x, ...) {
+
     if (is.element("modelfit", names(x))) {
         cat("\n")
         if (names(x$modelfit$model) != "M") {
             cat(names(x$modelfit$model), "\n", sep = "")
         }
+
         cat("model:          ", x$modelfit$model, "\n", sep = "")
         cat("theory:         ", x$modelfit$theory, "\n", sep = "")
         if (any(grepl("~", names(x$modelfit$intersections)))) {
@@ -212,39 +244,52 @@
             }
         }
     }
+
     essential.PIs <- NULL
     if (is.element("essential", names(x))) {
         essential.PIs <- x$essential
     }
     essentials <- length(essential.PIs) > 0
+
     overall <- FALSE
     if (is.element("overall", names(x))) {
         overall <- TRUE
     }
+
     cases.column <- sol.exists <- FALSE
     valid.covU <- TRUE
+
     dots <- list(...)
+
     max.nchar.cases <- 0
     line.length <- getOption("width")
     if (is.element("line.length", names(dots))) {
         line.length <- dots$line.length
     }
+
+
     if (!is.element("show.cases", names(x$options))) {
         x$options$show.cases <- FALSE
     }
+
     if (is.element("show.cases", names(dots))) {
         if (is.logical(dots$show.cases)) {
             x$options$show.cases <- dots$show.cases
         }
     }
+
     if (overall) {
+
         incl.cov <- x$overall$incl.cov
+
         nrow.incl.cov <- nrow(incl.cov)
         nchar.nrow <- nchar(nrow.incl.cov)
         ind.len <- length(x$individual)
+
         if (essentials) {
             essential.PIs.rows <- is.element(rownames(incl.cov), essential.PIs)
         }
+
         if (x$options$show.cases) {
             max.nchar.cases <- max(nchar(encodeString(incl.cov$cases)))
             cases.column <- TRUE
@@ -258,12 +303,14 @@
         else {
             incl.cov$cases <- NULL
         }
+
         prettyNums <- format(seq(nrow.incl.cov))
         for (i in seq(ncol(incl.cov))) {
             NAs <- is.na(incl.cov[, i])
             incl.cov[!NAs, i] <- formatC(incl.cov[!NAs, i], digits = 3, format = "f")
             incl.cov[NAs, i] <- "  -  "
         }
+
         colnames(incl.cov) <- format(colnames(incl.cov), justify = "centre")
         if (essentials) {
             which.essential <- seq(length(which(essential.PIs.rows)))
@@ -271,18 +318,23 @@
             prettyNums <- prettyNums[-which.essential]
             incl.cov.e <- incl.cov[essential.PIs.rows, , drop = FALSE]
             incl.cov <- incl.cov[!essential.PIs.rows, , drop = FALSE]
+            # print(incl.cov)
             for (i in seq(ind.len)) {
+
                 essentialPIs <- is.element(
                     rownames(x$individual[[i]]$incl.cov),
                     essential.PIs
                 )
+
                 unique.coverages <- formatC(
                     x$individual[[i]]$incl.cov$covU[essentialPIs],
                     digits = 3,
                     format = "f"
                 )
                 incl.cov.e <- cbind(incl.cov.e, S = unique.coverages, stringsAsFactors = FALSE)
+
                 x$individual[[i]]$incl.cov <- x$individual[[i]]$incl.cov[!essentialPIs, ]
+
                 if (x$options$use.labels && length(x$categories) > 0) {
                     rownames(x$individual[[i]]$incl.cov) <- replaceCategories(
                         rownames(x$individual[[i]]$incl.cov),
@@ -291,6 +343,7 @@
                 }
             }
         }
+
         if (nrow(incl.cov) > 0) {
             for (i in seq(ind.len)) {
                 incl.cov <- cbind(incl.cov, "     ", stringsAsFactors = FALSE)
@@ -302,6 +355,7 @@
                     ),
                     width = 5
                 )
+
                 if (length(x$individual[[i]]$incl.cov$covU) > 0) {
                     incl.cov[rownames(x$individual[[i]]$incl.cov), ncol(incl.cov)] <- formatC(
                         x$individual[[i]]$incl.cov$covU,
@@ -311,58 +365,77 @@
                 }
             }
         }
+
+        # "sol.incl.cov" IS present when the pof object is produced via minimize()
+        # and that is automatically detected
         sol.incl.cov <- matrix(
             unlist(lapply(x$individual, "[", "sol.incl.cov")),
             nrow = length(x$individual),
             ncol = 3,
             byrow = TRUE
         )
+
         rownames(sol.incl.cov) <- paste("M", seq(length(x$individual)), sep = "")
+
         sol.exists <- TRUE
+
     }
     else {
         incl.cov <- x$incl.cov
+
         nrow.incl.cov <- nrow(incl.cov)
         nchar.nrow <- nchar(nrow.incl.cov)
         prettyNums <- format(seq(nrow.incl.cov))
         incl.cov[incl.cov == "  NA"] <- "     "
         colnames(incl.cov) <- format(colnames(incl.cov), justify = "centre")
+
         if (x$options$show.cases) {
+            # 5 is the number of chars from column name "cases"
             max.nchar.cases <- max(5, max(nchar(encodeString(incl.cov$cases))))
             cases.column <- TRUE
             incl.cov.cases <- incl.cov$cases
             incl.cov$cases <- NULL
         }
+
         incl.cov$cases <- NULL
+
+
         for (i in seq(ncol(incl.cov))) {
             NAs <- is.na(incl.cov[, i])
             incl.cov[!NAs, i] <- formatC(incl.cov[!NAs, i], digits = 3, format = "f")
             incl.cov[NAs, i] <- "  -  "
         }
+
         for (i in seq(ncol(x$optionals))) {
             NAs <- is.na(x$optionals)
             x$optionals[!NAs, i] <- formatC(x$optionals[!NAs, i], digits = 3, format = "f")
             x$optionals[NAs, i] <- "  -  "
         }
+
         if (is.element("sol.incl.cov", names(x))) {
             sol.incl.cov <- as.matrix(x$sol.incl.cov)
             rownames(sol.incl.cov) <- "M1"
             sol.exists <- TRUE
         }
     }
+
     if (is.null(rownames(incl.cov))) {
         rownames(incl.cov) <- rep("  ", nrow(incl.cov))
     }
+
+
     if (x$options$use.labels && length(x$categories) > 0) {
         rownames(incl.cov) <- replaceCategories(
             rownames(incl.cov),
             categories = x$categories
         )
     }
+
     nchar.rownames <- max(nchar(rownames(incl.cov)))
     if (nchar.rownames == 1) {
         nchar.rownames <- 2
     }
+
     if (essentials) {
         nchar.rownames <- max(
             nchar.rownames,
@@ -372,27 +445,35 @@
             paste("% ", nchar.rownames, "s", sep = ""),
             rownames(incl.cov.e)
         )
+        # rownames(incl.cov.e) <- format(rownames(incl.cov.e), width = max(2, nchar.rownames))
     }
+
+
     rownames(incl.cov) <- sprintf(
         paste("% ", nchar.rownames, "s", sep = ""),
         rownames(incl.cov)
     )
+    # rownames(incl.cov) <- format(rownames(incl.cov), width = max(2, nchar.rownames))
     if (sol.exists) {
         rownames(sol.incl.cov) <- sprintf(
             paste("% ", nchar.rownames, "s", sep = ""),
             rownames(sol.incl.cov)
         )
+        # rownames(sol.incl.cov) <- format(rownames(sol.incl.cov), width = nchar.rownames)
         NAs <- is.na(sol.incl.cov)
         sol.incl.cov[!NAs] <- formatC(sol.incl.cov[!NAs], digits = 3, format = "f")
         sol.incl.cov[NAs] <- ""
     }
+
     incl.cov[incl.cov == "  NA"] <- "  -  "
+
     max.chars <- 1
     if (is.element(x$options$relation, c("sufficiency", "suf"))) {
         if (
             ncol(incl.cov) > (3 + any(grepl("PRI|RoN", colnames(incl.cov)))) &
             is.null(x$options$add)
         ) {
+
             first.printed.row <- paste(
                 c(
                     rep(" ", nchar.rownames + nchar.nrow + 25),
@@ -400,13 +481,18 @@
                 ),
                 collapse = ""
             )
+
             max.chars <- nchar(first.printed.row)
         }
     }
+
     if (max.chars < line.length) {
+
         if (cases.column) {
+            # calculate the number of characters including the cases column
             max.chars <- max.nchar.cases
         }
+
         sep.row <- paste(
             rep(
                 "-",
@@ -417,7 +503,10 @@
             ),
             collapse = ""
         )
+
+        # then compare again the max.chars with a "normal" length of a line
         if (nchar(sep.row) < line.length) {
+
             if (
                 ncol(incl.cov) > (3 + any(grepl("PRI|RoN", colnames(incl.cov)))) &
                 length(intersect(colnames(incl.cov), "pval1")) == 0 &
@@ -428,6 +517,7 @@
             else {
                 cat("\n")
             }
+
             colstoprint <- colnames(incl.cov)
             colnames.row <- cat(
                 paste(
@@ -441,6 +531,7 @@
                     collapse = "  "
                 )
             )
+
             cat(
                 paste(
                     colnames.row,
@@ -449,6 +540,7 @@
                 ),
                 "\n"
             )
+
             sep.row <- paste(
                 rep(
                     "-",
@@ -460,6 +552,7 @@
                 ),
                 collapse = ""
             )
+
             cat(sep.row, "\n")
             if (essentials) {
                 for (i in seq(nrow(incl.cov.e))) {
@@ -471,26 +564,35 @@
                         ),
                         sep = "  "
                     )
+
                     if (cases.column) {
                         i.row <- paste(i.row, incl.cov.e.cases[i], sep = "  ")
                     }
+
                     cat(i.row, "\n")
                 }
+
                 cat(sep.row, "\n")
             }
+
             for (i in seq(nrow(incl.cov))) {
                 rowtoprint <- c(rownames(incl.cov)[i], incl.cov[i, ])
+
                 i.row <- paste(
                     prettyNums[i],
                     paste(rowtoprint, collapse = "  "),
                     sep = "  "
                 )
+
                 if (cases.column) {
                     i.row <- paste(i.row, incl.cov.cases[i], sep = "  ")
                 }
+
                 cat(i.row, "\n")
             }
+
             cat(sep.row, "\n")
+
             if (sol.exists) {
                 for (i in seq(nrow(sol.incl.cov))) {
                     cat(
@@ -515,6 +617,8 @@
             cat("\n")
         }
         else {
+            # the number of characters including the cases exceeds a normal length line
+            # therefore the cases will be printed separately
             if (
                 ncol(incl.cov) > (3 + any(grepl("PRI|RoN", colnames(incl.cov)))) &
                 is.null(x$options$add)
@@ -523,6 +627,7 @@
             } else {
                 cat("\n")
             }
+
             cat(
                 paste(
                     c(
@@ -536,11 +641,14 @@
                 ),
                 "\n"
             )
+
             sep.row <- paste(
                 rep("-", nchar.rownames + 7 * ncol(incl.cov) + nchar.nrow + 2),
                 collapse = ""
             )
+
             cat(sep.row, "\n")
+
             if (essentials) {
                 for (i in seq(nrow(incl.cov.e))) {
                     cat(
@@ -558,8 +666,10 @@
                         sep = "  "
                     )
                 }
+
                 cat(sep.row, "\n")
             }
+
             for (i in seq(nrow(incl.cov))) {
                 cat(
                     paste(
@@ -576,7 +686,9 @@
                     "\n"
                 )
             }
+
             cat(sep.row, "\n")
+
             if (sol.exists) {
                 for (i in seq(nrow(sol.incl.cov))) {
                     cat(
@@ -598,6 +710,7 @@
                     )
                 }
             }
+
             if (cases.column) {
                 cat(
                     "\n",
@@ -610,6 +723,7 @@
                     ),
                     "\n"
                 )
+
                 cat(
                     paste(
                         rep("-", nchar.rownames + 7 + nchar.nrow + 2),
@@ -617,6 +731,7 @@
                     ),
                     "\n"
                 )
+
                 if (essentials) {
                     for (i in seq(nrow(incl.cov.e))) {
                         cat(
@@ -629,6 +744,7 @@
                                 sep = "  "
                             )
                         )
+
                         cases <- unlist(
                             strsplit(
                                 incl.cov.e.cases[i],
@@ -636,6 +752,7 @@
                                 useBytes = TRUE
                             )
                         )
+
                         cat(
                             admisc::prettyString(
                                 cases,
@@ -645,8 +762,10 @@
                                 cases = TRUE
                             )
                         )
+
                         cat("\n")
                     }
+
                     cat(
                         paste(
                             rep("-", nchar.rownames + nchar.nrow + 9),
@@ -655,6 +774,7 @@
                         "\n"
                     )
                 }
+
                 for (i in seq(nrow(incl.cov))) {
                     cat(
                         paste(
@@ -666,6 +786,7 @@
                             sep = "  "
                         )
                     )
+
                     cases <- unlist(
                         strsplit(
                             incl.cov.cases[i],
@@ -673,6 +794,7 @@
                             useBytes = TRUE
                         )
                     )
+
                     cat(
                         admisc::prettyString(
                             cases,
@@ -682,8 +804,10 @@
                             cases = TRUE
                         )
                     )
+
                     cat("\n")
                 }
+
                 cat(
                     paste(
                         rep("-", nchar.rownames + nchar.nrow + 9),
@@ -695,15 +819,26 @@
         }
     }
     else {
+
+        # the number of characters from all columns exceed a normal length line
+        # therefore the entire matrix will be printed on chunks of columns
         ncols <- floor((line.length - nchar.rownames)/7)
+
         if (ncols < 0) {
             admisc::stopError(
                 "Too complex to print. Try using single letters for all conditions."
             )
         }
+
         chunks <- ceiling(ncol(incl.cov)/ncols)
         colsplits <- seq(1, ncol(incl.cov), by = ncols)
+
+        #if (essentials) {
+        #    incl.cov.e <- incl.cov.e[, seq(1, ncols)]
+        #}
+
         for (chunk in seq(chunks)) {
+
             sel.cols <- seq(
                 colsplits[chunk],
                 ifelse(
@@ -712,12 +847,16 @@
                     colsplits[chunk + 1] - 1
                 )
             )
+
             incl.cov.temp <- incl.cov[, sel.cols, drop = FALSE]
+
             if (essentials) {
                 incl.cov.e.temp <- incl.cov.e[, sel.cols, drop = FALSE]
             }
+
             if (chunk < chunks) {
-                if (ncols > 3) { 
+
+                if (ncols > 3) { # quick'n'dirty hack to solve Mattia's printing error
                     cat(
                         paste(
                             c(
@@ -733,6 +872,7 @@
                         )
                     )
                 }
+
                 cat(
                     paste(
                         c(
@@ -746,6 +886,7 @@
                     ),
                     "\n"
                 )
+
                 sep.row <- paste(
                     rep(
                         "-",
@@ -754,6 +895,7 @@
                     collapse = ""
                 )
                 cat(sep.row, "\n")
+
                 if (essentials) {
                     for (i in seq(nrow(incl.cov.e.temp))) {
                         cat(
@@ -773,6 +915,7 @@
                     }
                     cat(sep.row, "\n")
                 }
+
                 for (i in seq(nrow(incl.cov.temp))) {
                     cat(
                         paste(
@@ -789,7 +932,9 @@
                         "\n"
                     )
                 }
+
                 cat(sep.row, "\n")
+
                 if (chunk == 1 & sol.exists) {
                     for (i in seq(nrow(sol.incl.cov))) {
                         cat(
@@ -819,8 +964,10 @@
                 if (cases.column) {
                     max.chars <- max.chars + max.nchar.cases
                 }
+
                 if (max.chars < line.length) {
                     cat(sep.row, "\n")
+
                     sep.row <- paste(
                         sep.row,
                         ifelse(
@@ -833,6 +980,7 @@
                         ),
                         sep = ""
                     )
+
                     colnames.row <- paste(
                         c(
                             paste(
@@ -843,6 +991,7 @@
                         ),
                         collapse = "  "
                     )
+
                     cat(
                         paste(
                             colnames.row,
@@ -851,7 +1000,9 @@
                         ),
                         "\n"
                     )
+
                     cat(sep.row, "\n")
+
                     if (essentials) {
                         for (i in seq(nrow(incl.cov.e.temp))) {
                             i.row <- paste(
@@ -876,6 +1027,7 @@
                         }
                         cat(sep.row, "\n")
                     }
+
                     for (i in seq(nrow(incl.cov.temp))) {
                         i.row <- paste(
                             prettyNums[i],
@@ -888,6 +1040,7 @@
                             ),
                             sep = "  "
                         )
+
                         if (cases.column) {
                             i.row <- paste(
                                 i.row,
@@ -897,10 +1050,12 @@
                         }
                         cat(i.row, "\n")
                     }
+
                     cat(sep.row, "\n")
                 }
                 else {
                     cat(sep.row, "\n")
+
                     cat(
                         paste(
                             c(
@@ -914,7 +1069,9 @@
                         ),
                         "\n"
                     )
+
                     cat(sep.row, "\n")
+
                     if (essentials) {
                         for (i in seq(nrow(incl.cov.e.temp))) {
                             i.row <- paste(
@@ -928,10 +1085,15 @@
                                 ),
                                 sep = "  "
                             )
+                            #if (cases.column) {
+                            #    i.row <- paste(i.row, incl.cov.e.cases[i], sep = "  ")
+                            #}
                             cat(i.row, "\n")
                         }
                         cat(sep.row, "\n")
                     }
+
+
                     for (i in seq(nrow(incl.cov.temp))) {
                         cat(
                             paste(
@@ -948,11 +1110,14 @@
                             "\n"
                         )
                     }
+
                     cat(sep.row, "\n")
+
                     if (cases.column) {
                         cat("\n", paste(paste(rep(" ", nchar.rownames + nchar.nrow + 2), collapse = ""), "cases"), "\n")
                         sep.row <- paste(rep("-", nchar.rownames + nchar.nrow + 9), collapse = "")
                         cat(sep.row, "\n")
+
                         if (essentials) {
                             for (i in seq(nrow(incl.cov.e.temp))) {
                                 cat(paste(prettyNums.e[i], paste(rownames(incl.cov.e.temp)[i], " "), sep = "  "))
@@ -970,6 +1135,8 @@
                             }
                             cat(sep.row, "\n")
                         }
+
+
                         for (i in seq(nrow(incl.cov.temp))) {
                             cat(
                                 paste(
@@ -1007,14 +1174,18 @@
         }
     }
 }
+
 `print.QCA_min` <- function(x, ...) {
+
     enter <- ifelse (
         is.element("enter", names(as.list(x$call))),
         as.list(x$call)$enter,
         "\n"
     )
+
     dots <- list(...)
     enter <- identical(enter, "\n")
+
     essential_replaced <- FALSE
     replace <-  length(x$tt$categories) > 0 &&
                 (
@@ -1023,32 +1194,56 @@
                         !isFALSE(dots$use.labels) && x$tt$options$use.labels
                     )
                 )
+
+    # TODO: detect when print.QCA_min() is called by print.QCA_loopmin()
+    # and only print the necessary solutions above the threshold, causalChain() style
+
     line.length <- getOption("width")
+
     if (any(names(x) == "via.web")) {
         line.length <- 10000
     }
+
     details <- x$options$details
+
     mqca <- FALSE
     if (is.element("mqca", names(dots))) {
         if (is.logical(dots$mqca)) {
             mqca <- dots$mqca
         }
     }
+
     sol.cons <- x$options$sol.cons
     sol.cov  <- x$options$sol.cov
+
     outcome <- x$tt$options$outcome
+
     if (x$options$curly) {
         outcome <- gsub("\\[", "{", gsub("\\]", "}", outcome))
     }
+
+    # if (mqca) {
     if (grepl(mvregexp, outcome)) {
+        # outcome.value <- squareBrackets(outcome)
+        # outcome <- squareBrackets(outcome, outside=TRUE)
+
         if (x$options$neg.out) {
+            # just to make sure it _does_ contain a tilde, the only way to
+            # display a negated multivalue outcome
             outcome <- paste("~", admisc::notilde(outcome), sep = "")
         }
+
+        ### only explain == 1 otherwise it isn't clear what the solution is sufficient for
+        ### e.g. if the outcome is BLAH{0} and explain = "0", what is the sufficiency for...?
         if (any(x$options$explain != 1)) {
             outcome <- ""
         }
+        ###
     }
     else {
+
+        ###
+
         if (x$options$neg.out) {
             if (admisc::tilde1st(outcome)) {
                 outcome <- admisc::notilde(outcome)
@@ -1057,39 +1252,80 @@
                 outcome <- paste("~", outcome, sep = "")
             }
         }
+
+        ###
     }
+    # }
+    # else {
+    #     # to make clear what the solution is sufficient for
+    #     outcome <- paste("OUT:\"", paste(x$options$explain, collapse = ","), "\"", sep = "")
+    # }
+
+    # or
+    # outcome <- paste(outcome, ":", paste(x$options$explain, collapse = ","), sep = "")
+
     if (replace) {
         outcome <- replaceCategories(
             outcome,
             categories = x$tt$categories
         )
     }
+
     if (is.element("show.cases", names(dots))) {
         if (is.logical(dots$show.cases)) {
             x$options$show.cases <- dots$show.cases
         }
     }
+
     if (!x$options$show.cases) {
         if (is.element("cases", names(x$IC$incl.cov))) {
             x$IC$incl.cov$cases <- NULL
         }
     }
+
     if (is.element("details", names(dots))) {
         if (is.logical(dots$details)) {
             details <- dots$details
+            # x$options$print.truth.table <- details
             x$options$details <- details
         }
     }
+
+    # if (x$options$print.truth.table) {
+    #     print.QCA_tt(x$tt)
+    # }
+    # else {
+    #     nofconditions <- length(x$tt$noflevels)
+    #     if (!all(is.element(names(x$tt$tt)[seq(nofconditions)], names(x$tt$recoded.data)[seq(nofconditions)])) & x$options$use.letters) {
+    #         if (enter) cat("\n")
+    #         names.mydata <- colnames(x$tt$recoded.data)[seq(nofconditions + 1)]
+    #         for (i in seq(nofconditions)) {
+    #             cat("    ", paste(names(x$tt$tt)[i], ": ", sep = ""), names.mydata[i], "\n", sep = "")
+    #         }
+    #     }
+    # }
+
+    # if (details) {
+    #     if (!x$options$print.truth.table & enter) cat("\n")
+    #     cat("n OUT = 1/0/C:", paste(x$numbers[1:3], collapse = "/"), "\n")
+    #     cat("  Total      :", x$numbers[4], "\n")
+    # }
+
     if (!mqca & enter) {
         cat("\n")
     }
+
     if (is.element("i.sol", names(x))) {
+
         sufnec <- logical(length(x$i.sol))
+
         for (i in seq(length(x$i.sol))) {
             if (is.element("overall", names(x$i.sol[[i]]$IC))) {
+                # sufnec[i] <- admisc::agteb(x$i.sol[[i]]$IC$overall$sol.incl.cov[c(1, 3)], c(sol.cons. sol.cov))
                 sufnec[i] <- all(admisc::agteb(x$i.sol[[i]]$IC$overall$sol.incl.cov[3], sol.cov))
             }
             else {
+                # sufnec[i] <- admisc::agteb(x$i.sol[[i]]$IC$sol.incl.cov[c(1, 3)], c(sol.cons. sol.cov))
                 sufnec[i] <- all(
                     admisc::agteb(
                         x$i.sol[[i]]$IC$sol.incl.cov[3],
@@ -1098,17 +1334,32 @@
                 )
             }
         }
+
+
         sufnec.char <- rep("", length(sufnec))
+
         uniques <- unique(lapply(x$i.sol, function(x) x$solution))
+
         for (j in seq(length(uniques))) {
             indices <- unlist(lapply(x$i.sol, function(x) identical(uniques[[j]], x$solution)))
             isols <- names(indices)[indices]
+
             cat(paste(ifelse(j > 1, "\n", ""), "From ", paste(isols, collapse = ", "), ": ", sep = ""))
             if (enter) cat("\n")
+
             i <- which(names(x$i.sol) == isols[1])
+
+            # if (x$options$show.cases & x$options$details) {
+            #     PIchart <- x$i.sol[[i]]$PIchart
+            #     PIchart <- PIchart[is.element(rownames(PIchart), unique(unlist(x$i.sol[[i]]$solution[[1]]))), , drop=FALSE]
+            #     mult.cov <- ifelse(any(colSums(PIchart) > 1), length(unlist(lapply(x$inputcases[colSums(PIchart) > 1], strsplit, split = ",", useBytes = TRUE))), 0)
+            #     cat("\nNumber of multiple-covered cases:", mult.cov, "\n")
+            # }
+
             if (!mqca & enter) {
                 cat("\n")
             }
+
             for (sol in seq(length(x$i.sol[[i]]$solution))) {
                 prettyNums <- formatC(
                     seq(length(x$i.sol[[i]]$solution)),
@@ -1125,20 +1376,25 @@
                     sep = ""
                 )
                 cat(preamble)
+
                 xsol <- x$i.sol[[i]]$solution[[sol]]
+
                 sufnec.char[i] <- paste(
                     ifelse(sufnec[i], "<", ""),
                     "->",
                     sep = ""
                 )
+
                 if (length(x$i.sol[[i]]$essential) > 0) {
                     xsol <- xsol[!is.element(xsol, x$i.sol[[i]]$essential)]
+
                     if (replace) {
                         x$i.sol[[i]]$essential <- replaceCategories(
                             x$i.sol[[i]]$essential,
                             categories = x$tt$categories
                         )
                     }
+
                     xsol <- paste(
                         paste(
                             x$i.sol[[i]]$essential,
@@ -1156,6 +1412,7 @@
                         ),
                         sep = ""
                     )
+
                     cat(
                         admisc::prettyString(
                             unlist(
@@ -1177,6 +1434,7 @@
                             categories = x$tt$categories
                         )
                     }
+
                     cat(
                         admisc::prettyString(
                             x$i.sol[[i]]$solution[[sol]],
@@ -1190,21 +1448,35 @@
                     )
                 }
             }
+
             if (x$options$details) {
                 print.QCA_pof(x$i.sol[[i]]$IC, show.cases = x$options$show.cases)
             }
         }
+
     }
-    else { 
+    else { # no intermediate solutions, just regular ones
+
+        # if (x$options$show.cases & !mqca & x$options$details) {
+        #     PIchart <- x$PIchart
+
+        #     PIchart <- PIchart[is.element(rownames(PIchart), unique(unlist(x$solution[[1]]))), , drop = FALSE]
+        #     mult.cov <- ifelse(any(colSums(PIchart) > 1), length(unlist(lapply(x$inputcases[colSums(PIchart) > 1], strsplit, split = ",", useBytes = TRUE))), 0)
+        #     cat("Number of multiple-covered cases:", mult.cov, "\n\n")
+        # }
+
         if (length(x$solution) == 1) {
+            # sufnec <- admisc::agteb(x$IC$sol.incl.cov[c(1, 3)], c(sol.cons, sol.cov))
             sufnec <- all(admisc::agteb(x$IC$sol.incl.cov[3], sol.cov))
             sufnec <- paste(ifelse(sufnec, "<", ""), "->", sep = "")
+
             if (replace) {
                 x$solution[[1]] <- replaceCategories(
                     x$solution[[1]],
                     categories = x$tt$categories
                 )
             }
+
             cat(
                 sprintf(
                     "M1: %s\n",
@@ -1218,15 +1490,21 @@
                     )
                 )
             )
+
         }
         else {
+
+            # there is an "overall" and an "individual" component to IC
             prettyNums <- formatC(
                 seq(length(x$solution)),
                 digits = nchar(length(x$solution)) - 1,
                 flag = 0
             )
+
             sufnec <- logical(length(x$solution))
+
             for (i in seq(length(x$solution))) {
+                # sufnec[i] <- admisc::agteb(x$IC$individual[[i]]$sol.incl.cov[c(1, 3)], c(sol.cons. sol.cov))
                 sufnec[i] <- all(
                     admisc::agteb(
                         x$IC$individual[[i]]$sol.incl.cov[3],
@@ -1234,26 +1512,32 @@
                     )
                 )
             }
+
             sufnec.char <- rep("", length(sufnec))
+
             for (i in seq(length(x$solution))) {
                 cat(paste("M", prettyNums[i], ": ", sep = ""))
                 xsol <- x$solution[[i]]
                 sufnec.char[i] <- paste0(ifelse(sufnec[i], "<", ""), "->")
                 if (length(x$essential) > 0) {
                     xsol <- xsol[!is.element(xsol, x$essential)]
+
                     if (replace) {
                         if (!essential_replaced) {
                             x$essential <- replaceCategories(
                                 x$essential,
                                 categories = x$tt$categories
                             )
+
                             essential_replaced <- TRUE
                         }
+
                         xsol <- replaceCategories(
                             xsol,
                             categories = x$tt$categories
                         )
                     }
+
                     xsol <- paste0(
                         paste(x$essential, collapse = "@"),
                         ifelse(
@@ -1267,6 +1551,7 @@
                             ""
                         )
                     )
+
                     cat(
                         admisc::prettyString(
                             unlist(strsplit(xsol, split="@")),
@@ -1280,12 +1565,14 @@
                     )
                 }
                 else {
+
                     if (replace) {
                         x$solution[[i]] <- replaceCategories(
                             x$solution[[i]],
                             categories = x$tt$categories
                         )
                     }
+
                     cat(
                         admisc::prettyString(
                             x$solution[[i]],
@@ -1297,12 +1584,17 @@
                         ),
                         "\n"
                     )
+                    # cat(sprintf("%s %s %s\n", paste(x$solution[[i]], collapse = " + "), sufnec.char[i], outcome))
                 }
+
             }
+
             if (!mqca & x$options$details & enter) {
                 cat("\n")
             }
+
         }
+
         if (x$options$details) {
             print.QCA_pof(
                 x$IC,
@@ -1310,7 +1602,17 @@
                 line.length = line.length
             )
         }
+
     }
+
+    # if (x$options$warn1conf) {
+    #     warning.message <- paste("There is only one configuration to be explained.",
+    #                              "No minimization was performed.")
+    #     cat("\nNB: ")
+    #     cat(admisc::prettyString(unlist(strsplit(warning.message, split=" ")), line.length - 4, 4, " "))
+        # cat("\n\n")
+    # }
+
     if (x$complex) {
         warning(
             simpleWarning(
@@ -1318,22 +1620,32 @@
             )
         )
     }
+
     if (!x$options$details & enter) {
         cat("\n")
     }
+
 }
+
 `print.QCA_sS` <- function(x, ...) {
     dots <- list(...)
+
+
     xletters <- NULL
     if (x$options$use.letters) {
         xletters <- x$letters
     }
+
     if (x$options$use.labels && length(x$categories) > 0) {
         rownames(x$incl.cov) <- replaceCategories(
             rownames(x$incl.cov),
             categories = x$categories
         )
     }
+
+    # admisc::translate(rownames(x$incl.cov)[1], snames = conditions, noflevels = noflevels)
+
+
     if (x$options$use.letters) {
         conditions <- names(xletters)
         xletters <- as.vector(xletters)
@@ -1350,6 +1662,7 @@
             }
         }
     }
+
     incl.cov <- x$incl.cov
     cat("\n")
     prettyNums <- format(seq(nrow(incl.cov)))
@@ -1364,6 +1677,7 @@
         incl.cov[!NAs, i] <- formatC(incl.cov[!NAs, i], digits = 3, format = "f")
         incl.cov[NAs, i] <- "  -  "
     }
+
     nchar.rownames <- nchar(rownames(incl.cov)[1])
     cat(
         paste(
@@ -1386,6 +1700,7 @@
         collapse = ""
     )
     cat(sep.row, "\n")
+
     for (i in seq(nrow(incl.cov))) {
         cat(
             paste(
@@ -1405,33 +1720,41 @@
     cat(sep.row, "\n")
     cat("\n")
 }
+
 `print.QCA_tt` <- function(x, ...) {
+
     dots <- list(...)
+
     enter <- ifelse (
         is.element("enter", names(as.list(x$call))),
         as.list(x$call)$enter,
         TRUE
     )
+
     if (!is.null(x$rowsorder)) {
         x$tt <- x$tt[x$rowsorder, ]
     }
+
     complete <- x$options$complete
     if (is.element("complete", names(dots))) {
         if (is.logical(dots$complete)) {
             complete <- dots$complete[1]
         }
     }
+
     show.cases <- x$options$show.cases
     if (is.element("show.cases", names(dots))) {
         if (is.logical(dots$show.cases)) {
             show.cases <- dots$show.cases[1]
         }
     }
+
     if (!complete) {
         if (!is.element("removed", names(x$options))) {
             x$tt <- x$tt[x$tt$OUT != "?", , drop = FALSE]
         }
     }
+
     if (show.cases) {
         if (x$options$dcc) {
             x$tt$cases <- ""
@@ -1442,6 +1765,7 @@
     else {
         x$tt$cases <- NULL
     }
+
     if (nrow(x$tt) > 1024) {
         if (enter) cat("\n")
         cat(
@@ -1462,6 +1786,7 @@
         names.mydata <- colnames(x$recoded.data)[seq(nofconditions + 1)]
         if (!is.element("removed", names(x$options))) {
             if (enter) cat("\n")
+
             if (
                 !all(
                     is.element(
@@ -1475,21 +1800,31 @@
                 }
             }
         }
+
         x$tt[, "n"] <- paste(" ", x$tt[, "n"], "")
         colnames(x$tt)[colnames(x$tt) == "n"] <- "  n "
+
         inclusion <- x$tt[, "incl"]
         missincl <- x$tt[, "incl"] == "-"
         x$tt[!missincl, "incl"] <- formatC(as.numeric(inclusion[!missincl]), digits = 3, format = "f")
+
+
+        # change the column named PRI which is _after_(!) the column OUT
+        # the Porter data for example has a causal condition named PRI...!
         whichpri <- tail(which(colnames(x$tt) == "PRI"), 1)
+
         pri <- x$tt[, whichpri]
         misspri <- x$tt[, whichpri] == "-"
         x$tt[!misspri, whichpri] <- formatC(as.numeric(pri[!misspri]), digits = 3, format = "f")
+
+
         if (any(names(x$tt) == "pval1")) {
             x$tt[x$tt[, "pval1"] != "-", "pval1"] <- formatC(
                 as.numeric(x$tt[x$tt[, "pval1"] != "-", "pval1"]),
                 digits = 3,
                 format = "f"
             )
+
             if (length(x$options$incl.cut) > 1) {
                 x$tt[x$tt[, "pval0"] != "-", "pval0"] <- formatC(
                     as.numeric(x$tt[x$tt[, "pval0"] != "-", "pval0"]),
@@ -1498,12 +1833,15 @@
                 )
             }
         }
+
         if (any(missincl)) {
             x$tt[missincl, "incl"] <- "  -"
         }
+
         if (any(misspri)) {
             x$tt[misspri, "PRI"] <- "  -"
         }
+
         if (!is.element("removed", names(x$options))) {
             cat("  OUT: output value\n")
             cat("    n: number of cases in configuration\n")
@@ -1521,6 +1859,7 @@
                         sep = ""
                     )
                 )
+
                 if (length(x$options$incl.cut) > 1) {
                     cat(
                         paste(
@@ -1534,13 +1873,17 @@
             }
             cat("\n")
         }
+
         alloutzero <- all(x$tt$OUT == 0)
+
         wOUT <- which(colnames(x$tt) == "OUT")
+
         if (x$options$use.labels && length(x$categories) > 0) {
             outcome <- x$options$outcome
             for (fcond in setdiff(names(x$categories), outcome)) {
                 x$tt[, fcond] <- x$categories[[fcond]][x$tt[, fcond] + 1]
             }
+
             if (is.element(outcome, names(x$categories))) {
                 obs <- x$tt[, wOUT] != "?"
                 x$tt[, wOUT][obs] <- x$categories[[outcome]][
@@ -1548,9 +1891,12 @@
                 ]
             }
         }
+
         x$tt[, wOUT] <- paste(" ", x$tt[, wOUT], "")
         colnames(x$tt)[wOUT] <- "  OUT "
+
         print(admisc::prettyTable(x$tt))
+
         if (alloutzero) {
             if (enter) cat("\n")
             cat(
@@ -1564,6 +1910,43 @@
                 )
             )
         }
+
         if (enter) cat("\n")
     }
 }
+
+
+#`print.QCA_pims` <-
+#function(x, ...) {
+    #line.length <- floor(getOption("width")*0.95)
+    #rownames(x) <- format(rownames(x))
+    #x <- apply(x, 2, formatC, digits = 3, format = "f")
+    #nchar.rownames <- nchar(rownames(x)[1])
+
+    #for (i in seq(ncol(x))) {
+    #    colnames(x)[i] <- format(colnames(x)[i], width=max(5, nchar(colnames(x)[i])))
+    #}
+
+    #sep.row <- paste(rep("-", nchar.rownames + ifelse(ncol(x) > 1, sum(nchar(colnames(x)[-ncol(x)])) + 2*(ncol(x) - 1), 0) + max(nchar(colnames(x)[ncol(x)]), 5) + 2), collapse = "")
+    #nchar.sep.row <- nchar(sep.row)
+    #if (nchar.sep.row < line.length) {
+    #    columns <- paste(colnames(x), collapse = "  ")
+    #    cat(paste(paste(rep(" ", nchar.rownames), collapse = ""), columns, sep = "  "), "\n")
+    #    cat(sep.row, "\n")
+    #    for (i in seq(nrow(x))) {
+    #        catrow <- paste(rownames(x)[i], x[i, 1], sep = "  ")
+    #        if (ncol(x) > 1) {
+    #            for (colno in seq(2, ncol(x))) {
+    #                ncharcol <- nchar(colnames(x)[colno - 1])
+    #                catrow <- paste(catrow, x[i, colno], sep=paste(rep(" ", max(2, ifelse(ncharcol > 5, ncharcol - 3, 0))), collapse = ""))
+    #            }
+    #        }
+    #        cat(catrow, "\n")
+    #    }
+    #    cat(sep.row, "\n")
+    #}
+    #else {
+    #
+    #}
+    #print(unclass(x))
+#}

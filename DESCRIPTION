@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.24.2
+Version: 3.25
 SystemRequirements: POSIX threads (optional)
 Title: Qualitative Comparative Analysis
 Authors@R: c(
@@ -20,16 +20,9 @@ LazyData: yes
 Imports: methods, declared, venn
 Description: An extensive set of functions to perform Qualitative Comparative Analysis:
        crisp sets ('csQCA'), temporal ('tQCA'), multi-value ('mvQCA')
-       and fuzzy sets ('fsQCA'), using a GUI - graphical user interface.
-       'QCA' is a methodology that bridges the qualitative and quantitative
-       divide in social science research. It uses a Boolean minimization
-       algorithm, resulting in a minimal causal configuration associated
-       with a given phenomenon.
+       and fuzzy sets ('fsQCA'). 'QCA' is a methodology that bridges
+       the qualitative and quantitative divide in social science research.
+       It uses a Boolean minimization algorithm, resulting in a minimal causal
+       configuration associated with a given phenomenon.
 License: GPL (>= 3)
-NeedsCompilation: yes
-Packaged: 2026-05-07 14:49:13 UTC; dusadrian
-Author: Adrian Dusa [aut, cre, cph] (ORCID:
-    <https://orcid.org/0000-0002-3525-9253>),
-  Ciprian Paduraru [ctb] (ORCID: <https://orcid.org/0000-0002-4518-374X>),
-  Alrik Thiem [aut] (from version 1.0-0 up to version 1.1-3)
-Maintainer: Adrian Dusa <dusa.adrian@unibuc.ro>
+Encoding: UTF-8
