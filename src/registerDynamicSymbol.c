@@ -26,8 +26,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <R.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
+#include "qca_rinternals.h"
 #include <R_ext/Rdynload.h>
 #include "solvePIchart_gurobi.h"
 extern SEXP C_findminLpSolveInternal(SEXP chart);

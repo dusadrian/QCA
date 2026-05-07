@@ -1,5 +1,5 @@
 #include <stdbool.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
 
 bool gurobi_runtime_available(void);
 void gurobi_release_env(void);

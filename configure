@@ -11,7 +11,6 @@ gurobi_libs=""
 pthread_cflags=""
 pthread_cppflags=""
 pthread_libs=""
-warning_cflags=""
 disable_pthread="no"
 
 for arg in "$@"; do
@@ -107,20 +106,9 @@ fi
 rm -rf conftest conftest.c conftest.o conftest.dSYM
 fi
 
-cat > conftest.c <<'EOF'
-int main(void) { return 0; }
-EOF
-
-if ${CC} ${CPPFLAGS} ${CFLAGS} -Wno-unknown-warning-option -c conftest.c -o conftest.o >/dev/null 2>&1; then
-    warning_cflags=" -Wno-unknown-warning-option"
-fi
-
-rm -rf conftest.c conftest.o
-
 sed \
     -e "s|@QCA_GUROBI_CPPFLAGS@|${gurobi_cppflags}|" \
     -e "s|@QCA_GUROBI_LIBS@|${gurobi_libs}|" \
-    -e "s|@QCA_WARNING_CFLAGS@|${warning_cflags}|" \
     -e "s|@QCA_PTHREAD_CFLAGS@|${pthread_cflags}|" \
     -e "s|@QCA_PTHREAD_CPPFLAGS@|${pthread_cppflags}|" \
     -e "s|@QCA_PTHREAD_LIBS@|${pthread_libs}|" \

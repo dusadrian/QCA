@@ -1,8 +1,8 @@
 #ifndef QCA_FINDMIN_SCP_H
 #define QCA_FINDMIN_SCP_H
 
-#include <R_ext/Boolean.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
+#include "qca_rinternals.h"
 
 SEXP C_findminScpInternal(SEXP chart);
 SEXP C_getScpProfile(void);

@@ -17,7 +17,7 @@
 # include "lp_fortify.h"
 #endif
 
-#include <R.h>
+#include "qca_r.h"
 
 
 /* Math operator equivalence function */

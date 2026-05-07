@@ -1,4 +1,4 @@
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include <math.h>
 #include "consistency.h"
 #include "find_models.h"

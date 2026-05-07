@@ -27,7 +27,7 @@ Description: An extensive set of functions to perform Qualitative Comparative An
        with a given phenomenon.
 License: GPL (>= 3)
 NeedsCompilation: yes
-Packaged: 2026-05-07 13:54:25 UTC; dusadrian
+Packaged: 2026-05-07 14:49:13 UTC; dusadrian
 Author: Adrian Dusa [aut, cre, cph] (ORCID:
     <https://orcid.org/0000-0002-3525-9253>),
   Ciprian Paduraru [ctb] (ORCID: <https://orcid.org/0000-0002-4518-374X>),

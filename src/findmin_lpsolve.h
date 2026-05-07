@@ -1,8 +1,8 @@
 #ifndef QCA_FINDMIN_LPSOLVE_H
 #define QCA_FINDMIN_LPSOLVE_H
 
-#include <R_ext/Boolean.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
+#include "qca_rinternals.h"
 
 SEXP C_findminLpSolveInternal(SEXP chart);
 Rboolean solvePIchart_lpsolve(

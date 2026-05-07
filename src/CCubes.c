@@ -26,11 +26,11 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <R.h>
+#include "qca_rinternals.h"
 #include <R_ext/RS.h> 
-#include <R_ext/Boolean.h>
+#include "qca_rinternals.h"
 #include <R_ext/Utils.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
 #include <Rmath.h>
 #include <stdlib.h>
 #include <string.h>

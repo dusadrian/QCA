@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <R_ext/RS.h>
-#include <R_ext/Print.h>
+#include "qca_r.h"
 
 #define BIGNUMBER      1.0e+30
 #define TINYNUMBER     1.0e-04

@@ -26,7 +26,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include "row_dominance.h"
 void row_dominance(
     int p_pichart[],

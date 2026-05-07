@@ -27,7 +27,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <R_ext/RS.h> 
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include "utils.h"
 double consistency(
     const double p_x[],
