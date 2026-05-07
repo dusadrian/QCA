@@ -1,3 +1,4 @@
 #!/bin/sh
 
 rm -f src/Makevars src/Makevars.win
+find src -type f \( -name '*.o' -o -name '*.so' -o -name '*.a' -o -name '*.dll' -o -name '*.dylib' \) -exec rm -f {} \;

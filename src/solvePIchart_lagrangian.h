@@ -9,9 +9,12 @@ void solvePIchart_lagrangian(
     const int ON_minterms,
     const double weights[],
     int *solution,
-    int *solmin
+    int *solmin,
+    double *best_lb_out,
+    double *lagr_score_out
 );
 
 SEXP C_findminLagrangian(SEXP chart);
+SEXP C_findminLagrangianInfo(SEXP chart);
 
 #endif

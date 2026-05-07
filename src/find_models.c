@@ -26,16 +26,68 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+#include <R.h>
 #include <R_ext/RS.h> 
 #include <R_ext/Boolean.h>
 #include <R_ext/Utils.h>
 #include <stdlib.h>
 #include "find_models.h"
-#ifdef _OPENMP
-    #undef match
-    #include <omp.h>
-#endif
+#include "qca_threads.h"
 #define INTERRUPT_EVERY 1024
+typedef struct {
+    const int *p_pichart;
+    int pirows;
+    unsigned int picols;
+    int k;
+    unsigned char *valid;
+} QCAFindModelsValidContext;
+static void qca_find_models_valid_range(
+    unsigned long long start,
+    unsigned long long end,
+    int worker_id,
+    void *data
+) {
+    QCAFindModelsValidContext *ctx = (QCAFindModelsValidContext *) data;
+    (void) worker_id;
+    for (unsigned long long int task = start; task < end; task++) {
+        int tempk[ctx->k];
+        unsigned long long int combination = task;
+        int x = 0;
+        for (int i = 0; i < ctx->k; i++) {
+            while (1) {
+                unsigned long long int cval = nchoosek(ctx->picols - (x + 1), ctx->k - (i + 1));
+                if (cval == 0 || cval > combination) {
+                    break;
+                }
+                combination -= cval;
+                x++;
+            }
+            if (x < 0) {
+                x = 0;
+            }
+            if (x >= (int) ctx->picols) {
+                x = (int) ctx->picols - 1;
+            }
+            tempk[i] = x;
+            x++;
+        }
+        Rboolean allrows = true;
+        int r = 0;
+        while (r < ctx->pirows && allrows) {
+            Rboolean covered = false;
+            int c = 0;
+            while (c < ctx->k && !covered) {
+                covered = ctx->p_pichart[tempk[c] * ctx->pirows + r];
+                c++;
+            }
+            allrows = covered;
+            r++;
+        }
+        if (allrows) {
+            ctx->valid[task] = 1;
+        }
+    }
+}
 void find_models(
     const int p_pichart[],
     const int pirows,
@@ -180,47 +232,19 @@ void find_models(
         if (!firstmin && maxcomb <= 0) {
             unsigned long long int maxtasks = nchoosek(picols, k);
             unsigned char *valid = (unsigned char *) R_Calloc(maxtasks, unsigned char);
-            #ifdef _OPENMP
-                #pragma omp parallel for schedule(static, 1) reduction(+:solfound)
-            #endif
+            QCAFindModelsValidContext ctx = {
+                .p_pichart = p_pichart,
+                .pirows = pirows,
+                .picols = picols,
+                .k = k,
+                .valid = valid
+            };
+            if (!qca_parallel_for(maxtasks, 0, qca_find_models_valid_range, &ctx)) {
+                R_Free(valid);
+                error("Failed to start pthread workers while finding models.");
+            }
             for (unsigned long long int task = 0; task < maxtasks; task++) {
-                int tempk[k];
-                unsigned long long int combination = task;
-                int x = 0;
-                for (int i = 0; i < k; i++) {
-                    while (1) {
-                        unsigned long long int cval = nchoosek(picols - (x + 1), k - (i + 1));
-                        if (cval == 0 || cval > combination) {
-                            break;
-                        }
-                        combination -= cval;
-                        x++;
-                    }
-                    if (x < 0) {
-                        x = 0;
-                    }
-                    if (x >= (int) picols) {
-                        x = (int) picols - 1;
-                    }
-                    tempk[i] = x;
-                    x++;
-                }
-                Rboolean allrows = true;
-                int r = 0;
-                while (r < pirows && allrows) {
-                    Rboolean covered = false;
-                    int c = 0;
-                    while (c < k && !covered) {
-                        covered = p_pichart[tempk[c] * pirows + r];
-                        c++;
-                    }
-                    allrows = covered;
-                    r++;
-                }
-                if (allrows) {
-                    valid[task] = 1;
-                    solfound++;
-                }
+                solfound += valid[task] != 0;
             }
             R_CheckUserInterrupt();
             if (solfound > 0) {

@@ -69,20 +69,17 @@
                     PACKAGE = "QCA"
                 )
             } else if (verbose) {
-                message("Gurobi not available, falling back to lpSolve.")
+                message("Gurobi not available, falling back to the internal lp_solve solver.")
             }
         }
         if (is.null(solution)) {
-            solution <- lpSolve::lp(
-                direction = "min",
-                objective.in = rep(1, ncol(chart)),
-                const.mat = chart,
-                const.dir = rep(">=", nrow(chart)),
-                const.rhs = rep(1, nrow(chart)),
-                all.bin = TRUE
-            )$solution
+            solution <- .Call(
+                "C_findminLpSolveInternal",
+                matrix(as.logical(chart), nrow = nrow(chart)),
+                PACKAGE = "QCA"
+            )
         }
-        if (just_minima | any(solution > 0 & solution < 1)) {
+        if (just_minima) {
             solution <- as.integer(ceiling(sum(solution)))
         }
     }
