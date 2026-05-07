@@ -1,4 +1,3 @@
-*.js~
 *.json
 *.marks
 *.history
@@ -12,6 +11,8 @@
 *.DS_Store
 src/*.DS_Store
 src/*.a
-.Rproj.user
+*.R
+!R/
+!R/*.R
 *.txt
 *.md

@@ -1,8 +1,9 @@
 Version 3.25
-    o Improved: heuristic Lagrangian relaxation solver
     o Now using a trimmed down version of lp_solve for exact covers
-    o Internal C code now uses pthreads instead of OpenMP to ensure
-      universal use of parallel multi-thread processing
+    o Improved: heuristic Lagrangian relaxation solver
+    o Internal C code now uses the modern POSIX pthreads instead of OpenMP
+      to ensure universal benefit from parallel multi-thread processing
+    o Simplifying assumptions are now calculated in C, targetting speed
 
 Version 3.24
     o Fixed: bug printing row numbers for very large solutions
