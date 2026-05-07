@@ -32,21 +32,31 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <R_ext/Utils.h>
 #include <Rinternals.h>
 #include <Rmath.h>
+#include <stdlib.h>
 #include <string.h>
 #include "CCubes.h"
 #include "solvePIchart_gurobi.h"
 #include "solvePIchart_lagrangian.h"
-#ifdef _OPENMP
-    #undef match
-    #include <omp.h>
-    #define OMP_NUM_PROCS omp_get_num_procs()
-    #define OMP_THREAD_LIMIT omp_get_thread_limit()
-    #define OMP_MAX_THREADS omp_get_max_threads()
-#else
-    #define OMP_NUM_PROCS 1
-    #define OMP_THREAD_LIMIT 1
-    #define OMP_MAX_THREADS 1
-#endif
+#include "findmin_lpsolve.h"
+static Rboolean resize_worker_buffer(
+    void **array,
+    int type,
+    int increase,
+    int size,
+    int nrows
+) {
+    size_t elem_size = type == 1 ? sizeof(int) : sizeof(unsigned int);
+    size_t old_count = (size_t) size * (size_t) nrows;
+    size_t new_count = (size_t) (size + increase) * (size_t) nrows;
+    void *tmp = calloc(new_count, elem_size);
+    if (tmp == NULL) {
+        return FALSE;
+    }
+    memcpy(tmp, *array, old_count * elem_size);
+    free(*array);
+    *array = tmp;
+    return TRUE;
+}
 #define BITS_PER_WORD 32
 #define INTERRUPT_EVERY 1024
 typedef struct {
@@ -101,15 +111,22 @@ void CCubes(const int p_tt[],
     get_noflevels(noflevels, p_tt, nconds, ttrows);
     int estimPI = 25000;
     int increase = 25000; 
-    int *p_pichart = (int *) R_Calloc(posrows * estimPI, int);
-    int *p_indx = (int *) R_Calloc(nconds * estimPI, int);
-    int *p_implicants = (int *) R_Calloc(nconds * estimPI, int);
+    int *p_pichart = (int *) calloc((size_t) posrows * (size_t) estimPI, sizeof(int));
+    int *p_indx = (int *) calloc((size_t) nconds * (size_t) estimPI, sizeof(int));
+    int *p_implicants = (int *) calloc((size_t) nconds * (size_t) estimPI, sizeof(int));
     int pichart_words = (posrows + BITS_PER_WORD - 1) / BITS_PER_WORD; 
-    unsigned int *p_pichart_pos = (unsigned int *) R_Calloc(estimPI * pichart_words, unsigned int);
+    unsigned int *p_pichart_pos = (unsigned int *) calloc((size_t) estimPI * (size_t) pichart_words, sizeof(unsigned int));
     int implicant_words = (nconds + BITS_PER_WORD - 1) / BITS_PER_WORD; 
-    unsigned int *p_implicants_pos = (unsigned int *) R_Calloc(estimPI * implicant_words, unsigned int);
-    unsigned int *p_implicants_val = (unsigned int *) R_Calloc(estimPI * implicant_words, unsigned int);
-    int *p_ck = (int *) R_Calloc(estimPI, int);
+    unsigned int *p_implicants_pos = (unsigned int *) calloc((size_t) estimPI * (size_t) implicant_words, sizeof(unsigned int));
+    unsigned int *p_implicants_val = (unsigned int *) calloc((size_t) estimPI * (size_t) implicant_words, sizeof(unsigned int));
+    int *p_ck = (int *) calloc((size_t) estimPI, sizeof(int));
+    if (
+        p_pichart == NULL || p_indx == NULL || p_implicants == NULL ||
+        p_pichart_pos == NULL || p_implicants_pos == NULL ||
+        p_implicants_val == NULL || p_ck == NULL
+    ) {
+        error("Memory allocation failed during PI buffer initialization.");
+    }
     Rboolean stop_searching = false;
     Rboolean solind_failed = false;
     Rboolean native_gurobi_checked = false;
@@ -120,10 +137,13 @@ void CCubes(const int p_tt[],
     int solmin = 0;
     int previndices[posrows];
     int indices[posrows];
-    int *covered = (int *) R_Calloc(estimPI, int);
+    int *covered = (int *) calloc((size_t) estimPI, sizeof(int));
+    if (covered == NULL) {
+        error("Memory allocation failed during PI coverage initialization.");
+    }
     int *last_index = (int *) R_Calloc(posrows, int);
     int *k_last_index = (int *) R_Calloc(posrows, int);
-    int nthreads = OMP_MAX_THREADS;
+    int nthreads = 1;
     ThreadBuffer *buffers = (ThreadBuffer *) R_Calloc(nthreads, ThreadBuffer);
     for (int t = 0; t < nthreads; t++) {
         buffers[t].implicants = (int *) R_Calloc(posrows * nconds, int);
@@ -139,11 +159,9 @@ void CCubes(const int p_tt[],
         previndices[i] = 0;
         indices[i] = 0;
     }
-    #if defined(SHOW_DEBUG_PROFILE) && defined(_OPENMP)
-        const double findingPIsStart_time = omp_get_wtime();
-    #endif
     Rboolean solution_exists = false;
     int counter = 0; 
+    Rboolean pi_resize_failed = false;
     int k;
     for (k = 1; k <= pidepth; k++) {
         R_CheckUserInterrupt();
@@ -154,19 +172,11 @@ void CCubes(const int p_tt[],
         unsigned long long int maxtasks = nchoosek(nconds, k);
         if (maxtasks == 0) {
         }
-        #ifdef _OPENMP
-            #pragma omp parallel for schedule(static, 1)
-        #endif
         for (unsigned long long int task = 0; task < maxtasks; task++) {
-            #ifndef _OPENMP
-                if (task > 0 && task % INTERRUPT_EVERY == 0) {
-                    R_CheckUserInterrupt();
-                }
-            #endif
+            if (task > 0 && task % INTERRUPT_EVERY == 0) {
+                R_CheckUserInterrupt();
+            }
             int tid = 0;
-            #ifdef _OPENMP
-                tid = omp_get_thread_num();
-            #endif
             ThreadBuffer *tb = &buffers[tid];
             tb->found = 0;
             int tempk[k];
@@ -190,12 +200,6 @@ void CCubes(const int p_tt[],
             int decneg[negrows];
             int mbase[k];
             mbase[0] = 1; 
-            #ifdef SHOW_DEBUG_OUTPUT
-                #pragma omp critical
-                {
-                    int threadid = omp_get_thread_num();
-                }
-            #endif
             for (int c = 1; c < k; c++) {
                 mbase[c] = mbase[c - 1] * noflevels[tempk[c - 1]];
             }
@@ -304,22 +308,26 @@ void CCubes(const int p_tt[],
                 }
             }
             if (tb->found > 0) {
-                #ifdef _OPENMP
-                    #pragma omp critical
-                #endif
                 {
-                    while ((double)(foundPI + tb->found) / (double)estimPI > 0.9) {
-                        resize((void**)&p_pichart,        1, increase, estimPI, posrows);
-                        resize((void**)&p_implicants,     1, increase, estimPI, nconds);
-                        resize((void**)&p_indx,           1, increase, estimPI, nconds);
-                        resize((void**)&p_implicants_val, 2, increase, estimPI, implicant_words);
-                        resize((void**)&p_implicants_pos, 2, increase, estimPI, implicant_words);
-                        resize((void**)&p_ck,             1, increase, estimPI, 1);
-                        resize((void**)&p_pichart_pos,    2, increase, estimPI, pichart_words);
-                        resize((void**)&covered,          1, increase, estimPI, 1);
-                        estimPI += increase;
+                    if (!pi_resize_failed) {
+                        while ((double)(foundPI + tb->found) / (double)estimPI > 0.9) {
+                            if (
+                                !resize_worker_buffer((void**)&p_pichart,        1, increase, estimPI, posrows) ||
+                                !resize_worker_buffer((void**)&p_implicants,     1, increase, estimPI, nconds) ||
+                                !resize_worker_buffer((void**)&p_indx,           1, increase, estimPI, nconds) ||
+                                !resize_worker_buffer((void**)&p_implicants_val, 2, increase, estimPI, implicant_words) ||
+                                !resize_worker_buffer((void**)&p_implicants_pos, 2, increase, estimPI, implicant_words) ||
+                                !resize_worker_buffer((void**)&p_ck,             1, increase, estimPI, 1) ||
+                                !resize_worker_buffer((void**)&p_pichart_pos,    2, increase, estimPI, pichart_words) ||
+                                !resize_worker_buffer((void**)&covered,          1, increase, estimPI, 1)
+                            ) {
+                                pi_resize_failed = true;
+                                break;
+                            }
+                            estimPI += increase;
+                        }
                     }
-                    for (int bf = 0; bf < tb->found; bf++) {
+                    for (int bf = 0; !pi_resize_failed && bf < tb->found; bf++) {
                         int base_imp = bf * nconds;
                         int base_bits = bf * implicant_words;
                         int base_pic = bf * pichart_words;
@@ -372,6 +380,9 @@ void CCubes(const int p_tt[],
             }
         }
         R_CheckUserInterrupt();
+        if (pi_resize_failed) {
+            error("Memory allocation failed during PI buffer resize.");
+        }
         if (foundPI > 0) {
             *complex = !gurobi && too_complex(foundPI, (solmin > 0 ? solmin : k), maxcomb);
             solution_exists = all_covered(p_pichart, posrows, foundPI);
@@ -409,7 +420,9 @@ void CCubes(const int p_tt[],
                         posrows,
                         NULL,
                         indices,
-                        &solmin
+                        &solmin,
+                        NULL,
+                        NULL
                     );
                     used_native_lagrangian = solmin > 0;
                     solind_failed = !used_native_lagrangian;
@@ -418,32 +431,14 @@ void CCubes(const int p_tt[],
                     }
                 }
                 if (!used_native_gurobi && !used_native_lagrangian) {
-                    SEXP pic = PROTECT(allocMatrix(INTSXP, posrows, foundPI));
-                    Memcpy(INTEGER(pic), p_pichart, posrows * foundPI);
-                    SEXP cpi = PROTECT(allocVector(INTSXP, 1));
-                    INTEGER(cpi)[0] = 0;
-                    setAttrib(pic, install("C_PI"), cpi);
-                    SEXP gurobipic = PROTECT(allocVector(LGLSXP, 1));
-                    LOGICAL(gurobipic)[0] = gurobi;
-                    setAttrib(pic, install("gurobi"), gurobipic);
-                    R_ParseEvalString("library(QCA)", R_GlobalEnv);
-                    SEXP pkg_env = PROTECT(R_FindNamespace(mkString("QCA")));
-                    SEXP call = PROTECT(Rf_lang2(Rf_install("findmin"), pic));
-                    SEXP evalinR = PROTECT(R_tryEval(call, pkg_env, NULL));
-                    int leneval = length(evalinR);
-                    solind_failed = leneval == 1 && TYPEOF(evalinR) == INTSXP;
-                    if (solind_failed) {
-                        solmin = INTEGER(evalinR)[0];
-                    } else {
-                        solmin = 0;
-                        for (int i = 0; i < leneval; i++) {
-                            if (REAL(evalinR)[i] > 0) {
-                                indices[solmin] = i;
-                                solmin++;
-                            }
-                        }
-                    }
-                    UNPROTECT(6);
+                    solmin = 0;
+                    solind_failed = !solvePIchart_lpsolve(
+                        p_pichart,
+                        posrows,
+                        foundPI,
+                        indices,
+                        &solmin
+                    );
                 }
                 if (solmin == prevsolmin) {
                     for (int i = 0; i < solmin; i++) {
@@ -597,10 +592,13 @@ void CCubes(const int p_tt[],
         }
         R_Free(p_sorted);
     }
-    R_Free(p_pichart);
-    R_Free(p_implicants);
-    R_Free(p_indx);
-    R_Free(p_ck);
+    free(p_pichart);
+    free(p_implicants);
+    free(p_indx);
+    free(p_ck);
+    free(p_pichart_pos);
+    free(p_implicants_pos);
+    free(p_implicants_val);
     for (int t = 0; t < nthreads; t++) {
         R_Free(buffers[t].implicants);
         R_Free(buffers[t].indx);
@@ -611,7 +609,7 @@ void CCubes(const int p_tt[],
         R_Free(buffers[t].pichart_pos);
     }
     R_Free(buffers);
-    R_Free(covered);
+    free(covered);
     R_Free(last_index);
     R_Free(k_last_index);
     R_Free(*models);

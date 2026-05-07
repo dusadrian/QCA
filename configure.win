@@ -8,6 +8,19 @@ output="${src_dir}/Makevars.win"
 
 gurobi_cppflags=""
 gurobi_libs=""
+pthread_cflags=""
+pthread_cppflags=""
+pthread_libs=""
+warning_cflags=""
+disable_pthread="no"
+
+for arg in "$@"; do
+    case "${arg}" in
+        --disable-pthread|--disable-pthreads)
+            disable_pthread="yes"
+            ;;
+    esac
+done
 
 if [ -n "${GUROBI_HOME}" ]; then
     gurobi_home="${GUROBI_HOME}"
@@ -57,7 +70,68 @@ if [ -n "${gurobi_home}" ]; then
     fi
 fi
 
+if [ "${QCA_DISABLE_PTHREAD}" = "yes" ] || [ "${QCA_DISABLE_PTHREAD}" = "true" ] || [ "${QCA_DISABLE_PTHREAD}" = "1" ]; then
+    disable_pthread="yes"
+fi
+
+if [ -n "${R_HOME}" ] && [ -x "${R_HOME}/bin/R" ]; then
+    R_BIN="${R_HOME}/bin/R"
+else
+    R_BIN="R"
+fi
+
+if [ "${disable_pthread}" = "yes" ]; then
+    echo "configure.win: pthread support disabled"
+    CC=`"${R_BIN}" CMD config CC`
+    CFLAGS=`"${R_BIN}" CMD config CFLAGS`
+    CPPFLAGS=`"${R_BIN}" CMD config CPPFLAGS`
+else
+    CC=`"${R_BIN}" CMD config CC`
+    CFLAGS=`"${R_BIN}" CMD config CFLAGS`
+    CPPFLAGS=`"${R_BIN}" CMD config CPPFLAGS`
+    LDFLAGS=`"${R_BIN}" CMD config LDFLAGS`
+
+    cat > conftest.c <<'EOF'
+#include <pthread.h>
+static void *worker(void *arg) { return arg; }
+int main(void) {
+    pthread_t thread;
+    if (pthread_create(&thread, 0, worker, 0) != 0) return 1;
+    if (pthread_join(thread, 0) != 0) return 1;
+    return 0;
+}
+EOF
+
+    if ${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} conftest.c -o conftest >/dev/null 2>&1; then
+        pthread_cppflags=" -DHAVE_PTHREAD"
+        echo "configure.win: pthread support enabled"
+    elif ${CC} ${CPPFLAGS} ${CFLAGS} -pthread ${LDFLAGS} conftest.c -o conftest -pthread >/dev/null 2>&1; then
+        pthread_cflags=" -pthread"
+        pthread_cppflags=" -DHAVE_PTHREAD"
+        pthread_libs=" -pthread"
+        echo "configure.win: pthread support enabled with -pthread"
+    else
+        echo "configure.win: pthread support not available"
+    fi
+
+    rm -rf conftest conftest.c conftest.o conftest.exe conftest.dSYM
+fi
+
+cat > conftest.c <<'EOF'
+int main(void) { return 0; }
+EOF
+
+if ${CC} ${CPPFLAGS} ${CFLAGS} -Wno-unknown-warning-option -c conftest.c -o conftest.o >/dev/null 2>&1; then
+    warning_cflags=" -Wno-unknown-warning-option"
+fi
+
+rm -rf conftest.c conftest.o
+
 sed \
     -e "s|@QCA_GUROBI_CPPFLAGS@|${gurobi_cppflags}|" \
     -e "s|@QCA_GUROBI_LIBS@|${gurobi_libs}|" \
+    -e "s|@QCA_WARNING_CFLAGS@|${warning_cflags}|" \
+    -e "s|@QCA_PTHREAD_CFLAGS@|${pthread_cflags}|" \
+    -e "s|@QCA_PTHREAD_CPPFLAGS@|${pthread_cppflags}|" \
+    -e "s|@QCA_PTHREAD_LIBS@|${pthread_libs}|" \
     "${template}" > "${output}"

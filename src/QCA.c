@@ -38,12 +38,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "utils.h"
 #include "find_models.h"
 #include "generate_matrix.h"
+#include "qca_threads.h"
 #include "sort_matrix.h"
 #include "CCubes.h"
-#ifdef _OPENMP
-    #undef match
-    #include <omp.h>
-#endif
 static R_INLINE SEXP Rtranspose(SEXP matrix) {
     SEXPTYPE type = TYPEOF(matrix);
     int nr = nrows(matrix);
@@ -387,9 +384,6 @@ SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
                 sum_1_min_y_minx = 0; 
                 sum_1_maxx = 0;       
                 sum_1_min_y_maxx = 0; 
-                #ifdef _OPENMP
-                    #pragma omp parallel for schedule(static) reduction(+:sum_minx,sum_maxx,sum_min_y_minx,sum_min_y_maxx,prisum_minx,prisum_maxx,sum_1_minx,sum_1_maxx,sum_1_min_y_minx,sum_1_min_y_maxx)
-                #endif
                 for (int r = 0; r < xrows; r++) { 
                     double min_local = 1000000;
                     double max_local = 0;
@@ -701,7 +695,7 @@ SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
     return(result);
 }
 SEXP C_QMC(SEXP tt, SEXP noflevels) {
-    SEXP pimat, tempmat, minimized, copymat, order, cl; 
+    SEXP tempmat, copymat, order, cl; 
     int *p_tt, *p_noflevels, *p_pimat, *p_tempmat, *p_minimized, *p_copymat, *p_order,  *p_cl;
     SEXP usage = PROTECT(allocVector(VECSXP, 10));
     SEXP dimnames, colnms;
@@ -726,22 +720,20 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
     int found = 1;
     while (found > 0 && nimplicants > 1) {
         found = 0;
-        SET_VECTOR_ELT(usage, 3, minimized = allocVector(LGLSXP, nimplicants));
-        p_minimized = LOGICAL(minimized);
-        memset(p_minimized, FALSE, nimplicants * sizeof(int));
+        p_minimized = (int *) calloc((size_t) nimplicants, sizeof(int));
         int estimpi = 10000;
-        SET_VECTOR_ELT(usage, 4, pimat = allocMatrix(INTSXP, nconds, estimpi));
-        p_pimat = INTEGER(pimat);
+        p_pimat = (int *) calloc((size_t) nconds * (size_t) estimpi, sizeof(int));
+        Rboolean qmc_alloc_failed = false;
+        if (p_minimized == NULL || p_pimat == NULL) {
+            free(p_minimized);
+            free(p_pimat);
+            error("Memory allocation failed during QMC initialization.");
+        }
         unsigned long long int maxtasks = nchoosek(nimplicants, 2);
-        #ifdef _OPENMP
-            #pragma omp parallel for schedule(static, 1)
-        #endif
         for (unsigned long long int task = 0; task < maxtasks; task++) {
-            #ifndef _OPENMP
-                if (task > 0 && task % 1024 == 0) {
-                    R_CheckUserInterrupt();
-                }
-            #endif
+            if (task > 0 && task % 1024 == 0) {
+                R_CheckUserInterrupt();
+            }
             int combs_local[2];
             unsigned long long int combination = task;
             int x = 0;
@@ -802,50 +794,55 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
                     c++;
                 }
                 if (tominimize == p_noflevels[which]) {
-                    #ifdef _OPENMP
-                        #pragma omp critical
-                    #endif
                     {
-                        for (int i = 0; i < tominimize; i++) {
-                            p_minimized[minrows[i]] = TRUE;
-                        }
-                        int f = 0;
-                        Rboolean Runique = TRUE;
-                        while (f < found && Runique) {
-                            Rboolean equal = TRUE;
-                            int rr = 0;
-                            while (rr < nconds && equal) {
-                                equal = temp_local[rr] == p_pimat[f * nconds + rr];
-                                rr++;
+                        if (!qmc_alloc_failed) {
+                            for (int i = 0; i < tominimize; i++) {
+                                p_minimized[minrows[i]] = TRUE;
                             }
-                            Runique = !equal;
-                            f++;
-                        }
-                        if (Runique) {
-                            if (found == estimpi) {
-                                estimpi *= 2;
-                                int totlent = found * nconds;
-                                SET_VECTOR_ELT(usage, 5, copymat = allocVector(INTSXP, totlent));
-                                p_copymat = INTEGER(copymat);
-                                for (int i = 0; i < totlent; i++) {
-                                    p_copymat[i] = p_pimat[i];
+                            int f = 0;
+                            Rboolean Runique = TRUE;
+                            while (f < found && Runique) {
+                                Rboolean equal = TRUE;
+                                int rr = 0;
+                                while (rr < nconds && equal) {
+                                    equal = temp_local[rr] == p_pimat[f * nconds + rr];
+                                    rr++;
                                 }
-                                SET_VECTOR_ELT(usage, 4, pimat = allocMatrix(INTSXP, nconds, estimpi));
-                                p_pimat = INTEGER(pimat);
-                                for (int i = 0; i < totlent; i++) {
-                                    p_pimat[i] = p_copymat[i];
+                                Runique = !equal;
+                                f++;
+                            }
+                            if (Runique) {
+                                if (found == estimpi) {
+                                    int new_estim = estimpi * 2;
+                                    int *tmp = (int *) realloc(
+                                        p_pimat,
+                                        (size_t) nconds * (size_t) new_estim * sizeof(int)
+                                    );
+                                    if (tmp == NULL) {
+                                        qmc_alloc_failed = true;
+                                    } else {
+                                        p_pimat = tmp;
+                                        estimpi = new_estim;
+                                    }
+                                }
+                                if (!qmc_alloc_failed) {
+                                    for (int rr = 0; rr < nconds; rr++) {
+                                        p_pimat[found * nconds + rr] = temp_local[rr];
+                                    }
+                                    found++;
                                 }
                             }
-                            for (int rr = 0; rr < nconds; rr++) {
-                                p_pimat[found * nconds + rr] = temp_local[rr];
-                            }
-                            found++;
                         }
                     }
                 }
             }
         }
         R_CheckUserInterrupt();
+        if (qmc_alloc_failed) {
+            free(p_minimized);
+            free(p_pimat);
+            error("Memory allocation failed during QMC resize.");
+        }
         int nonmin = 0;
         for (int i = 0; i < nimplicants; i++) {
             nonmin += !p_minimized[i];
@@ -871,6 +868,8 @@ SEXP C_QMC(SEXP tt, SEXP noflevels) {
         for (int i = 0; i < foundlent; i++) {
             p_tempmat[i] = p_copymat[i];
         }
+        free(p_minimized);
+        free(p_pimat);
         nimplicants = ncols(tempmat);
     }
     SET_VECTOR_ELT(usage, 6, order = allocVector(INTSXP, nimplicants));
@@ -1145,55 +1144,90 @@ SEXP C_pof(SEXP x, SEXP y, SEXP nec) {
     UNPROTECT(1);
     return(inclcov);
 }
+typedef struct {
+    int nconds;
+    int *p_k;
+    int *p_noflevels;
+    int *p_result;
+} QCAComplexityContext;
+static int qca_complexity_one(
+    int nconds,
+    int k,
+    const int *p_noflevels
+) {
+    int resum = 0;
+    unsigned long long int maxtasks = nchoosek(nconds, k);
+    for (unsigned long long int task = 0; task < maxtasks; task++) {
+        int tempk[k];
+        unsigned long long int combination = task;
+        int x = 0;
+        for (int i = 0; i < k; i++) {
+            while (1) {
+                unsigned long long int cval = nchoosek(nconds - (x + 1), k - (i + 1));
+                if (cval == 0 || cval > combination) {
+                    break;
+                }
+                combination -= cval;
+                x++;
+            }
+            if (x < 0) {
+                x = 0;
+            }
+            if (x >= nconds) {
+                x = nconds - 1;
+            }
+            tempk[i] = x;
+            x++;
+        }
+        int prod = 1;
+        for (int i = 0; i < k; i++) {
+            prod *= p_noflevels[tempk[i]];
+        }
+        resum += prod;
+    }
+    return resum;
+}
+static void qca_complexity_range_worker(
+    unsigned long long start,
+    unsigned long long end,
+    int worker_id,
+    void *data
+) {
+    QCAComplexityContext *ctx = (QCAComplexityContext *) data;
+    (void) worker_id;
+    for (unsigned long long ck = start; ck < end; ck++) {
+        ctx->p_result[ck] = qca_complexity_one(
+            ctx->nconds,
+            ctx->p_k[ck],
+            ctx->p_noflevels
+        );
+    }
+}
 SEXP C_omplexity(SEXP list) {
     int nconds = INTEGER(VECTOR_ELT(list, 0))[0];
     int lk = length(VECTOR_ELT(list, 1));
     int *p_k = INTEGER(VECTOR_ELT(list, 1));
     int *p_noflevels = INTEGER(VECTOR_ELT(list, 2));
-    SEXP result = PROTECT(allocVector(INTSXP, lk));
-    #ifdef _OPENMP
-        #pragma omp parallel for schedule(static)
-    #endif
-    for (int ck = 0; ck < lk; ck++) {
-        #ifndef _OPENMP
-            if (ck > 0 && ck % 1024 == 0) {
-                R_CheckUserInterrupt();
-            }
-        #endif
-        int resum = 0;
-        int k = p_k[ck];
-        unsigned long long int maxtasks = nchoosek(nconds, k);
-        for (unsigned long long int task = 0; task < maxtasks; task++) {
-            int tempk[k];
-            unsigned long long int combination = task;
-            int x = 0;
-            for (int i = 0; i < k; i++) {
-                while (1) {
-                    unsigned long long int cval = nchoosek(nconds - (x + 1), k - (i + 1));
-                    if (cval == 0 || cval > combination) {
-                        break;
-                    }
-                    combination -= cval;
-                    x++;
-                }
-                if (x < 0) {
-                    x = 0;
-                }
-                if (x >= nconds) {
-                    x = nconds - 1;
-                }
-                tempk[i] = x;
-                x++;
-            }
-            int prod = 1;
-            for (int i = 0; i < k; i++) {
-                prod *= p_noflevels[tempk[i]];
-            }
-            resum += prod;
-        }
-        INTEGER(result)[ck] = resum;
+    int *p_result = (int *) calloc((size_t) lk, sizeof(int));
+    if (p_result == NULL) {
+        error("Memory allocation failed during complexity calculation.");
+    }
+    QCAComplexityContext ctx = {
+        .nconds = nconds,
+        .p_k = p_k,
+        .p_noflevels = p_noflevels,
+        .p_result = p_result
+    };
+    if (!qca_parallel_for((unsigned long long) lk, 0, qca_complexity_range_worker, &ctx)) {
+        free(p_result);
+        error("Failed to start pthread workers for complexity calculation.");
     }
     R_CheckUserInterrupt();
+    SEXP result = PROTECT(allocVector(INTSXP, lk));
+    for (int ck = 0; ck < lk; ck++) {
+        INTEGER(result)[ck] = p_result[ck];
+    }
+    free(p_result);
     UNPROTECT(1);
     return(result);
 }

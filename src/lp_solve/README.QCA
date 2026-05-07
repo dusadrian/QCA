@@ -1,0 +1,27 @@
+This directory contains code derived from the `lp_solve` project,
+internalized in `QCA` for package-internal use.
+
+Provenance
+
+- Original solver project: https://lp-solve.github.io/
+- R wrapper package used as the import base: `lpSolve`
+
+License
+
+- Upstream `lpSolve` declares `License: LGPL-2` in its `DESCRIPTION`.
+- The code in this directory should therefore be treated as third-party
+  code under LGPL-2, as imported from that source.
+
+Local modifications
+
+- The imported code has been substantially pruned and modified for the
+  internal needs of `QCA`.
+- In particular, package-interface code, parser/file I/O code, and
+  multiple generic reporting and solver subsystems were reduced or
+  replaced with compatibility stubs.
+
+Notes
+
+- This file is a local provenance notice added by `QCA`.
+- It does not replace any upstream copyright or license statements that
+  may exist in individual source files.
