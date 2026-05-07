@@ -1,4 +1,4 @@
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include "super_rows.h"
 #include "utils.h"
 #include "consistent_solution.h"

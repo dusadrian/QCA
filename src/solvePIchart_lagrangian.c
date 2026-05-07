@@ -27,10 +27,10 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include "solvePIchart_lagrangian.h"
-#include <R.h>
+#include "qca_rinternals.h"
 #include <R_ext/RS.h>
 #include <R_ext/Utils.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
 #include <stdbool.h>
 #include <float.h>
 #include <math.h>

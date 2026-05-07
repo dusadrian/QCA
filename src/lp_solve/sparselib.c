@@ -8,7 +8,7 @@
 #include "sparselib.h"
 
 #include "lpkit.h"
-#include <R.h>
+#include "qca_r.h"
 
 sparseMatrix *createMatrix(int dimLimit, int lenLimit, int initVectors)
 {

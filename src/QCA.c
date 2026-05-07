@@ -27,12 +27,12 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <R_ext/RS.h>
-#include <R_ext/Boolean.h>
+#include "qca_rinternals.h"
 #include <float.h>
 #include <stdlib.h>
 #include <string.h>
-#include <R.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
+#include "qca_rinternals.h"
 #include <Rmath.h>
 #include <R_ext/Rdynload.h>
 #include "utils.h"

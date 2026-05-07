@@ -5,8 +5,8 @@
 #include "lp_lib.h"
 #include "lp_report.h"
 
-#include <R.h>
-#include <R_ext/Print.h>
+#include "qca_r.h"
+#include "qca_r.h"
 
 #if defined _MSC_VER
 # define vsnprintf _vsnprintf

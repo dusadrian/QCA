@@ -26,9 +26,9 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <R.h>
+#include "qca_r.h"
 #include <R_ext/RS.h>
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include <math.h>
 #include "find_consistent_models.h"
 #include "utils.h"

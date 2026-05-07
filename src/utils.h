@@ -1,4 +1,4 @@
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 #include "row_dominance.h"
 #include "sort_cols.h"
 

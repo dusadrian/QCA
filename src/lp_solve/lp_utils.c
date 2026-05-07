@@ -10,7 +10,7 @@
 # include "lp_fortify.h"
 #endif
 
-#include "R.h"
+#include "qca_r.h"
 
 /*
     Miscellaneous utilities as implemented for lp_solve v5.0+

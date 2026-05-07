@@ -1,4 +1,4 @@
-#include <R_ext/Boolean.h>
+#include "qca_r.h"
 
 Rboolean consistent_solution(
     const double p_data[],      // the raw, calibrated (fuzzy) data

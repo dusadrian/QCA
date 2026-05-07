@@ -26,9 +26,9 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <R.h>
+#include "qca_rinternals.h"
 #include <R_ext/RS.h>
-#include <Rinternals.h>
+#include "qca_rinternals.h"
 #include <string.h>
 #include "findmin_scp.h"
 #include "scp_solver/scp_solver.h"

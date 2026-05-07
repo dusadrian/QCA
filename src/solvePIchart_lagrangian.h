@@ -1,7 +1,7 @@
 #ifndef QCA_SOLVE_PICHART_LAGRANGIAN_H
 #define QCA_SOLVE_PICHART_LAGRANGIAN_H
 
-#include <Rinternals.h>
+#include "qca_rinternals.h"
 
 void solvePIchart_lagrangian(
     int pichart[],
