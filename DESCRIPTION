@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.25
+Version: 3.25.1
 SystemRequirements: POSIX threads (optional)
 Title: Qualitative Comparative Analysis
 Authors@R: c(
