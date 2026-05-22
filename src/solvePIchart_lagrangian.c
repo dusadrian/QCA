@@ -6,6 +6,7 @@
 #include "qca_rinternals.h"
 #include <stdbool.h>
 #include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -136,6 +137,7 @@ typedef struct {
     double phi_min;
     double phi_contract;
     double stabilization_beta;
+    double deflection_alpha;
     double best_zlb;
     double prev_zlb;
     double prev_step;
@@ -145,6 +147,7 @@ typedef struct {
     int have_prev;
     double *best_t;
     double *prev_t;
+    double *prev_direction;
 } lagr_subgradient_state;
 
 static int lagr_state_init(lagr_subgradient_state *state, int rows) {
@@ -154,6 +157,7 @@ static int lagr_state_init(lagr_subgradient_state *state, int rows) {
     state->phi_min = 0.005;
     state->phi_contract = 0.90;
     state->stabilization_beta = 1.0;
+    state->deflection_alpha = 0.0;
     state->best_zlb = -DBL_MAX;
     state->prev_zlb = -DBL_MAX;
     state->prev_step = 0.0;
@@ -163,8 +167,9 @@ static int lagr_state_init(lagr_subgradient_state *state, int rows) {
     state->have_prev = 0;
     state->best_t = (double*) R_Calloc((size_t)rows, double);
     state->prev_t = (double*) R_Calloc((size_t)rows, double);
+    state->prev_direction = (double*) R_Calloc((size_t)rows, double);
 
-    return (state->best_t != NULL && state->prev_t != NULL);
+    return (state->best_t != NULL && state->prev_t != NULL && state->prev_direction != NULL);
 }
 
 static void lagr_state_free(lagr_subgradient_state *state) {
@@ -173,6 +178,8 @@ static void lagr_state_free(lagr_subgradient_state *state) {
     state->best_t = NULL;
     if (state->prev_t) R_Free(state->prev_t);
     state->prev_t = NULL;
+    if (state->prev_direction) R_Free(state->prev_direction);
+    state->prev_direction = NULL;
 }
 
 static void lagr_state_reset_progress(lagr_subgradient_state *state) {
@@ -393,6 +400,9 @@ static int subgradient_update(
         lagr_state_contract_phi(state);
         state->have_prev = 0;
         state->prev_step = 0.0;
+        if (state->prev_direction) {
+            memset(state->prev_direction, 0, (size_t)rows * sizeof(double));
+        }
         return 1;
     }
 
@@ -423,6 +433,14 @@ static int subgradient_update(
     }
 
     R_Free(x);
+
+    if (state->deflection_alpha > 0.0 && state->prev_direction) {
+        sum_s2 = 0.0;
+        for (int i = 0; i < rows; ++i) {
+            slack[i] += state->deflection_alpha * state->prev_direction[i];
+            sum_s2 += slack[i] * slack[i];
+        }
+    }
 
     if (sum_s2 <= 1e-15) {
         R_Free(slack);
@@ -456,6 +474,10 @@ static int subgradient_update(
         t[i] = (val > 0.0) ? val : 0.0;
     }
 
+    if (state->deflection_alpha > 0.0 && state->prev_direction) {
+        Memcpy(state->prev_direction, slack, rows);
+    }
+
     state->stagnation_iter++;
     if (state->stagnation_iter >= state->stagnation_period) {
         state->stagnation_iter = 0;
@@ -466,6 +488,286 @@ static int subgradient_update(
         lagr_state_contract_phi(state);
     }
 
+    R_Free(slack);
+    return 1;
+}
+
+typedef struct {
+    int rows;
+    int memory;
+    int count;
+    int head;
+    double prox_mu;
+    double min_mu;
+    double max_mu;
+    double null_expand;
+    double serious_shrink;
+    double serious_fraction;
+    double serious_tol;
+    double momentum;
+    double center_value;
+    double predicted_gain;
+    double *center_t;
+    double *prev_center_t;
+    double *cut_alpha;
+    double *cut_slacks;
+    int null_streak;
+    int serious_streak;
+    int has_trial;
+} LagrangianBundleState;
+
+static void bundle_project_simplex(double *v, int n) {
+    if (!v || n <= 0) return;
+
+    double *u = (double*) R_Calloc((size_t)n, double);
+    if (!u) {
+        double uniform = 1.0 / (double)n;
+        for (int i = 0; i < n; ++i) v[i] = uniform;
+        return;
+    }
+
+    Memcpy(u, v, n);
+    for (int i = 1; i < n; ++i) {
+        double key = u[i];
+        int j = i - 1;
+        while (j >= 0 && u[j] < key) {
+            u[j + 1] = u[j];
+            --j;
+        }
+        u[j + 1] = key;
+    }
+
+    double cssv = 0.0;
+    int rho = 0;
+    for (int i = 0; i < n; ++i) {
+        cssv += u[i];
+        double theta = (cssv - 1.0) / (double)(i + 1);
+        if (u[i] - theta > 0.0) rho = i + 1;
+    }
+
+    cssv = 0.0;
+    for (int i = 0; i < rho; ++i) cssv += u[i];
+    double theta = rho > 0 ? (cssv - 1.0) / (double)rho : 0.0;
+
+    for (int i = 0; i < n; ++i) {
+        double projected = v[i] - theta;
+        v[i] = projected > 0.0 ? projected : 0.0;
+    }
+
+    R_Free(u);
+}
+
+static int bundle_update(
+    int rows,
+    int cols,
+    int **colsCovering,
+    int *colsCoveringCount,
+    const double *ls,
+    double UB,
+    double ZLB,
+    double *t,
+    LagrangianBundleState *bs
+) {
+    if (!bs || bs->memory <= 0 || !bs->center_t || !bs->cut_alpha || !bs->cut_slacks) {
+        return 0;
+    }
+
+    unsigned char *x = (unsigned char*) R_Calloc((size_t)cols, unsigned char);
+    if (!x) return 0;
+
+    for (int c = 0; c < cols; ++c) {
+        x[c] = (ls[c] < 0.0) ? 1 : 0;
+    }
+
+    double *slack = (double*) R_Calloc((size_t)rows, double);
+    if (!slack) {
+        R_Free(x);
+        return 0;
+    }
+
+    double sum_s2 = 0.0;
+    for (int r = 0; r < rows; ++r) {
+        int covered = 0;
+        for (int k = 0; k < colsCoveringCount[r]; ++k) {
+            int c = colsCovering[r][k];
+            covered += x[c];
+        }
+        slack[r] = 1.0 - (double)covered;
+        sum_s2 += slack[r] * slack[r];
+    }
+
+    R_Free(x);
+
+    if (sum_s2 <= 1e-15 || UB - ZLB <= 0.0) {
+        R_Free(slack);
+        return 0;
+    }
+
+    if (bs->center_value <= -DBL_MAX / 2.0) {
+        Memcpy(bs->center_t, t, rows);
+        if (bs->prev_center_t) {
+            Memcpy(bs->prev_center_t, t, rows);
+        }
+        bs->center_value = ZLB;
+        bs->has_trial = 0;
+    } else if (bs->has_trial) {
+        double actual_gain = ZLB - bs->center_value;
+        if (actual_gain > bs->serious_tol) {
+            if (bs->prev_center_t) {
+                Memcpy(bs->prev_center_t, bs->center_t, rows);
+            }
+            Memcpy(bs->center_t, t, rows);
+            bs->center_value = ZLB;
+            bs->prox_mu = fmax(bs->min_mu, bs->prox_mu * bs->serious_shrink);
+            bs->serious_streak++;
+            bs->null_streak = 0;
+        } else {
+            bs->prox_mu = fmin(bs->max_mu, bs->prox_mu * bs->null_expand);
+            bs->null_streak++;
+            bs->serious_streak = 0;
+        }
+        bs->has_trial = 0;
+    } else if (ZLB > bs->center_value + bs->serious_tol) {
+        if (bs->prev_center_t) {
+            Memcpy(bs->prev_center_t, bs->center_t, rows);
+        }
+        Memcpy(bs->center_t, t, rows);
+        bs->center_value = ZLB;
+        bs->serious_streak++;
+        bs->null_streak = 0;
+    } else {
+        bs->prox_mu = fmin(bs->max_mu, bs->prox_mu * bs->null_expand);
+        bs->null_streak++;
+        bs->serious_streak = 0;
+    }
+
+    double dot_gt = 0.0;
+    for (int r = 0; r < rows; ++r) dot_gt += slack[r] * t[r];
+    double alpha = -ZLB + dot_gt;
+
+    if (bs->count < bs->memory) {
+        int slot = (bs->head + bs->count) % bs->memory;
+        Memcpy(bs->cut_slacks + (size_t)slot * (size_t)rows, slack, rows);
+        bs->cut_alpha[slot] = alpha;
+        bs->count++;
+    } else {
+        int slot = bs->head;
+        Memcpy(bs->cut_slacks + (size_t)slot * (size_t)rows, slack, rows);
+        bs->cut_alpha[slot] = alpha;
+        bs->head = (bs->head + 1) % bs->memory;
+    }
+
+    int m = bs->count;
+    if (m <= 0 || (bs->prox_mu >= bs->max_mu - 1e-12 && bs->null_streak >= bs->memory * 8)) {
+        R_Free(slack);
+        return 0;
+    }
+
+    double *base_t = (double*) R_Calloc((size_t)rows, double);
+    double *linear = (double*) R_Calloc((size_t)m, double);
+    double *gram = (double*) R_Calloc((size_t)m * (size_t)m, double);
+    double *lambda = (double*) R_Calloc((size_t)m, double);
+    double *gradient = (double*) R_Calloc((size_t)m, double);
+    double *gbar = (double*) R_Calloc((size_t)rows, double);
+    if (!base_t || !linear || !gram || !lambda || !gradient || !gbar) {
+        if (base_t) R_Free(base_t);
+        if (linear) R_Free(linear);
+        if (gram) R_Free(gram);
+        if (lambda) R_Free(lambda);
+        if (gradient) R_Free(gradient);
+        if (gbar) R_Free(gbar);
+        R_Free(slack);
+        return 0;
+    }
+
+    for (int r = 0; r < rows; ++r) {
+        double base = bs->center_t[r];
+        if (bs->momentum > 0.0 && bs->prev_center_t && bs->serious_streak > 0) {
+            base += bs->momentum * (bs->center_t[r] - bs->prev_center_t[r]);
+        }
+        base_t[r] = base > 0.0 ? base : 0.0;
+    }
+
+    int start = bs->head;
+    for (int i = 0; i < m; ++i) {
+        int slot_i = (start + i) % bs->memory;
+        const double *g_i = bs->cut_slacks + (size_t)slot_i * (size_t)rows;
+        double dot_center = 0.0;
+        for (int r = 0; r < rows; ++r) dot_center += g_i[r] * base_t[r];
+        linear[i] = bs->cut_alpha[slot_i] - dot_center;
+
+        for (int j = i; j < m; ++j) {
+            int slot_j = (start + j) % bs->memory;
+            const double *g_j = bs->cut_slacks + (size_t)slot_j * (size_t)rows;
+            double dot = 0.0;
+            for (int r = 0; r < rows; ++r) dot += g_i[r] * g_j[r];
+            gram[i * m + j] = dot;
+            gram[j * m + i] = dot;
+        }
+    }
+
+    double max_row_sum = 0.0;
+    for (int i = 0; i < m; ++i) {
+        double row_sum = 0.0;
+        for (int j = 0; j < m; ++j) row_sum += fabs(gram[i * m + j]);
+        if (row_sum > max_row_sum) max_row_sum = row_sum;
+    }
+
+    double pg_step = 1.0 / ((max_row_sum / bs->prox_mu) + 1e-9);
+    for (int i = 0; i < m; ++i) lambda[i] = 1.0 / (double)m;
+
+    for (int iter = 0; iter < 80; ++iter) {
+        for (int i = 0; i < m; ++i) {
+            double gram_lambda = 0.0;
+            for (int j = 0; j < m; ++j) gram_lambda += gram[i * m + j] * lambda[j];
+            gradient[i] = linear[i] - gram_lambda / bs->prox_mu;
+        }
+
+        for (int i = 0; i < m; ++i) lambda[i] += pg_step * gradient[i];
+        bundle_project_simplex(lambda, m);
+    }
+
+    for (int i = 0; i < m; ++i) {
+        int slot = (start + i) % bs->memory;
+        const double *g_i = bs->cut_slacks + (size_t)slot * (size_t)rows;
+        for (int r = 0; r < rows; ++r) gbar[r] += lambda[i] * g_i[r];
+    }
+
+    for (int r = 0; r < rows; ++r) {
+        double next = base_t[r] + gbar[r] / bs->prox_mu;
+        t[r] = next > 0.0 ? next : 0.0;
+    }
+
+    double model_f = -DBL_MAX;
+    for (int i = 0; i < m; ++i) {
+        int slot = (start + i) % bs->memory;
+        const double *g_i = bs->cut_slacks + (size_t)slot * (size_t)rows;
+        double cut = bs->cut_alpha[slot];
+        for (int r = 0; r < rows; ++r) cut -= g_i[r] * t[r];
+        if (cut > model_f) model_f = cut;
+    }
+
+    double predicted_gain = -bs->center_value - model_f;
+    if (predicted_gain <= bs->serious_tol) {
+        R_Free(base_t);
+        R_Free(linear);
+        R_Free(gram);
+        R_Free(lambda);
+        R_Free(gradient);
+        R_Free(gbar);
+        R_Free(slack);
+        return 0;
+    }
+
+    bs->predicted_gain = predicted_gain;
+    bs->has_trial = 1;
+
+    R_Free(base_t);
+    R_Free(linear);
+    R_Free(gram);
+    R_Free(lambda);
+    R_Free(gradient);
+    R_Free(gbar);
     R_Free(slack);
     return 1;
 }
@@ -758,84 +1060,15 @@ static double solution_total_weight(const int *sol, int sol_len, const double *w
     return s;
 }
 
-static int lagr_local_passes_from_env(void) {
-    static int cached = -1;
-    if (cached >= 0) return cached;
-
-    int def = 10;
-    const char *env = getenv("CCUBES_LAGR_LOCAL_PASSES");
-    if (env) {
-        long v = strtol(env, NULL, 10);
-        if (v >= 0 && v < 100000000) {
-            cached = (int)v;
-            return cached;
-        }
-    }
-
-    cached = def;
-    return cached;
-}
-
-static int lagr_small_gap_threshold_from_env(void) {
-    static int cached = -1;
-    if (cached >= 0) return cached;
-
-    int def = 2;
-    const char *env = getenv("CCUBES_LAGR_SMALL_GAP");
-    if (env) {
-        long v = strtol(env, NULL, 10);
-        if (v >= 0 && v < 100000000) {
-            cached = (int)v;
-            return cached;
-        }
-    }
-
-    cached = def;
-    return cached;
-}
-
-static int lagr_small_gap_extra_passes_from_env(void) {
-    static int cached = -1;
-    if (cached >= 0) return cached;
-
-    int def = 20;
-    const char *env = getenv("CCUBES_LAGR_SMALL_GAP_PASSES");
-    if (env) {
-        long v = strtol(env, NULL, 10);
-        if (v >= 0 && v < 100000000) {
-            cached = (int)v;
-            return cached;
-        }
-    }
-
-    cached = def;
-    return cached;
-}
-
-static int lagr_use_rarity_init_from_env(void) {
-    static int cached = -1;
-    if (cached >= 0) return cached;
-
-    int def = 1;
-    const char *env = getenv("CCUBES_LAGR_RARITY_INIT");
-    if (env) {
-        long v = strtol(env, NULL, 10);
-        cached = (v != 0);
-        return cached;
-    }
-
-    cached = def;
-    return cached;
-}
-
 static void lagr_initialize_multipliers(
     int rows,
     const int *colsCoveringCount,
+    int rarity_init,
     double *t
 ) {
     if (!t || rows <= 0) return;
 
-    if (!lagr_use_rarity_init_from_env() || !colsCoveringCount) {
+    if (!rarity_init || !colsCoveringCount) {
         for (int i = 0; i < rows; ++i) {
             t[i] = 1.0;
         }
@@ -1220,45 +1453,358 @@ static void local_search_drop2_repair(
     R_Free(cand);
 }
 
-void solvePIchart_lagrangian(
-    int pichart[],
-    const int foundPI,
-    const int ON_minterms,
+
+typedef struct {
+    int col;
+    int new_cover;
+    int cover_count;
+    double lagr_score;
+    double weight;
+} PolishCandidate;
+
+typedef struct {
+    int rows;
+    int cols;
+    int **rowsCovered;
+    int *rowsCoveredCount;
+    int **colsCovering;
+    int *colsCoveringCount;
+    const double *lagr_score;
+    const double *weights;
+    int target;
+    long node_limit;
+    long nodes;
+    int *coverCount;
+    unsigned char *colSelected;
+    int *chosen;
+    int *out;
+} PolishSearch;
+
+static bool polish_candidate_better(const PolishCandidate *a, const PolishCandidate *b) {
+    if (a->new_cover != b->new_cover) return a->new_cover > b->new_cover;
+    if (fabs(a->lagr_score - b->lagr_score) > EPS) return a->lagr_score < b->lagr_score;
+    if (a->cover_count != b->cover_count) return a->cover_count > b->cover_count;
+    if (fabs(a->weight - b->weight) > EPS) return a->weight > b->weight;
+    return a->col < b->col;
+}
+
+static void polish_sort_candidates(PolishCandidate *candidates, int count) {
+    for (int i = 1; i < count; ++i) {
+        PolishCandidate value = candidates[i];
+        int j = i - 1;
+        while (j >= 0 && polish_candidate_better(&value, &candidates[j])) {
+            candidates[j + 1] = candidates[j];
+            --j;
+        }
+        candidates[j + 1] = value;
+    }
+}
+
+static int polish_new_cover(
+    const PolishSearch *search,
+    int col
+) {
+    int new_cover = 0;
+    for (int i = 0; i < search->rowsCoveredCount[col]; ++i) {
+        int row = search->rowsCovered[col][i];
+        if (search->coverCount[row] == 0) ++new_cover;
+    }
+    return new_cover;
+}
+
+static int polish_choose_row(
+    const PolishSearch *search,
+    int uncovered,
+    int slots_left
+) {
+    int best_row = -1;
+    int best_count = INT_MAX;
+    int max_new_cover = 0;
+
+    for (int row = 0; row < search->rows; ++row) {
+        if (search->coverCount[row] > 0) continue;
+
+        int viable = 0;
+        for (int i = 0; i < search->colsCoveringCount[row]; ++i) {
+            int col = search->colsCovering[row][i];
+            if (search->colSelected[col]) continue;
+            int new_cover = polish_new_cover(search, col);
+            if (new_cover <= 0) continue;
+            ++viable;
+            if (new_cover > max_new_cover) max_new_cover = new_cover;
+        }
+
+        if (viable == 0) return -1;
+        if (viable < best_count) {
+            best_count = viable;
+            best_row = row;
+        }
+    }
+
+    if (max_new_cover <= 0) return -1;
+    if (uncovered > slots_left * max_new_cover) return -1;
+    return best_row;
+}
+
+static bool polish_search_rec(
+    PolishSearch *search,
+    int depth,
+    int covered
+) {
+    if (covered >= search->rows) {
+        Memcpy(search->out, search->chosen, depth);
+        return true;
+    }
+
+    if (depth >= search->target) return false;
+    if (search->nodes++ >= search->node_limit) return false;
+
+    int slots_left = search->target - depth;
+    int uncovered = search->rows - covered;
+    int row = polish_choose_row(search, uncovered, slots_left);
+    if (row < 0) return false;
+
+    int raw_count = search->colsCoveringCount[row];
+    PolishCandidate *candidates = (PolishCandidate*) R_Calloc((size_t)raw_count, PolishCandidate);
+    if (!candidates) return false;
+
+    int candidate_count = 0;
+    for (int i = 0; i < raw_count; ++i) {
+        int col = search->colsCovering[row][i];
+        if (search->colSelected[col]) continue;
+
+        int new_cover = polish_new_cover(search, col);
+        if (new_cover <= 0) continue;
+
+        candidates[candidate_count++] = (PolishCandidate){
+            .col = col,
+            .new_cover = new_cover,
+            .cover_count = search->rowsCoveredCount[col],
+            .lagr_score = search->lagr_score ? search->lagr_score[col] : 0.0,
+            .weight = search->weights ? search->weights[col] : 0.0
+        };
+    }
+
+    polish_sort_candidates(candidates, candidate_count);
+
+    for (int i = 0; i < candidate_count; ++i) {
+        int col = candidates[i].col;
+        int added = 0;
+
+        search->colSelected[col] = 1;
+        search->chosen[depth] = col;
+
+        for (int j = 0; j < search->rowsCoveredCount[col]; ++j) {
+            int covered_row = search->rowsCovered[col][j];
+            if (search->coverCount[covered_row] == 0) ++added;
+            ++search->coverCount[covered_row];
+        }
+
+        if (polish_search_rec(search, depth + 1, covered + added)) {
+            R_Free(candidates);
+            return true;
+        }
+
+        for (int j = 0; j < search->rowsCoveredCount[col]; ++j) {
+            int covered_row = search->rowsCovered[col][j];
+            --search->coverCount[covered_row];
+        }
+
+        search->colSelected[col] = 0;
+    }
+
+    R_Free(candidates);
+    return false;
+}
+
+static int polish_find_smaller_cover(
+    int rows,
+    int cols,
+    int **rowsCovered,
+    int *rowsCoveredCount,
+    int **colsCovering,
+    int *colsCoveringCount,
+    const double *lagr_score,
+    const double *weights,
+    int target,
+    long node_limit,
+    int *out
+) {
+    if (target <= 0 || node_limit <= 0) return 0;
+
+    int *coverCount = (int*) R_Calloc((size_t)rows, int);
+    unsigned char *colSelected = (unsigned char*) R_Calloc((size_t)cols, unsigned char);
+    int *chosen = (int*) R_Calloc((size_t)target, int);
+
+    if (!coverCount || !colSelected || !chosen) {
+        if (coverCount) R_Free(coverCount);
+        if (colSelected) R_Free(colSelected);
+        if (chosen) R_Free(chosen);
+        return 0;
+    }
+
+    PolishSearch search = {
+        .rows = rows,
+        .cols = cols,
+        .rowsCovered = rowsCovered,
+        .rowsCoveredCount = rowsCoveredCount,
+        .colsCovering = colsCovering,
+        .colsCoveringCount = colsCoveringCount,
+        .lagr_score = lagr_score,
+        .weights = weights,
+        .target = target,
+        .node_limit = node_limit,
+        .nodes = 0,
+        .coverCount = coverCount,
+        .colSelected = colSelected,
+        .chosen = chosen,
+        .out = out
+    };
+
+    int found = polish_search_rec(&search, 0, 0) ? 1 : 0;
+
+    R_Free(coverCount);
+    R_Free(colSelected);
+    R_Free(chosen);
+
+    return found;
+}
+
+typedef struct {
+    int max_iter;
+    int heur_every;
+    int local_passes;
+    int small_gap_threshold;
+    int small_gap_extra_passes;
+    double step_coef;
+    double step_min;
+    int halve_period;
+    double phi_contract;
+    double stabilization_beta;
+    int rarity_init;
+    double deflection_alpha;
+    int polish_enabled;
+    long polish_node_limit;
+    int portfolio_enabled;
+    int portfolio_max_profiles;
+    double portfolio_deflection_alpha;
+    int hybrid_bundle_portfolio;
+    int bundle_enabled;
+    int bundle_interval;
+    int bundle_memory;
+    double bundle_prox_mu;
+    double bundle_min_mu;
+    double bundle_max_mu;
+    double bundle_null_expand;
+    double bundle_serious_shrink;
+    double bundle_serious_fraction;
+    double bundle_serious_tol;
+    double bundle_momentum;
+} LagrangianConfig;
+
+#define LAGR_PORTFOLIO_PROFILE_COUNT 6
+
+static int lagr_max_int(int a, int b) {
+    return a > b ? a : b;
+}
+
+static void lagr_config_for_best_bound(LagrangianConfig *cfg) {
+    cfg->max_iter = 20000;
+    cfg->heur_every = 1;
+    cfg->local_passes = 10;
+    cfg->small_gap_threshold = 0;
+    cfg->small_gap_extra_passes = cfg->local_passes;
+    cfg->step_coef = 2.0;
+    cfg->step_min = 0.005;
+    cfg->halve_period = 8;
+    cfg->phi_contract = 0.95;
+    cfg->stabilization_beta = 1.0;
+    cfg->rarity_init = 0;
+    cfg->deflection_alpha = 0.0;
+    cfg->polish_enabled = 1;
+    cfg->polish_node_limit = 5000;
+    cfg->portfolio_enabled = 1;
+    cfg->portfolio_max_profiles = 6;
+    cfg->portfolio_deflection_alpha = 0.75;
+    cfg->hybrid_bundle_portfolio = 1;
+    cfg->bundle_enabled = 0;
+    cfg->bundle_interval = 8;
+    cfg->bundle_memory = 8;
+    cfg->bundle_prox_mu = 8.0;
+    cfg->bundle_min_mu = 1.0;
+    cfg->bundle_max_mu = 1024.0;
+    cfg->bundle_null_expand = 2.0;
+    cfg->bundle_serious_shrink = 0.8;
+    cfg->bundle_serious_fraction = 0.05;
+    cfg->bundle_serious_tol = 1e-9;
+    cfg->bundle_momentum = 0.35;
+}
+
+static int lagr_build_portfolio_configs(
+    const LagrangianConfig *baseline,
+    double deflection_alpha,
+    LagrangianConfig profiles[LAGR_PORTFOLIO_PROFILE_COUNT]
+) {
+    profiles[0] = *baseline;
+
+    if (baseline->hybrid_bundle_portfolio) {
+        LagrangianConfig bundle = *baseline;
+        bundle.bundle_enabled = 1;
+        bundle.deflection_alpha = 0.0;
+
+        profiles[1] = *baseline;
+        profiles[1].deflection_alpha = deflection_alpha;
+
+        profiles[2] = bundle;
+        profiles[2].deflection_alpha = 0.0;
+
+        profiles[3] = bundle;
+        profiles[3].deflection_alpha = deflection_alpha;
+
+        profiles[4] = *baseline;
+        profiles[4].max_iter = 500;
+        profiles[4].phi_contract = 0.99;
+        profiles[4].deflection_alpha = 0.0;
+
+        profiles[5] = profiles[4];
+        profiles[5].deflection_alpha = deflection_alpha;
+
+        return LAGR_PORTFOLIO_PROFILE_COUNT;
+    }
+
+    profiles[1] = *baseline;
+    profiles[1].deflection_alpha = deflection_alpha;
+
+    profiles[2] = *baseline;
+    profiles[2].max_iter = lagr_max_int(baseline->max_iter, 80000);
+    profiles[2].halve_period = lagr_max_int(baseline->halve_period, 16);
+
+    profiles[3] = profiles[2];
+    profiles[3].deflection_alpha = deflection_alpha;
+
+    return 4;
+}
+
+static void solvePIchart_lagrangian_core(
+    int rows,
+    int cols,
+    int **rowsCovered,
+    int *rowsCoveredCount,
+    int **colsCovering,
+    int *colsCoveringCount,
     const double weights[],
+    const LagrangianConfig *cfg,
     int *solution,
     int *solmin,
     double *best_lb_out,
     double *lagr_score_out
 ) {
     *solmin = -1;
-    if (!pichart || foundPI <= 0 || ON_minterms <= 0 || !solution || !solmin) return;
+    if (rows <= 0 || cols <= 0 || !rowsCovered || !rowsCoveredCount || !colsCovering || !colsCoveringCount || !cfg || !solution || !solmin) return;
 
-    int **rowsCovered = NULL, *rowsCoveredCount = NULL;
-    int **colsCovering = NULL, *colsCoveringCount = NULL;
-
-    int rc_ad = build_adjacency(
-        pichart,
-        ON_minterms,
-        foundPI,
-        &rowsCovered,
-        &rowsCoveredCount,
-        &colsCovering,
-        &colsCoveringCount
-    );
-
-    if (rc_ad == -2 || rc_ad == -1) {
-        *solmin = -1;
-        if (best_lb_out) *best_lb_out = -DBL_MAX;
-        if (lagr_score_out) {
-            for (int c = 0; c < foundPI; ++c) lagr_score_out[c] = 0.0;
-        }
-        return;
-    }
-
-    int rows = ON_minterms, cols = foundPI;
-    int local_passes = lagr_local_passes_from_env();
-    int small_gap_threshold = lagr_small_gap_threshold_from_env();
-    int small_gap_extra_passes = lagr_small_gap_extra_passes_from_env();
+    int local_passes = cfg->local_passes;
+    int small_gap_threshold = cfg->small_gap_threshold;
+    int small_gap_extra_passes = cfg->small_gap_extra_passes;
 
     double *t = (double*) R_Calloc((size_t)rows, double);
     double *ls = (double*) R_Calloc((size_t)cols, double);
@@ -1267,6 +1813,7 @@ void solvePIchart_lagrangian(
     int *sol_tmp3 = (int*) R_Calloc((size_t)cols, int);
     int best_sol_size = -1;
     lagr_subgradient_state sg_state = (lagr_subgradient_state){0};
+    LagrangianBundleState bundle_state = {0};
 
     if (!t || !ls || !sol_tmp || !sol_tmp2 || !sol_tmp3 || !lagr_state_init(&sg_state, rows)) {
         if (t) R_Free(t);
@@ -1275,7 +1822,6 @@ void solvePIchart_lagrangian(
         if (sol_tmp2) R_Free(sol_tmp2);
         if (sol_tmp3) R_Free(sol_tmp3);
         lagr_state_free(&sg_state);
-        free_adjacency(rowsCovered, rowsCoveredCount, cols, colsCovering, colsCoveringCount, rows);
         *solmin = -1;
         if (best_lb_out) *best_lb_out = -DBL_MAX;
         if (lagr_score_out) {
@@ -1284,47 +1830,54 @@ void solvePIchart_lagrangian(
         return;
     }
 
-    int max_iter = 20000;
-    int heur_every = 1;
+    int max_iter = cfg->max_iter;
+    int heur_every = cfg->heur_every;
+    sg_state.phi = cfg->step_coef;
+    sg_state.phi_min = cfg->step_min;
+    sg_state.stagnation_period = cfg->halve_period;
+    sg_state.phi_contract = cfg->phi_contract;
+    sg_state.stabilization_beta = cfg->stabilization_beta;
+    sg_state.deflection_alpha = cfg->deflection_alpha;
 
-    const char *s_env = NULL;
-    s_env = getenv("CCUBES_LAGR_MAX_ITER");
-    if (s_env) {
-        long v = strtol(s_env, NULL, 10);
-        if (v > 10 && v < 50000000) max_iter = (int)v;
-    }
-    s_env = getenv("CCUBES_LAGR_HEUR_EVERY");
-    if (s_env) {
-        long v = strtol(s_env, NULL, 10);
-        if (v >= 1 && v < 10000) heur_every = (int)v;
-    }
-    s_env = getenv("CCUBES_LAGR_STEP_COEF");
-    if (s_env) {
-        double v = strtod(s_env, NULL);
-        if (v > 0.0 && v < 1000.0) sg_state.phi = v;
-    }
-    s_env = getenv("CCUBES_LAGR_STEP_MIN");
-    if (s_env) {
-        double v = strtod(s_env, NULL);
-        if (v > 0.0 && v < sg_state.phi) sg_state.phi_min = v;
-    }
-    s_env = getenv("CCUBES_LAGR_HALVE_PERIOD");
-    if (s_env) {
-        long v = strtol(s_env, NULL, 10);
-        if (v >= 1 && v < 10000) sg_state.stagnation_period = (int)v;
-    }
-    s_env = getenv("CCUBES_LAGR_PHI_CONTRACT");
-    if (s_env) {
-        double v = strtod(s_env, NULL);
-        if (v > 0.0 && v < 1.0) sg_state.phi_contract = v;
-    }
-    s_env = getenv("CCUBES_LAGR_STABILIZATION_BETA");
-    if (s_env) {
-        double v = strtod(s_env, NULL);
-        if (v > 0.0 && v <= 1.0) sg_state.stabilization_beta = v;
+    if (cfg->bundle_enabled) {
+        int memory = cfg->bundle_memory > 0 ? cfg->bundle_memory : 1;
+        bundle_state.rows = rows;
+        bundle_state.memory = memory;
+        bundle_state.prox_mu = cfg->bundle_prox_mu;
+        bundle_state.min_mu = cfg->bundle_min_mu;
+        bundle_state.max_mu = cfg->bundle_max_mu;
+        bundle_state.null_expand = cfg->bundle_null_expand;
+        bundle_state.serious_shrink = cfg->bundle_serious_shrink;
+        bundle_state.serious_fraction = cfg->bundle_serious_fraction;
+        bundle_state.serious_tol = cfg->bundle_serious_tol;
+        bundle_state.momentum = cfg->bundle_momentum;
+        bundle_state.center_value = -DBL_MAX;
+        bundle_state.center_t = (double*) R_Calloc((size_t)rows, double);
+        bundle_state.prev_center_t = (double*) R_Calloc((size_t)rows, double);
+        bundle_state.cut_alpha = (double*) R_Calloc((size_t)memory, double);
+        bundle_state.cut_slacks = (double*) R_Calloc((size_t)memory * (size_t)rows, double);
+        if (!bundle_state.center_t || !bundle_state.prev_center_t ||
+            !bundle_state.cut_alpha || !bundle_state.cut_slacks) {
+            if (bundle_state.center_t) R_Free(bundle_state.center_t);
+            if (bundle_state.prev_center_t) R_Free(bundle_state.prev_center_t);
+            if (bundle_state.cut_alpha) R_Free(bundle_state.cut_alpha);
+            if (bundle_state.cut_slacks) R_Free(bundle_state.cut_slacks);
+            R_Free(t);
+            R_Free(ls);
+            R_Free(sol_tmp);
+            R_Free(sol_tmp2);
+            R_Free(sol_tmp3);
+            lagr_state_free(&sg_state);
+            *solmin = -1;
+            if (best_lb_out) *best_lb_out = -DBL_MAX;
+            if (lagr_score_out) {
+                for (int c = 0; c < cols; ++c) lagr_score_out[c] = 0.0;
+            }
+            return;
+        }
     }
 
-    lagr_initialize_multipliers(rows, colsCoveringCount, t);
+    lagr_initialize_multipliers(rows, colsCoveringCount, cfg->rarity_init, t);
 
     compute_reduced_and_lb(rows, cols, rowsCovered, rowsCoveredCount, t, ls);
 
@@ -1366,7 +1919,10 @@ void solvePIchart_lagrangian(
         R_Free(sol_tmp2);
         R_Free(sol_tmp3);
         lagr_state_free(&sg_state);
-        free_adjacency(rowsCovered, rowsCoveredCount, cols, colsCovering, colsCoveringCount, rows);
+        if (bundle_state.center_t) R_Free(bundle_state.center_t);
+        if (bundle_state.prev_center_t) R_Free(bundle_state.prev_center_t);
+        if (bundle_state.cut_alpha) R_Free(bundle_state.cut_alpha);
+        if (bundle_state.cut_slacks) R_Free(bundle_state.cut_slacks);
         *solmin = -1;
         if (best_lb_out) *best_lb_out = -DBL_MAX;
         if (lagr_score_out) {
@@ -1455,6 +2011,7 @@ void solvePIchart_lagrangian(
             }
 
             if (small_gap_extra_passes > local_passes &&
+                small_gap_threshold > 0 &&
                 bestTerms < INT_MAX &&
                 bestTerms - (int) LBint <= small_gap_threshold) {
                 polish_candidate_solution(rows, cols, rowsCovered, rowsCoveredCount,
@@ -1511,12 +2068,35 @@ void solvePIchart_lagrangian(
 
         if (bestUB <= LBint + EPS) break;
 
-        int updated = subgradient_update(
-            rows, cols, colsCovering, colsCoveringCount,
-            ls, bestUB, ZLB, t, &sg_state
-        );
+        int used_subgradient_update = 0;
+        int updated = 0;
 
-        if (!updated || sg_state.phi <= sg_state.phi_min + EPS) {
+        int use_bundle_update = cfg->bundle_enabled &&
+            (cfg->bundle_interval <= 1 || it % cfg->bundle_interval == 0);
+
+        if (use_bundle_update) {
+            updated = bundle_update(
+                rows,
+                cols,
+                colsCovering,
+                colsCoveringCount,
+                ls,
+                bestUB,
+                ZLB,
+                t,
+                &bundle_state
+            );
+        }
+
+        if (!use_bundle_update || !updated) {
+            updated = subgradient_update(
+                rows, cols, colsCovering, colsCoveringCount,
+                ls, bestUB, ZLB, t, &sg_state
+            );
+            used_subgradient_update = 1;
+        }
+
+        if (!updated || (used_subgradient_update && sg_state.phi <= sg_state.phi_min + EPS)) {
             heuristic_row_min_rc(
                 rows, cols, rowsCovered, rowsCoveredCount,
                 colsCovering, colsCoveringCount,
@@ -1546,6 +2126,7 @@ void solvePIchart_lagrangian(
             }
 
             if (small_gap_extra_passes > local_passes &&
+                small_gap_threshold > 0 &&
                 bestTerms < INT_MAX &&
                 bestTerms - (int) ceil(bestLB - 1e-12) <= small_gap_threshold) {
                 polish_candidate_solution(rows, cols, rowsCovered, rowsCoveredCount,
@@ -1599,6 +2180,33 @@ void solvePIchart_lagrangian(
         }
     }
 
+    if (cfg->polish_enabled && best_sol_size > 1) {
+        int polish_target = best_sol_size - 1;
+        if (
+            bestLB >= (double)polish_target - EPS &&
+            bestLB <= (double)polish_target + EPS &&
+            polish_find_smaller_cover(
+                rows, cols,
+                rowsCovered, rowsCoveredCount,
+                colsCovering, colsCoveringCount,
+                ls, weights,
+                polish_target,
+                cfg->polish_node_limit,
+                sol_tmp
+            )
+        ) {
+            best_sol_size = polish_target;
+            bestUB = (double)polish_target;
+            bestTerms = polish_target;
+            bestWeight = solution_total_weight(sol_tmp, polish_target, weights);
+            Memcpy(solution, sol_tmp, polish_target);
+        }
+    }
+
+    (void)bestUB;
+    (void)bestTerms;
+    (void)bestWeight;
+
     *solmin = best_sol_size;
     if (best_lb_out) *best_lb_out = bestLB;
     if (lagr_score_out) {
@@ -1611,6 +2219,126 @@ void solvePIchart_lagrangian(
     R_Free(sol_tmp2);
     R_Free(sol_tmp3);
     lagr_state_free(&sg_state);
+    if (bundle_state.center_t) R_Free(bundle_state.center_t);
+    if (bundle_state.prev_center_t) R_Free(bundle_state.prev_center_t);
+    if (bundle_state.cut_alpha) R_Free(bundle_state.cut_alpha);
+    if (bundle_state.cut_slacks) R_Free(bundle_state.cut_slacks);
+}
+
+
+void solvePIchart_lagrangian(
+    int pichart[],
+    const int foundPI,
+    const int ON_minterms,
+    const double weights[],
+    int *solution,
+    int *solmin,
+    double *best_lb_out,
+    double *lagr_score_out
+) {
+    if (solmin) *solmin = -1;
+    if (!pichart || foundPI <= 0 || ON_minterms <= 0 || !solution || !solmin) return;
+
+    int **rowsCovered = NULL, *rowsCoveredCount = NULL;
+    int **colsCovering = NULL, *colsCoveringCount = NULL;
+
+    int rc_ad = build_adjacency(
+        pichart,
+        ON_minterms,
+        foundPI,
+        &rowsCovered,
+        &rowsCoveredCount,
+        &colsCovering,
+        &colsCoveringCount
+    );
+
+    if (rc_ad == -2 || rc_ad == -1) {
+        *solmin = -1;
+        if (best_lb_out) *best_lb_out = -DBL_MAX;
+        if (lagr_score_out) {
+            for (int c = 0; c < foundPI; ++c) lagr_score_out[c] = 0.0;
+        }
+        return;
+    }
+
+    const int rows = ON_minterms;
+    const int cols = foundPI;
+    LagrangianConfig baseline;
+    lagr_config_for_best_bound(&baseline);
+
+    int portfolio_enabled = baseline.portfolio_enabled;
+    double portfolio_deflection_alpha = baseline.portfolio_deflection_alpha;
+    if (portfolio_enabled) {
+        baseline.deflection_alpha = 0.0;
+    }
+
+    double best_report_lb = -DBL_MAX;
+    solvePIchart_lagrangian_core(
+        rows, cols,
+        rowsCovered, rowsCoveredCount,
+        colsCovering, colsCoveringCount,
+        weights,
+        &baseline,
+        solution,
+        solmin,
+        &best_report_lb,
+        lagr_score_out
+    );
+
+    int best_solmin = *solmin;
+    if (best_lb_out) *best_lb_out = best_report_lb;
+
+    if (portfolio_enabled) {
+        LagrangianConfig profiles[LAGR_PORTFOLIO_PROFILE_COUNT];
+        int profile_count = lagr_build_portfolio_configs(&baseline, portfolio_deflection_alpha, profiles);
+        int max_profiles = baseline.portfolio_max_profiles;
+        if (max_profiles < 0) max_profiles = 0;
+        if (max_profiles > profile_count) max_profiles = profile_count;
+
+        int *candidate_solution = (int*) R_Calloc((size_t)cols, int);
+        double *candidate_scores = lagr_score_out ? (double*) R_Calloc((size_t)cols, double) : NULL;
+
+        if (candidate_solution != NULL && (!lagr_score_out || candidate_scores != NULL)) {
+            for (int profile = 1; profile < max_profiles; ++profile) {
+                int candidate_solmin = -1;
+                double candidate_lb = -DBL_MAX;
+                memset(candidate_solution, 0, (size_t)cols * sizeof(int));
+                if (candidate_scores) {
+                    memset(candidate_scores, 0, (size_t)cols * sizeof(double));
+                }
+
+                solvePIchart_lagrangian_core(
+                    rows, cols,
+                    rowsCovered, rowsCoveredCount,
+                    colsCovering, colsCoveringCount,
+                    weights,
+                    &profiles[profile],
+                    candidate_solution,
+                    &candidate_solmin,
+                    &candidate_lb,
+                    candidate_scores
+                );
+
+                if (candidate_solmin > 0 && (best_solmin <= 0 || candidate_solmin < best_solmin)) {
+                    best_solmin = candidate_solmin;
+                    *solmin = candidate_solmin;
+                    Memcpy(solution, candidate_solution, candidate_solmin);
+                }
+
+                if (candidate_lb > best_report_lb + EPS) {
+                    best_report_lb = candidate_lb;
+                    if (best_lb_out) *best_lb_out = best_report_lb;
+                    if (lagr_score_out && candidate_scores) {
+                        Memcpy(lagr_score_out, candidate_scores, cols);
+                    }
+                }
+            }
+        }
+
+        if (candidate_solution) R_Free(candidate_solution);
+        if (candidate_scores) R_Free(candidate_scores);
+    }
+
     free_adjacency(rowsCovered, rowsCoveredCount, cols, colsCovering, colsCoveringCount, rows);
 }
 
