@@ -1,0 +1,17 @@
+PKG_CFLAGS =
+PKG_CPPFLAGS = -DHAVE_GUROBI -I/Library/gurobi1302/macos_universal2/include -DHAVE_PTHREAD -I. -Ilp_solve -Iscp_solver -DINTEGERTIME -DBUILDING_FOR_R -DYY_NEVER_INTERACTIVE -DUSRDLL -DCLOCKTIME -DRoleIsExternalInvEngine -DINVERSE_ACTIVE=INVERSE_LUSOL -DINLINE=static -DParanoia
+PKG_LIBS = -L/Library/gurobi1302/macos_universal2/lib -lgurobi130
+
+OBJECTS = CCubes.o QCA.o consistency.o consistent_solution.o \
+	find_consistent_models.o find_models.o findmin_lpsolve.o findmin_scp.o \
+	generate_matrix.o qca_threads.o registerDynamicSymbol.o row_dominance.o \
+	solvePIchart_gurobi.o solvePIchart_lagrangian.o sort_cols.o \
+	sort_matrix.o super_rows.o truthTable.o utils.o \
+	lp_solve/commonlib.o lp_solve/isfixedvar.o lp_solve/lp_Hash.o \
+	lp_solve/lp_LUSOL.o lp_solve/lp_SOS.o lp_solve/lp_crash.o \
+	lp_solve/lp_lib.o lp_solve/lp_matrix.o lp_solve/lp_mipbb.o \
+	lp_solve/lp_presolve.o lp_solve/lp_price.o lp_solve/lp_pricePSE.o \
+	lp_solve/lp_report.o lp_solve/lp_scale.o lp_solve/lp_simplex.o \
+	lp_solve/lp_utils.o lp_solve/lusol.o lp_solve/myblas.o \
+	lp_solve/sparselib.o scp_solver/scp_relaxation.o \
+	scp_solver/scp_solver.o
