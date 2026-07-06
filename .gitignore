@@ -1,8 +1,13 @@
+*.js~
 *.json
 *.marks
 *.history
 *.o
 *.so
+*.R
+!R/
+!R/*.R
+!tools/build-cran-source.R
 *.Rproj
 *.Rproj.user
 *.Rhistory
@@ -11,8 +16,3 @@
 *.DS_Store
 src/*.DS_Store
 src/*.a
-*.R
-!R/
-!R/*.R
-*.txt
-*.md

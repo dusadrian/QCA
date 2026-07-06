@@ -1,0 +1,12 @@
+CompileFlags:
+  Add:
+    - "-I/Library/Frameworks/R.framework/Resources/include"
+    - "-I/Library/Frameworks/R.framework/Headers"
+    - "-I/Library/gurobi1302/macos_universal2/include"
+    - "-I/opt/homebrew/include"
+    - "-Isrc"
+    - "-Isrc/lp_solve"
+    - "-Isrc/scp_solver"
+    - "-DHAVE_GUROBI"
+    - "-DHAVE_PTHREAD"
+    - "-DBUILDING_FOR_R"

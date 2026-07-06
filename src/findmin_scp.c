@@ -38,9 +38,10 @@ static int solve_scp_from_int_matrix(
         error("Failed to allocate SCP solver workspace.");
     }
 
-    for (int r = 0; r < nr; r++) {
-        for (int c = 0; c < nc; c++) {
-            if (p_chart[c * nr + r]) {
+    for (int c = 0; c < nc; c++) {
+        int c_offset = c * nr;
+        for (int r = 0; r < nr; r++) {
+            if (p_chart[c_offset + r]) {
                 row_counts[r]++;
                 col_masks[c * nwords_rows + (r >> 6)] |= (1ULL << (r & 63));
             }
@@ -53,9 +54,10 @@ static int solve_scp_from_int_matrix(
     }
 
     memset(row_counts, 0, (size_t) nr * sizeof(int));
-    for (int r = 0; r < nr; r++) {
-        for (int c = 0; c < nc; c++) {
-            if (p_chart[c * nr + r]) {
+    for (int c = 0; c < nc; c++) {
+        int c_offset = c * nr;
+        for (int r = 0; r < nr; r++) {
+            if (p_chart[c_offset + r]) {
                 int pos = row_starts[r] + row_counts[r];
                 row_cols[pos] = c;
                 row_counts[r]++;

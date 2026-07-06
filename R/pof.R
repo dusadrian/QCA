@@ -153,109 +153,6 @@
     conditions <- outcomename <- ""
     condnegated <- outnegated <- FALSE
 
-
-    ### temporary use of validateNames() until package admisc gets updated
-
-    `extract` <- function(x, snames = "", data = NULL) {
-        if (grepl("<=>|<->", x)) {
-            admisc::stopError(
-                "Incorrect expression: relation can be either necessity or sufficiency.",
-                ... = ...
-            )
-        }
-
-        multivalue <- grepl("\\{|\\}|\\[|\\]", x)
-        relation <- ifelse(
-            grepl("=|-", x),
-            ifelse(
-                grepl("=>|->", x),
-                "suf",
-                ifelse(
-                    grepl("<=|<-", x),
-                    "nec",
-                    NA
-                )
-            ),
-            NA
-        )
-
-        x <- gsub("<=|=>|<-|->", "@", gsub("[[:space:]]", "", x))
-        x <- unlist(strsplit(x, split = "@"))
-        xcopy <- x
-
-        if (!multivalue) {
-            x[1] <- mvSOP(x[1], snames = snames, data = data)
-            if (!is.na(x[2])) {
-                x[2] <- mvSOP(x[2], snames = snames, data = data)
-            }
-        }
-
-        if (grepl("\\+|\\*", x[2])) {
-            # if (grepl("\\+|\\*", x[1])) {
-            #     admisc::stopError(
-            #         "Incorrect output in the right hand side.", ... = ...
-            #     )
-            # }
-
-            x <- rev(x)
-            if (relation == "nec") {
-                relation <- "suf"
-            }
-            else if (relation == "suf") {
-                relation <- "nec"
-            }
-        }
-
-        if (identical(snames, "") & !is.null(data)) {
-            snames <- colnames(data)
-        }
-
-        if (identical(substring(x[1], 1, 2), "1-")) {
-            x[1] <- invert(gsub("1-", "", x[1]), snames = snames)
-        }
-
-        if (identical(substring(x[2], 1, 2), "1-")) {
-            x[2] <- invert(gsub("1-", "", x[2]), snames = snames)
-        }
-
-        outmtrx <- NA
-
-        if (length(x) > 1) {
-            outmtrx <- validateNames(x[2], snames = snames, data = data)
-        }
-
-        if (!identical(outmtrx, NA)) {
-            if (!multivalue) {
-                rownames(outmtrx) <- xcopy[2]
-            }
-
-            if (!is.null(data)) {
-                # pof("SR~V + CLP~V + SCRP + SLRP => ~JSR", data = d.jobsecurity)
-                # here, there are no * signs in the expression, and d.jobsecurity
-                # contains both single letter conditions and multi-letter outcome
-                # this decreases time when translating the expression, via admisc::validateNames()
-                data <- data[, -which(is.element(colnames(data), colnames(outmtrx))), drop = FALSE]
-            }
-        }
-
-        condmtrx <- validateNames(x[1], snames = snames, data = data)
-        if (!multivalue & is.data.frame(condmtrx)) {
-            rownames(condmtrx) <- admisc::trimstr(unlist(strsplit(xcopy[1], split = "\\+")))
-            # x[1] <- xcopy[1]
-        }
-
-        return(
-            list(
-                condmtrx = condmtrx,
-                outmtrx = outmtrx,
-                expression = x[1],
-                oexpr = xcopy[1],
-                relation = relation,
-                multivalue = multivalue
-            )
-        )
-    }
-
     checkoutcome <- TRUE
     addexpression <- FALSE
 
@@ -275,7 +172,7 @@
             )
         }
 
-        toverify <- extract(setms, data = odata)
+        toverify <- pof_extract(setms, data = odata, ... = ...)
 
         if (!is.na(toverify$relation)) {
             relation <- toverify$relation
@@ -637,32 +534,7 @@
     }
 
     if (identical(inf.test[1], "binom")) {
-
-        statistical.testing <- TRUE
-
-        if (length(inf.test) > 1) {
-            alpha <- as.numeric(inf.test[2]) # already checked if a number between 0 and 1
-        }
-        else {
-            alpha <- 0.05
-        }
-
-        if (nec(relation)) {
-            nofcases <- rep(sum(outcome), ncol(setms) + 1)
-        }
-        else {
-            nofcases <- c(colSums(setms), sum(fuzzyor(setms)))
-        }
-
-        success <- as.vector(round(nofcases * incl.cov[, which(grepl("incl", colnames(incl.cov)))[1]]))
-
-        incl.cov$pval0 <- incl.cov$pval1 <- 0
-
-        for (i in seq(length(success))) {
-            incl.cov[i, "pval1"] <- binom.test(success[i], nofcases[i], p = ic1, alternative = "greater")$p.value
-            incl.cov[i, "pval0"] <- binom.test(success[i], nofcases[i], p = ic0, alternative = "greater")$p.value
-        }
-
+        incl.cov <- pof_binom_test(incl.cov, setms, outcome, relation, inf.test, ic1, ic0)
     }
 
     result.list$incl.cov <- incl.cov
@@ -703,115 +575,34 @@
 
 
     if (is.element("solution.list", names(dots))) {
-
-        solution.list <- dots$solution.list
-        length.solution <- length(solution.list)
-        individual <- vector("list", length = length.solution)
-
-        for (i in seq(length.solution)) {
-            individual[[i]] <- list()
-            temp <- setms[, solution.list[[i]], drop = FALSE]
-
-            incl.cov <- .Call("C_pof", as.matrix(cbind(temp, fuzzyor(temp))), outcome, nec(relation), PACKAGE = "QCA")
-            incl.cov[incl.cov < 0.0001] <- 0
-            incl.cov <- as.data.frame(incl.cov)
-
-            rownames(incl.cov) <- c(colnames(temp), "expression")
-
-            if (nec(relation)) {
-                colnames(incl.cov) <- c("inclN", "RoN", "covN", "covU")
-                incl.cov <- incl.cov[, -4]
-            }
-            else {
-                colnames(incl.cov) <- c("inclS", "PRI", "covS", "covU")
-                incl.cov[nrow(incl.cov), 4] <- NA
-            }
-
-            if (nrow(incl.cov) == 2 & suf(relation)) {
-                incl.cov[1, 4] <- NA
-            }
-
-            individual[[i]]$incl.cov <- incl.cov[-nrow(incl.cov), ]
-            individual[[i]]$sol.incl.cov <- incl.cov[nrow(incl.cov), 1:3]
-            individual[[i]]$pims <- as.data.frame(temp)
-
-        }
-
-        # return(list(overall = result.list, individual = individual))
-        return(structure(list(
-            overall = result.list,
-            individual = individual,
-            essential = dots$essential,
-            pims = as.data.frame(setms),
+        return(pof_solution_list(
+            result.list = result.list,
+            setms = setms,
+            outcome = outcome,
             relation = relation,
             categories = categories,
-            options = c(
-                list(
-                    setms = setms,
-                    outcome = outcome,
-                    data = data,
-                    relation = relation,
-                    inf.test = inf.test,
-                    incl.cut = incl.cut,
-                    add = add,
-                    use.labels = use.labels
-                ),
-                dots)
-            ), class = "QCA_pof"))
+            inf.test = inf.test,
+            incl.cut = incl.cut,
+            add = add,
+            use.labels = use.labels,
+            dots = dots,
+            data = data
+        ))
     }
 
     result.list$categories <- categories
 
     if (!is.null(add)) {
-
-        if (!is.list(add)) {
-            if (!is.function(add)) {
-                admisc::stopError(
-                    "The argument <add> should be a function or a list of functions.",
-                    ... = ...
-                )
-            }
-
-            if (any(grepl("function", funargs$add))) {
-                funargs$add <- "X"
-            }
-
-            add <- list(add)
-            names(add) <- substr(funargs$add, 1, 5)
-        }
-
-        if (!all(unlist(lapply(add, is.function)))) {
-            admisc::stopError(
-                "Components from the list argument <add> should be functions.",
-                ... = ...
-            )
-        }
-
-        toadd <- matrix(nrow = nrow(result.list$incl.cov), ncol = length(add))
-        if (is.null(names(add))) {
-            names(add) <- paste0("X", seq(length(add)))
-        }
-
-        if (any(duplicated(substr(names(add), 1, 5)))) {
-            names(add) <- paste0("X", seq(length(add)))
-        }
-
-        colnames(toadd) <- substr(names(add), 1, 5)
-
-        for (i in seq(length(add))) {
-            coltoadd <- apply(
-                cbind(setms, fuzzyor(setms)),
-                2,
-                add[[i]],
-                outcome
-            )
-            if (ncol(setms) == 1) {
-                coltoadd <- coltoadd[1]
-            }
-            toadd[, i] <- coltoadd
-        }
-
-        result.list$incl.cov <- cbind(result.list$incl.cov, toadd)
+        added <- pof_add_functions(
+            incl.cov = result.list$incl.cov,
+            add = add,
+            funargs_add = funargs$add,
+            setms = setms,
+            outcome = outcome,
+            ... = ...
+        )
+        result.list$incl.cov <- added$incl.cov
+        add <- added$add
     }
 
     result.list$options <- c(
@@ -830,3 +621,226 @@
     return(structure(result.list, class = "QCA_pof"))
 
 }
+
+`pof_extract` <- function(x, snames = "", data = NULL, ...) {
+    if (grepl("<=>|<->", x)) {
+        admisc::stopError(
+            "Incorrect expression: relation can be either necessity or sufficiency.",
+            ... = ...
+        )
+    }
+
+    multivalue <- grepl("\\{|\\}|\\[|\\]", x)
+    relation <- ifelse(
+        grepl("=|-", x),
+        ifelse(
+            grepl("=>|->", x),
+            "suf",
+            ifelse(
+                grepl("<=|<-", x),
+                "nec",
+                NA
+            )
+        ),
+        NA
+    )
+
+    x <- gsub("<=|=>|<-|->", "@", gsub("[[:space:]]", "", x))
+    x <- unlist(strsplit(x, split = "@"))
+    xcopy <- x
+
+    if (!multivalue) {
+        x[1] <- mvSOP(x[1], snames = snames, data = data)
+        if (!is.na(x[2])) {
+            x[2] <- mvSOP(x[2], snames = snames, data = data)
+        }
+    }
+
+    if (grepl("\\+|\\*", x[2])) {
+        x <- rev(x)
+        if (relation == "nec") {
+            relation <- "suf"
+        }
+        else if (relation == "suf") {
+            relation <- "nec"
+        }
+    }
+
+    if (identical(snames, "") & !is.null(data)) {
+        snames <- colnames(data)
+    }
+
+    if (identical(substring(x[1], 1, 2), "1-")) {
+        x[1] <- invert(gsub("1-", "", x[1]), snames = snames)
+    }
+
+    if (identical(substring(x[2], 1, 2), "1-")) {
+        x[2] <- invert(gsub("1-", "", x[2]), snames = snames)
+    }
+
+    outmtrx <- NA
+
+    if (length(x) > 1) {
+        outmtrx <- validateNames(x[2], snames = snames, data = data)
+    }
+
+    if (!identical(outmtrx, NA)) {
+        if (!multivalue) {
+            rownames(outmtrx) <- xcopy[2]
+        }
+
+        if (!is.null(data)) {
+            data <- data[, -which(is.element(colnames(data), colnames(outmtrx))), drop = FALSE]
+        }
+    }
+
+    condmtrx <- validateNames(x[1], snames = snames, data = data)
+    if (!multivalue & is.data.frame(condmtrx)) {
+        rownames(condmtrx) <- admisc::trimstr(unlist(strsplit(xcopy[1], split = "\\+")))
+    }
+
+    return(
+        list(
+            condmtrx = condmtrx,
+            outmtrx = outmtrx,
+            expression = x[1],
+            oexpr = xcopy[1],
+            relation = relation,
+            multivalue = multivalue
+        )
+    )
+}
+
+`pof_binom_test` <- function(incl.cov, setms, outcome, relation, inf.test, ic1, ic0) {
+    if (length(inf.test) > 1) {
+        alpha <- as.numeric(inf.test[2]) # already checked if a number between 0 and 1
+    }
+    else {
+        alpha <- 0.05
+    }
+
+    if (nec(relation)) {
+        nofcases <- rep(sum(outcome), ncol(setms) + 1)
+    }
+    else {
+        nofcases <- c(colSums(setms), sum(fuzzyor(setms)))
+    }
+
+    success <- as.vector(round(nofcases * incl.cov[, which(grepl("incl", colnames(incl.cov)))[1]]))
+
+    incl.cov$pval0 <- incl.cov$pval1 <- 0
+
+    for (i in seq(length(success))) {
+        incl.cov[i, "pval1"] <- binom.test(success[i], nofcases[i], p = ic1, alternative = "greater")$p.value
+        incl.cov[i, "pval0"] <- binom.test(success[i], nofcases[i], p = ic0, alternative = "greater")$p.value
+    }
+
+    return(incl.cov)
+}
+
+`pof_solution_list` <- function(result.list, setms, outcome, relation, categories, inf.test, incl.cut, add, use.labels, dots, data) {
+    solution.list <- dots$solution.list
+    length.solution <- length(solution.list)
+    individual <- vector("list", length = length.solution)
+
+    for (i in seq(length.solution)) {
+        individual[[i]] <- list()
+        temp <- setms[, solution.list[[i]], drop = FALSE]
+
+        incl.cov <- .Call("C_pof", as.matrix(cbind(temp, fuzzyor(temp))), outcome, nec(relation), PACKAGE = "QCA")
+        incl.cov[incl.cov < 0.0001] <- 0
+        incl.cov <- as.data.frame(incl.cov)
+
+        rownames(incl.cov) <- c(colnames(temp), "expression")
+
+        if (nec(relation)) {
+            colnames(incl.cov) <- c("inclN", "RoN", "covN", "covU")
+            incl.cov <- incl.cov[, -4]
+        }
+        else {
+            colnames(incl.cov) <- c("inclS", "PRI", "covS", "covU")
+            incl.cov[nrow(incl.cov), 4] <- NA
+        }
+
+        if (nrow(incl.cov) == 2 & suf(relation)) {
+            incl.cov[1, 4] <- NA
+        }
+
+        individual[[i]]$incl.cov <- incl.cov[-nrow(incl.cov), ]
+        individual[[i]]$sol.incl.cov <- incl.cov[nrow(incl.cov), 1:3]
+        individual[[i]]$pims <- as.data.frame(temp)
+    }
+
+    return(structure(list(
+        overall = result.list,
+        individual = individual,
+        essential = dots$essential,
+        pims = as.data.frame(setms),
+        relation = relation,
+        categories = categories,
+        options = c(
+            list(
+                setms = setms,
+                outcome = outcome,
+                data = data,
+                relation = relation,
+                inf.test = inf.test,
+                incl.cut = incl.cut,
+                add = add,
+                use.labels = use.labels
+            ),
+            dots)
+        ), class = "QCA_pof"))
+}
+
+`pof_add_functions` <- function(incl.cov, add, funargs_add, setms, outcome, ...) {
+    if (!is.list(add)) {
+        if (!is.function(add)) {
+            admisc::stopError(
+                "The argument <add> should be a function or a list of functions.",
+                ... = ...
+            )
+        }
+
+        if (any(grepl("function", funargs_add))) {
+            funargs_add <- "X"
+        }
+
+        add <- list(add)
+        names(add) <- substr(funargs_add, 1, 5)
+    }
+
+    if (!all(unlist(lapply(add, is.function)))) {
+        admisc::stopError(
+            "Components from the list argument <add> should be functions.",
+            ... = ...
+        )
+    }
+
+    toadd <- matrix(nrow = nrow(incl.cov), ncol = length(add))
+    if (is.null(names(add))) {
+        names(add) <- paste0("X", seq(length(add)))
+    }
+
+    if (any(duplicated(substr(names(add), 1, 5)))) {
+        names(add) <- paste0("X", seq(length(add)))
+    }
+
+    colnames(toadd) <- substr(names(add), 1, 5)
+
+    for (i in seq(length(add))) {
+        coltoadd <- apply(
+            cbind(setms, fuzzyor(setms)),
+            2,
+            add[[i]],
+            outcome
+        )
+        if (ncol(setms) == 1) {
+            coltoadd <- coltoadd[1]
+        }
+        toadd[, i] <- coltoadd
+    }
+
+    return(list(incl.cov = cbind(incl.cov, toadd), add = add))
+}
+
