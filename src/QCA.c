@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "qca_rinternals.h"
-#include "qca_rinternals.h"
 #include <Rmath.h>
 #include <R_ext/Rdynload.h>
 #include "utils.h"

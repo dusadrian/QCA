@@ -1,10 +1,15 @@
 ## Ignore travis config file
 ^\.travis\.yml$
 \.vscode
-^(?!R/).*[.]R$
+^\.clangd$
 ^.*\.Rproj$
 ^\.Rproj\.user$
-.github
-^.txt$
-^.md$
-CITESTE.txt
+^build$
+^build\.sh$
+^clean\.sh$
+^.*\.tar\.gz$
+(^|/)\.DS_Store$
+^tests$
+^Vignettes$
+^vignettes$
+^(?!R/).*[.]R$
