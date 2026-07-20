@@ -33,7 +33,7 @@ void CCubes(
     // int *solmin_,         // solution minima
 
     const Rboolean firstmin,   // IEEE switch
-    const Rboolean lagrangian, // whether using the lagrangian backend via findmin()
+    const Rboolean hybrid,     // hybrid exact backend, default TRUE
     const Rboolean gurobi,     // whether to use Gurobi (if installed), default is TRUE
     const Rboolean solind      // IF using Gurobi, findmin() returns the indexes of the solutions
 );

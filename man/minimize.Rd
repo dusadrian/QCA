@@ -92,6 +92,19 @@ The default method (when \bold{\code{all.sol = FALSE}}), is to find the minimal 
 configurations (minterms), then exhaustively search through all possible disjunctions of
 \bold{\code{k}} prime implicants which do cover those configurations.
 
+The minimal number \bold{\code{k}} is determined by solving the set covering problem on
+the PI chart. During prime implicant generation, duplicate and dominated coverage
+columns are marked and omitted from the chart passed to every solver backend; the
+complete PI chart remains available for output and solution enumeration. Every
+available backend returns a proven minimum. By default, the internal hybrid solver combines
+a level-2 Lagrangian relaxation bound with
+reduced-cost fixing and a progress-adaptive branch-and-bound search. When that search is
+inconclusive, the reduced core is completed by the internal lp_solve backend (see
+\bold{\code{\link[QCA]{findmin}()}} for details). Setting \code{hybrid = FALSE} instead uses
+an integer programming formulation, solved with the Gurobi library when available or with
+the internal lp_solve library otherwise. The choice of backend can therefore
+only affect the solving time, never the solutions.
+
 Once the PI chart is constructed using the prime implicants found in the previous
 stages, the argument \bold{\code{row.dom}} can be used to further eliminate
 irrelevant prime implicants when solving the PI chart, applying the principle of row

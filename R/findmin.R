@@ -1,40 +1,20 @@
-# Copyright (c) 2016 - 2026, Adrian Dusa
-# All rights reserved.
-# 
-# Redistribution and use in source and binary forms, with or without
-# modification, in whole or in part, are permitted provided that the
-# following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * The names of its contributors may NOT be used to endorse or promote
-#       products derived from this software without specific prior written
-#       permission.
-# 
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED. IN NO EVENT SHALL ADRIAN DUSA BE LIABLE FOR ANY
-# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+`findmin` <- function(chart, type = c("hybrid", "conservative"), ...) {
 
-`findmin` <- function(chart, type = c("exact", "lagrangian"), ...) {
     dots <- list(...)
     verbose <- isTRUE(dots$verbose)
+
     if (missing(type) || is.null(type)) {
         type <- attr(chart, "type")
     }
+
     if (is.null(type)) {
-        type <- "exact"
+        type <- "hybrid"
     }
-    type <- match.arg(type, c("exact", "lagrangian"))
+
+    type <- match.arg(type, c("hybrid", "conservative"))
+
     if (!methods::is(chart, "QCA_pic")) {
+
         if (!is.matrix(chart) | (!is.logical(chart) & length(setdiff(chart, 0:1)) > 0)) {
             admisc::stopError(
                 "Use a logical, TRUE/FALSE matrix. See makeChart()'s output.",
@@ -42,17 +22,28 @@
             )
         }
     }
+
     cpi <- !is.null(attr(chart, "C_PI"))
+
     if (!cpi) {
         chart <- t(chart)
     }
+
     if (all(colSums(chart) > 0)) {
+
         just_minima <- !isTRUE(attr(chart, "solind")) && !isTRUE(dots$solind)
         gurobi <- !isFALSE(attr(chart, "gurobi")) && !isFALSE(dots$gurobi)
         solution <- NULL
-        if (identical(type, "lagrangian")) {
+
+        if (identical(type, "hybrid")) {
+            # Low-row coverage-mask dominance first removes solver-equivalent
+            # or dominated columns. Level-2 Lagrangian preparation then builds
+            # an incumbent, a bound and a reduced core. A bounded internal
+            # search gets a short probe and progressively more work while it
+            # makes proof progress; lp_solve completes the reduced core when
+            # needed.
             solution <- .Call(
-                "C_findminLagrangian",
+                "C_findminHybridInternal",
                 matrix(as.logical(chart), nrow = nrow(chart)),
                 PACKAGE = "QCA"
             )
@@ -62,6 +53,7 @@
                 native_gurobi_available <- isTRUE(.Call("C_gurobiRuntimeAvailable", PACKAGE = "QCA"))
                 options(native.gurobi.available = native_gurobi_available)
             }
+
             if (isTRUE(native_gurobi_available)) {
                 solution <- .Call(
                     "C_findminExact",
@@ -72,6 +64,7 @@
                 message("Gurobi not available, falling back to the internal lp_solve solver.")
             }
         }
+
         if (is.null(solution)) {
             solution <- .Call(
                 "C_findminLpSolveInternal",
@@ -79,6 +72,8 @@
                 PACKAGE = "QCA"
             )
         }
+        
+
         if (just_minima) {
             solution <- as.integer(ceiling(sum(solution)))
         }
@@ -86,6 +81,7 @@
     else {
         solution <- 0L
     }
+
     class(solution) <- c(class(solution), "QCA_findmin")
     return(solution)
 }
