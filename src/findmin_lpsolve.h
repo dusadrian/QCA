@@ -12,5 +12,13 @@ Rboolean solvePIchart_lpsolve(
     int *indices,
     int *solmin
 );
+Rboolean solvePIchart_lpsolve_active(
+    const int *chart,
+    int nrows,
+    int ncols,
+    const unsigned char *active,
+    int *indices,
+    int *solmin
+);
 
 #endif

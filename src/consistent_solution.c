@@ -1,30 +1,3 @@
-/*
-Copyright (c) 2016 - 2026, Adrian Dusa
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without
-modification, in whole or in part, are permitted provided that the
-following conditions are met:
-    * Redistributions of source code must retain the above copyright
-      notice, this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright
-      notice, this list of conditions and the following disclaimer in the
-      documentation and/or other materials provided with the distribution.
-    * The names of its contributors may NOT be used to endorse or promote
-      products derived from this software without specific prior written
-      permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL ADRIAN DUSA BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
 
 #include "qca_r.h"
 #include <R_ext/RS.h>
@@ -33,6 +6,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include "utils.h"
 #include "consistent_solution.h"
+
+
+
 Rboolean consistent_solution(
     const double p_data[],
     const int nconds,
@@ -46,6 +22,8 @@ Rboolean consistent_solution(
     const int p_fsconds[],
     const double solcons,
     const double solcov) {
+    
+    
     int cindx, val;
     double *p_y = (double *) calloc(1, sizeof(double));
     double *ymat = (double *) calloc((size_t) nrdata * (size_t) k, sizeof(double));
@@ -54,11 +32,19 @@ Rboolean consistent_solution(
         free(ymat);
         return FALSE;
     }
+    
     double sumy = 0;
     for (int r = 0; r < nrdata; r++) {
         sumy += p_data[nconds * nrdata + r];
     }
-    for (int i = 0; i < k; i++) { 
+    
+    // Rboolean aici = false;
+    // if (k == 2) {
+    //     aici = (tempk[0] == 0 && tempk[1] == 2) || (tempk[0] == 1 && tempk[1] == 3);
+    // }
+
+    for (int i = 0; i < k; i++) { // for each conjunction
+        
         int k2 = ck[tempk[i]];
         if (k2 <= 0) {
             free(p_y);
@@ -71,15 +57,26 @@ Rboolean consistent_solution(
             free(ymat);
             return FALSE;
         }
+        
+        
         for (int c = 0; c < k2; c++) {
+            // cindx = indx[c * foundPI + tempk[i]];
             cindx = indx[tempk[i] * nconds + c] - 1;
             if (cindx < 0 || cindx >= nconds) {
                 free(p_y);
                 free(ymat);
                 return FALSE;
             }
+            
+            // val = p_implicants[cindx * foundPI + tempk[i]] - 1;
             val = p_implicants[tempk[i] * nconds + cindx] - 1;
+            
+            // if (aici) {
+            //     printf("%d%d; cindx: %d, val: %d\n", tempk[0],tempk[1], cindx, val);
+            // }
+
             if (p_fsconds[cindx]) {
+                
                 Rboolean negation = val == 0;
                 for (int r = 0; r < nrdata; r++) {
                     p_y[c * nrdata + r] = negation ? (1 - p_data[cindx * nrdata + r]) : p_data[cindx * nrdata + r];
@@ -91,19 +88,36 @@ Rboolean consistent_solution(
                 }
             }
         }
+        
         double pminx;
+        
         for (int r = 0; r < nrdata; r++) {
             pminx = 1;
+            
             for (int c = 0; c < k2; c++) {
                 if (p_y[c * nrdata + r] < pminx) {
                     pminx = p_y[c * nrdata + r];
                 }
             }
+            
             ymat[i * nrdata + r] = pminx;
         }
+        
     }
+
+    // if (aici) {
+    //     for (int r = 0; r < nrdata; r++) {
+    //         for (int c = 0; c < k; c++) {
+    //             printf("%1.0f ", ymat[c * nrdata + r]);
+    //         }
+    //         printf("\n");
+    //     }
+    //     printf("\n");
+    // }
+    
     double pmaxx;
     double sumx = 0, sumxy = 0;
+    
     for (int r = 0; r < nrdata; r++) {
         pmaxx = 0;
         for (int c = 0; c < k; c++) {
@@ -111,14 +125,28 @@ Rboolean consistent_solution(
                 pmaxx = ymat[c * nrdata + r];
             }
         }
+        
         sumx += pmaxx;
         sumxy += ((pmaxx < p_data[nconds * nrdata + r]) ? pmaxx: p_data[nconds * nrdata + r]);
+        
     }
+    
+    // Guard against divisions by zero (e.g., unattainable solutions with solcov = 1)
     if (sumx <= 0 || sumy <= 0) {
         free(p_y);
         free(ymat);
         return FALSE;
     }
+    
+    // if (aici) {
+        // Rprintf("sumxy: %5.3f; sumx: %5.3f; sumy: %5.3f, solcons: %5.3f, solcov: %5.3f\n", sumxy, sumx, sumy, solcons, solcov);
+        // Rprintf(
+        //     "incl: %5.3f; cov: %5.3f; decision: %d\n",
+        //     sumxy / sumx,
+        //     sumxy / sumy,
+        //     agteb(sumxy / sumx, solcons) && agteb(sumxy / sumy, solcov)
+        // );
+    // }
     free(p_y);
     free(ymat);
     return(agteb(sumxy / sumx, solcons) && agteb(sumxy / sumy, solcov));

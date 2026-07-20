@@ -49,7 +49,12 @@ Rboolean redundant(
     unsigned int prevfoundPI,
     const int covered[],
     unsigned int covered_limit,
-    bool debug
+    bool debug,
+    const unsigned int p_pichart_pos[],
+    int pichart_words,
+    const unsigned int candidate_coverage[],
+    const unsigned char solver_active[],
+    Rboolean *chart_dominated
 );
 
 void increment(

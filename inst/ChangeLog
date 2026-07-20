@@ -1,3 +1,20 @@
+Version 3.25.2
+    o The former Lagrangian relaxation heuristic is now an exact method:
+      dominance presolve, reduced-cost fixing at the best dual multipliers
+      and a bounded branch-and-bound finish certify optimality in most
+      cases, and any uncertified run is completed by the internal exact
+      set covering solver
+    o Renamed: findmin() argument type = "lagrangian" is now type = "hybrid",
+      reflecting its exact hybrid architecture; same for the minimize()
+      option hybrid = TRUE (formerly lagrangian = TRUE)
+    o The exact hybrid method is now the default in findmin() and CCubes;
+      use type = "conservative" or hybrid = FALSE to select the integer
+      programming backend explicitly
+    o Renamed: findmin() argument type = "exact" is now
+      type = "conservative", since both available methods are exact
+    o All set covering backends now return proven minimum covers; the
+      choice of backend only affects solving time, never the solutions
+
 Version 3.25
     o Now using a trimmed down version of lp_solve for exact covers
     o Improved: heuristic Lagrangian relaxation solver
