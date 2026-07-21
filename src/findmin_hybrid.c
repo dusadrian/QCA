@@ -12,17 +12,19 @@
 #include "scp_solver/scp_solver.h"
 #include "findmin_lagrangian.h"
 
+/*
+All limits are node counts: node budgets are deterministic, so the same
+chart always takes the same path and returns the same cover, regardless
+of machine load. Worst-case time is controlled instead by scaling the
+hard budgets with the core width (per-node cost grows with the number of
+active columns), which is equally deterministic.
+*/
 #define HYBRID_SCP_PROBE_NODE_LIMIT 5000ULL
 #define HYBRID_SCP_WIDE_PROBE_NODE_LIMIT 10000ULL
-#define HYBRID_SCP_PROBE_TIME_LIMIT 0.25
-#define HYBRID_SCP_WIDE_PROBE_TIME_LIMIT 0.5
 #define HYBRID_SCP_GAP_ONE_NODE_LIMIT 1500000ULL
 #define HYBRID_SCP_GAP_TWO_NODE_LIMIT 600000ULL
 #define HYBRID_SCP_LARGER_GAP_NODE_LIMIT 250000ULL
-#define HYBRID_SCP_GAP_ONE_TIME_LIMIT 60.0
-#define HYBRID_SCP_GAP_TWO_TIME_LIMIT 20.0
-#define HYBRID_SCP_LARGER_GAP_TIME_LIMIT 8.0
-#define HYBRID_SCP_WIDE_RATIO 8
+#define HYBRID_SCP_NODE_SCALE_COLUMNS 2000
 #define HYBRID_SCP_VERY_WIDE_RATIO 10
 #define DENSE_MASK_ROWS 20
 
@@ -491,10 +493,14 @@ static int solve_scp_from_int_matrix(
         }
     }
 
-    /* A strongly reduced core is already ideal lp_solve input. On a still-wide
-       core, probe the internal finisher briefly and extend geometrically only
-       after it improves the incumbent or completes another root subtree. */
-    if (core_nc * 4 > nc * 3 && nc >= nr * HYBRID_SCP_WIDE_RATIO) {
+    /*
+    Probe the internal finisher on every uncertified core: small cores
+    usually resolve within the probe budget (cheaper than an lp_solve
+    setup), wide cores extend geometrically only while making proof
+    progress. All budgets are node counts (deterministic); the hard caps
+    shrink with the core width so the worst case stays time-bounded.
+    */
+    {
         qca_scp_problem problem = {
             .nr = nr,
             .nc = core_nc,
@@ -514,11 +520,13 @@ static int solve_scp_from_int_matrix(
             : optimality_gap == 2
                 ? HYBRID_SCP_GAP_TWO_NODE_LIMIT
                 : HYBRID_SCP_LARGER_GAP_NODE_LIMIT;
-        double hard_time_limit = optimality_gap <= 1
-            ? HYBRID_SCP_GAP_ONE_TIME_LIMIT
-            : optimality_gap == 2
-                ? HYBRID_SCP_GAP_TWO_TIME_LIMIT
-                : HYBRID_SCP_LARGER_GAP_TIME_LIMIT;
+        unsigned long long node_scale = core_nc > HYBRID_SCP_NODE_SCALE_COLUMNS
+            ? (unsigned long long)core_nc / HYBRID_SCP_NODE_SCALE_COLUMNS
+            : 1ULL;
+        hard_node_limit /= node_scale;
+        if (hard_node_limit < HYBRID_SCP_PROBE_NODE_LIMIT) {
+            hard_node_limit = HYBRID_SCP_PROBE_NODE_LIMIT;
+        }
         hybrid_profile.scp_attempted = 1;
         qca_scp_result result = qca_scp_solve_exact_with_incumbent_adaptive(
             &problem,
@@ -530,11 +538,9 @@ static int solve_scp_from_int_matrix(
             very_wide
                 ? HYBRID_SCP_WIDE_PROBE_NODE_LIMIT
                 : HYBRID_SCP_PROBE_NODE_LIMIT,
-            very_wide
-                ? HYBRID_SCP_WIDE_PROBE_TIME_LIMIT
-                : HYBRID_SCP_PROBE_TIME_LIMIT,
+            0.0, /* node budgets only: deterministic */
             hard_node_limit,
-            hard_time_limit
+            0.0
         );
         if (result == QCA_SCP_SOLUTION) {
             for (int c = 0; c < core_nc; ++c) {
