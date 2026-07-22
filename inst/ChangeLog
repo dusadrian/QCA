@@ -1,4 +1,13 @@
 Version 3.25.2
+    o CCubes now uses adaptive stopping for supported binary truth-table
+      minimizations: the first unchanged minimum triggers a deterministic
+      delayed-pair diagnostic, and warned cases continue to a global
+      cardinality certificate
+    o Minimum-cardinality certification is tracked separately from complete
+      minimum-model enumeration; the default first.min = FALSE path retains
+      its PI-enumeration stopping rule
+    o The PI-inactivity rule now observes actual growth of the retained PI
+      family rather than pre-merge candidate activity
     o The former Lagrangian relaxation heuristic is now an exact method:
       dominance presolve, reduced-cost fixing at the best dual multipliers
       and a bounded branch-and-bound finish certify optimality in most
