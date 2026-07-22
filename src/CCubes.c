@@ -13,6 +13,7 @@
 #include "findmin_hybrid.h"
 #include "findmin_lpsolve.h"
 #include "pichart_presolve.h"
+#include "qca_stopping.h"
 
 static Rboolean resize_worker_buffer(
     void **array,
@@ -133,6 +134,19 @@ void CCubes(const int p_tt[],          // the truth table
 
     get_noflevels(noflevels, p_tt, nconds, ttrows);
 
+    QCAStoppingState stopping;
+    qca_stopping_state_init(
+        &stopping,
+        posmat,
+        negmat,
+        noflevels,
+        nconds,
+        posrows,
+        negrows,
+        picons,
+        solcons
+    );
+
     // preallocating for an estimated large number of 1000 found PIs
     // this number will be iteratively increased when the found PIs reach the upper limit
     int estimPI = 25000;
@@ -209,7 +223,7 @@ void CCubes(const int p_tt[],          // the truth table
 
 
     Rboolean solution_exists = false;
-    int counter = 0; // to stop if two consecutive levels of complexity yield no more PIs
+    int counter = 0; // legacy PI-inactivity patience for complete enumeration
     Rboolean pi_resize_failed = false;
     int k;
     for (k = 1; k <= pidepth; k++) {
@@ -536,6 +550,10 @@ void CCubes(const int p_tt[],          // the truth table
         if (pi_resize_failed) {
             error("Memory allocation failed during PI buffer resize.");
         }
+        /* Candidate buffers can contain entries later rejected as same-level
+           redundancies.  The stopping policy cares whether the retained PI
+           family actually grew. */
+        foundk = foundPI > prevfoundPI;
         if (foundPI > 0) {
 
             /* Coverage dominance is independent of the backend. Keep the full
@@ -551,6 +569,12 @@ void CCubes(const int p_tt[],          // the truth table
             );
 
             solution_exists = all_covered(p_pichart, posrows, foundPI);
+
+            qca_stopping_observe_coverage(
+                &stopping,
+                k,
+                solution_exists
+            );
 
             if (solution_exists) {
                 stop_searching = *complex;
@@ -635,14 +659,15 @@ void CCubes(const int p_tt[],          // the truth table
 
                 // find_min(p_pichart, posrows, foundPI, &solmin, indices);
 
-                if (solmin == prevsolmin) {
+                Rboolean minimum_plateau = solmin == prevsolmin;
+                if (minimum_plateau) {
                     // the minimum did not change in the current level of complexity
 
                     for (int i = 0; i < solmin; i++) {
                         indices[i] = previndices[i];
                     }
 
-                    if (firstmin) {
+                    if (firstmin && !stopping.supported) {
                         counter += 1;
                     }
                 }
@@ -660,6 +685,36 @@ void CCubes(const int p_tt[],          // the truth table
                     counter = 0; // this means for sure foundk is true
                 }
 
+                if (minimum_plateau && stopping.supported) {
+                    if (!qca_stopping_observe_plateau(
+                        &stopping,
+                        posmat,
+                        negmat,
+                        nconds,
+                        posrows,
+                        negrows,
+                        p_pichart,
+                        foundPI,
+                        indices,
+                        solmin
+                    )) {
+                        error("Adaptive stopping diagnostic failed.");
+                    }
+                    if (
+                        stopping.certification_required &&
+                        !qca_stopping_prepare_certificate(
+                            &stopping,
+                            posmat,
+                            negmat,
+                            nconds,
+                            posrows,
+                            negrows
+                        )
+                    ) {
+                        error("Adaptive stopping certificate initialization failed.");
+                    }
+                }
+
                 if (!firstmin) {
                     if (foundk) {
                         counter = 0;
@@ -667,6 +722,25 @@ void CCubes(const int p_tt[],          // the truth table
                     }
                     else {
                         counter += 1;
+                    }
+                }
+
+                if (stopping.supported) {
+                    const Rboolean boundary_exact = !solind_failed && solmin > 0;
+                    qca_stopping_cardinality_certified(
+                        &stopping,
+                        k,
+                        solmin,
+                        boundary_exact
+                    );
+
+                    if (firstmin && stopping.diagnostic_checked) {
+                        if (!stopping.certification_required) {
+                            stop_searching = true;
+                        }
+                        else if (stopping.cardinality_certified) {
+                            stop_searching = true;
+                        }
                     }
                 }
             }
@@ -680,9 +754,31 @@ void CCubes(const int p_tt[],          // the truth table
 
         // printf("counter: %d; stop: %d\n", counter, stop_searching * 1);
         
-        if (stop_searching || counter > 1) {
+        Rboolean legacy_enumeration_stop = counter > 1;
+        if (!firstmin) {
+            stopping.enumeration_complete = legacy_enumeration_stop;
+            if (
+                stopping.supported && stopping.certification_required &&
+                !stopping.cardinality_certified
+            ) {
+                stopping.enumeration_complete = false;
+            }
+            legacy_enumeration_stop = stopping.enumeration_complete;
+        }
+
+        if (stop_searching || legacy_enumeration_stop) {
             break;
         }
+    }
+
+    if (
+        stopping.supported && stopping.certification_required &&
+        !stopping.cardinality_certified && !*complex
+    ) {
+        error(
+            "Prime-implicant generation ended before the adaptive stopping "
+            "certificate was established; increase <pi.depth>."
+        );
     }
 
     int *copy_implicants = R_Calloc(1, int);
