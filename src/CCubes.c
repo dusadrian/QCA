@@ -7,6 +7,7 @@
 #include <Rmath.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 #include "CCubes.h"
 #include "findmin_gurobi.h"
 #include "findmin_lagrangian.h"
@@ -14,6 +15,8 @@
 #include "findmin_lpsolve.h"
 #include "pichart_presolve.h"
 #include "qca_stopping.h"
+#include "cover_validation.h"
+#include "qca_threads.h"
 
 static Rboolean resize_worker_buffer(
     void **array,
@@ -76,6 +79,258 @@ typedef struct {
     unsigned char *solver_active;
     int found;
 } ThreadBuffer;
+
+typedef struct {
+    int k;
+    int nconds;
+    int posrows;
+    int negrows;
+    int nrdata;
+    int value_bit_width;
+    int implicant_words;
+    int pichart_words;
+    double picons;
+    const int *posmat;
+    const int *negmat;
+    const int *noflevels;
+    const int *p_fsconds;
+    const double *p_data;
+    ThreadBuffer *buffers;
+    unsigned int **p_implicants_pos;
+    unsigned int **p_implicants_val;
+    unsigned int **p_pichart_pos;
+    int **p_pichart;
+    int **p_implicants;
+    int **p_indx;
+    int **p_ck;
+    unsigned char **p_solver_active;
+    int **covered;
+    int *foundPI;
+    int *estimPI;
+    int increase;
+    int *k_last_index;
+    atomic_bool *resize_failed;
+    qca_mutex merge_lock;
+} QCAPIGenerationContext;
+
+static void qca_merge_thread_buffer(QCAPIGenerationContext *ctx, ThreadBuffer *tb) {
+    qca_mutex_lock(&ctx->merge_lock);
+    if (atomic_load_explicit(ctx->resize_failed, memory_order_acquire)) {
+        qca_mutex_unlock(&ctx->merge_lock);
+        return;
+    }
+
+    while ((double)(*ctx->foundPI + tb->found) / (double)*ctx->estimPI > 0.9) {
+        int size = *ctx->estimPI;
+        if (
+            !resize_worker_buffer((void **)ctx->p_pichart, 1, ctx->increase, size, ctx->posrows) ||
+            !resize_worker_buffer((void **)ctx->p_implicants, 1, ctx->increase, size, ctx->nconds) ||
+            !resize_worker_buffer((void **)ctx->p_indx, 1, ctx->increase, size, ctx->nconds) ||
+            !resize_worker_buffer((void **)ctx->p_implicants_val, 2, ctx->increase, size, ctx->implicant_words) ||
+            !resize_worker_buffer((void **)ctx->p_implicants_pos, 2, ctx->increase, size, ctx->implicant_words) ||
+            !resize_worker_buffer((void **)ctx->p_ck, 1, ctx->increase, size, 1) ||
+            !resize_worker_buffer((void **)ctx->p_pichart_pos, 2, ctx->increase, size, ctx->pichart_words) ||
+            !resize_worker_buffer((void **)ctx->covered, 1, ctx->increase, size, 1) ||
+            !resize_byte_buffer(ctx->p_solver_active, ctx->increase, size)
+        ) {
+            atomic_store_explicit(ctx->resize_failed, true, memory_order_release);
+            qca_mutex_unlock(&ctx->merge_lock);
+            return;
+        }
+        *ctx->estimPI += ctx->increase;
+    }
+
+    for (int bf = 0; bf < tb->found; ++bf) {
+        int base_imp = bf * ctx->nconds;
+        int base_bits = bf * ctx->implicant_words;
+        int base_pic = bf * ctx->pichart_words;
+        Rboolean chart_dominated = FALSE;
+        if (redundant(
+            *ctx->p_implicants_pos,
+            *ctx->p_implicants_val,
+            ctx->implicant_words,
+            &tb->implicants_pos[base_bits],
+            &tb->implicants_val[base_bits],
+            (unsigned int)*ctx->foundPI,
+            NULL,
+            (unsigned int)*ctx->foundPI,
+            false,
+            *ctx->p_pichart_pos,
+            ctx->pichart_words,
+            &tb->pichart_pos[base_pic],
+            *ctx->p_solver_active,
+            &chart_dominated
+        )) continue;
+
+        int dst = *ctx->foundPI;
+        Memcpy(&(*ctx->p_implicants)[ctx->nconds * dst],
+               &tb->implicants[base_imp], ctx->nconds);
+        Memcpy(&(*ctx->p_indx)[ctx->nconds * dst],
+               &tb->indx[base_imp], ctx->nconds);
+        (*ctx->p_ck)[dst] = tb->ck[bf];
+        Memcpy(&(*ctx->p_implicants_pos)[ctx->implicant_words * dst],
+               &tb->implicants_pos[base_bits], ctx->implicant_words);
+        Memcpy(&(*ctx->p_implicants_val)[ctx->implicant_words * dst],
+               &tb->implicants_val[base_bits], ctx->implicant_words);
+        Memcpy(&(*ctx->p_pichart_pos)[dst * ctx->pichart_words],
+               &tb->pichart_pos[base_pic], ctx->pichart_words);
+        (*ctx->p_solver_active)[dst] = tb->solver_active[bf] && !chart_dominated;
+        for (int r = 0; r < ctx->posrows; ++r) {
+            int word = r / BITS_PER_WORD;
+            int bit = r % BITS_PER_WORD;
+            (*ctx->p_pichart)[ctx->posrows * dst + r] =
+                (tb->pichart_pos[base_pic + word] & (1U << bit)) != 0;
+        }
+
+        int covsum = tb->covsum[bf];
+        if (covsum < 1) covsum = 1;
+        if (covsum > ctx->posrows) covsum = ctx->posrows;
+        int insert_at = ctx->k_last_index[covsum - 1];
+        if (dst > insert_at) {
+            memmove(&(*ctx->covered)[insert_at + 1],
+                    &(*ctx->covered)[insert_at],
+                    (size_t)(dst - insert_at) * sizeof(int));
+        }
+        (*ctx->covered)[insert_at] = dst;
+        for (int i = 0; i < covsum; ++i) ctx->k_last_index[i]++;
+        (*ctx->foundPI)++;
+    }
+    qca_mutex_unlock(&ctx->merge_lock);
+}
+
+static void qca_pi_generation_range(
+    unsigned long long start,
+    unsigned long long end,
+    int worker_id,
+    void *data
+) {
+    QCAPIGenerationContext *ctx = (QCAPIGenerationContext *)data;
+    ThreadBuffer *tb = &ctx->buffers[worker_id];
+    int k = ctx->k;
+
+    for (unsigned long long task = start; task < end; ++task) {
+        if (atomic_load_explicit(ctx->resize_failed, memory_order_acquire)) return;
+        tb->found = 0;
+        int tempk[k];
+        int x = 0;
+        unsigned long long combination = task;
+        for (int i = 0; i < k; ++i) {
+            while (1) {
+                unsigned long long cval = nchoosek(
+                    ctx->nconds - (x + 1), k - (i + 1)
+                );
+                if (cval == 0 || cval > combination) break;
+                combination -= cval;
+                x++;
+            }
+            if (x < 0) x = 0;
+            if (x >= ctx->nconds) x = ctx->nconds - 1;
+            tempk[i] = x++;
+        }
+
+        int decpos[ctx->posrows];
+        int decneg[ctx->negrows];
+        int mbase[k];
+        mbase[0] = 1;
+        for (int c = 1; c < k; ++c) {
+            mbase[c] = mbase[c - 1] * ctx->noflevels[tempk[c - 1]];
+        }
+        get_decimals(
+            ctx->posrows, ctx->negrows, k, decpos, decneg,
+            ctx->posmat, ctx->negmat, tempk, mbase
+        );
+
+        int selected_word_index[k];
+        int selected_bit_index[k];
+        int bits_per_chunk = BITS_PER_WORD / ctx->value_bit_width;
+        for (int c = 0; c < k; ++c) {
+            selected_word_index[c] = tempk[c] / bits_per_chunk;
+            selected_bit_index[c] =
+                (tempk[c] % bits_per_chunk) * ctx->value_bit_width;
+        }
+
+        int possiblePIrows[ctx->posrows];
+        Rboolean possiblePI[ctx->posrows];
+        possiblePIrows[0] = 0;
+        possiblePI[0] = true;
+        int found = 1;
+        get_uniques(ctx->posrows, &found, decpos, possiblePI, possiblePIrows);
+        int compare = found;
+        if (ctx->picons > 0) {
+            int val[k], fuzzy[k];
+            for (int i = 0; i < compare; ++i) {
+                for (int c = 0; c < k; ++c) {
+                    val[c] = ctx->posmat[tempk[c] * ctx->posrows + possiblePIrows[i]];
+                    fuzzy[c] = ctx->p_fsconds[tempk[c]];
+                }
+                double score = consistency(
+                    ctx->p_data, ctx->nrdata, ctx->nconds, k,
+                    tempk, val, fuzzy
+                );
+                if (isnan(score)) {
+                    atomic_store_explicit(
+                        ctx->resize_failed, true, memory_order_release
+                    );
+                    return;
+                }
+                if (altb(score, ctx->picons)) {
+                    possiblePI[i] = false;
+                    found--;
+                }
+            }
+        } else if (ctx->negrows > 0) {
+            verify_possible_PI(
+                compare, ctx->negrows, &found, possiblePI,
+                possiblePIrows, decpos, decneg
+            );
+        }
+        if (found <= 0) continue;
+
+        int frows[found];
+        get_frows(frows, possiblePI, possiblePIrows, compare);
+        for (int f = 0; f < found; ++f) {
+            int bf = tb->found;
+            if (bf >= ctx->posrows) {
+                atomic_store_explicit(ctx->resize_failed, true, memory_order_release);
+                return;
+            }
+            int base_imp = bf * ctx->nconds;
+            int base_bits = bf * ctx->implicant_words;
+            int base_pic = bf * ctx->pichart_words;
+            unsigned int fixed_bits[ctx->implicant_words];
+            unsigned int value_bits[ctx->implicant_words];
+            Memzero(fixed_bits, ctx->implicant_words);
+            Memzero(value_bits, ctx->implicant_words);
+            Memzero(&tb->implicants[base_imp], ctx->nconds);
+            Memzero(&tb->indx[base_imp], ctx->nconds);
+            for (int c = 0; c < k; ++c) {
+                int value = ctx->posmat[tempk[c] * ctx->posrows + frows[f]];
+                int tempc = value + 1;
+                int word = selected_word_index[c];
+                int bit = selected_bit_index[c];
+                fixed_bits[word] |= (((1U << ctx->value_bit_width) - 1U) << bit);
+                value_bits[word] |= ((unsigned int)tempc << bit);
+                tb->implicants[base_imp + tempk[c]] = tempc;
+                tb->indx[base_imp + c] = tempk[c] + 1;
+            }
+            int covsum = 0;
+            unsigned int *coverage = &tb->pichart_pos[base_pic];
+            Memzero(coverage, ctx->pichart_words);
+            for (int r = 0; r < ctx->posrows; ++r) {
+                if (decpos[r] != decpos[frows[f]]) continue;
+                coverage[r / BITS_PER_WORD] |= 1U << (r % BITS_PER_WORD);
+                covsum++;
+            }
+            tb->ck[bf] = k;
+            tb->covsum[bf] = covsum;
+            tb->solver_active[bf] = TRUE;
+            Memcpy(&tb->implicants_pos[base_bits], fixed_bits, ctx->implicant_words);
+            Memcpy(&tb->implicants_val[base_bits], value_bits, ctx->implicant_words);
+            tb->found++;
+        }
+        if (tb->found > 0) qca_merge_thread_buffer(ctx, tb);
+    }
+}
 
 void CCubes(const int p_tt[],          // the truth table
             const int ttrows,          // number of rows in the truth table
@@ -200,7 +455,7 @@ void CCubes(const int p_tt[],          // the truth table
     int *last_index = (int *) R_Calloc(posrows, int);
     int *k_last_index = (int *) R_Calloc(posrows, int);
 
-    int nthreads = 1;
+    int nthreads = qca_default_thread_count();
     ThreadBuffer *buffers = (ThreadBuffer *) R_Calloc(nthreads, ThreadBuffer);
 
     for (int t = 0; t < nthreads; t++) {
@@ -225,6 +480,8 @@ void CCubes(const int p_tt[],          // the truth table
     Rboolean solution_exists = false;
     int counter = 0; // legacy PI-inactivity patience for complete enumeration
     Rboolean pi_resize_failed = false;
+    atomic_bool parallel_resize_failed;
+    atomic_init(&parallel_resize_failed, false);
     int k;
     for (k = 1; k <= pidepth; k++) {
         R_CheckUserInterrupt();
@@ -241,6 +498,7 @@ void CCubes(const int p_tt[],          // the truth table
             // return(R_NilValue);
         }
 
+        if (nthreads == 1) {
         for (unsigned long long int task = 0; task < maxtasks; task++) {
             if (task > 0 && task % INTERRUPT_EVERY == 0) {
                 R_CheckUserInterrupt();
@@ -324,7 +582,14 @@ void CCubes(const int p_tt[],          // the truth table
                         fuzzy[c] = p_fsconds[tempk[c]] * 1;
                     }
 
-                    if (altb(consistency(p_data, nrdata, nconds, k, tempk, val, fuzzy), picons)) {
+                    double score = consistency(
+                        p_data, nrdata, nconds, k, tempk, val, fuzzy
+                    );
+                    if (isnan(score)) {
+                        pi_resize_failed = true;
+                        break;
+                    }
+                    if (altb(score, picons)) {
                         possiblePI[i] = false;
                         found--;
                     }
@@ -546,6 +811,56 @@ void CCubes(const int p_tt[],          // the truth table
                 }
             }
         }
+        }
+        else {
+            atomic_store_explicit(
+                &parallel_resize_failed, false, memory_order_release
+            );
+            QCAPIGenerationContext pi_ctx = {
+                .k = k,
+                .nconds = nconds,
+                .posrows = posrows,
+                .negrows = negrows,
+                .nrdata = nrdata,
+                .value_bit_width = value_bit_width,
+                .implicant_words = implicant_words,
+                .pichart_words = pichart_words,
+                .picons = picons,
+                .posmat = posmat,
+                .negmat = negmat,
+                .noflevels = noflevels,
+                .p_fsconds = p_fsconds,
+                .p_data = p_data,
+                .buffers = buffers,
+                .p_implicants_pos = &p_implicants_pos,
+                .p_implicants_val = &p_implicants_val,
+                .p_pichart_pos = &p_pichart_pos,
+                .p_pichart = &p_pichart,
+                .p_implicants = &p_implicants,
+                .p_indx = &p_indx,
+                .p_ck = &p_ck,
+                .p_solver_active = &p_solver_active,
+                .covered = &covered,
+                .foundPI = &foundPI,
+                .estimPI = &estimPI,
+                .increase = increase,
+                .k_last_index = k_last_index,
+                .resize_failed = &parallel_resize_failed
+            };
+            if (!qca_mutex_init(&pi_ctx.merge_lock)) {
+                error("Failed to initialize PI merge mutex.");
+            }
+            if (!qca_parallel_for(
+                maxtasks, nthreads, qca_pi_generation_range, &pi_ctx
+            )) {
+                qca_mutex_destroy(&pi_ctx.merge_lock);
+                error("Failed to start pthread workers during PI generation.");
+            }
+            qca_mutex_destroy(&pi_ctx.merge_lock);
+            pi_resize_failed = atomic_load_explicit(
+                &parallel_resize_failed, memory_order_acquire
+            );
+        }
         R_CheckUserInterrupt();
         if (pi_resize_failed) {
             error("Memory allocation failed during PI buffer resize.");
@@ -562,7 +877,20 @@ void CCubes(const int p_tt[],          // the truth table
             int reduced = qca_reduce_active_columns(
                 p_pichart, posrows, foundPI, p_solver_active
             );
-            if (reduced > 0) solver_columns = reduced;
+            Rboolean incumbent_valid = qca_cover_is_feasible(
+                p_pichart, posrows, foundPI, previndices, prevsolmin
+            );
+            if (incumbent_valid) {
+                for (int i = 0; i < prevsolmin; ++i) {
+                    p_solver_active[previndices[i]] = 1;
+                }
+            }
+            if (reduced > 0) {
+                solver_columns = 0;
+                for (int c = 0; c < foundPI; ++c) {
+                    solver_columns += p_solver_active[c] != 0;
+                }
+            }
 
             *complex = !gurobi && too_complex(
                 solver_columns, (solmin > 0 ? solmin : k), maxcomb
@@ -606,11 +934,13 @@ void CCubes(const int p_tt[],          // the truth table
                     }
 
                     if (native_gurobi_available) {
-                        used_native_gurobi = solvePIchart_gurobi_active(
+                        used_native_gurobi = solvePIchart_gurobi_active_with_incumbent(
                             p_pichart,
                             foundPI,
                             posrows,
                             p_solver_active,
+                            incumbent_valid ? previndices : NULL,
+                            incumbent_valid ? prevsolmin : 0,
                             indices,
                             &solmin
                         );
@@ -630,11 +960,13 @@ void CCubes(const int p_tt[],          // the truth table
                     // 2. The internal SCP search is bounded; lp_solve finishes
                     // the compact core when that budget is inconclusive.
                     solmin = 0;
-                    used_native_hybrid = solvePIchart_hybrid_active(
+                    used_native_hybrid = solvePIchart_hybrid_active_with_incumbent(
                         p_pichart,
                         posrows,
                         foundPI,
                         p_solver_active,
+                        incumbent_valid ? previndices : NULL,
+                        incumbent_valid ? prevsolmin : 0,
                         indices,
                         &solmin
                     ) && solmin > 0;

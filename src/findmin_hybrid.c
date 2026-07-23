@@ -35,6 +35,8 @@ typedef struct {
     int scp_attempted;
     int scp_limited;
     int lpsolve_fallback;
+    int incumbent_requested;
+    int incumbent_accepted;
 } qca_hybrid_profile;
 
 static qca_hybrid_profile hybrid_profile = {0};
@@ -353,6 +355,8 @@ static int solve_scp_from_int_matrix(
     const int *p_chart,
     const int nr,
     const int nc,
+    const int *initial_indices,
+    int initial_solmin,
     int *solution
 ) {
     int ok = 0;
@@ -386,6 +390,10 @@ static int solve_scp_from_int_matrix(
     memset(&hybrid_profile, 0, sizeof(hybrid_profile));
     hybrid_profile.original_columns = nc;
     hybrid_profile.presolved_columns = nc;
+    hybrid_profile.incumbent_requested =
+        initial_indices != NULL && initial_solmin > 0;
+    hybrid_profile.incumbent_accepted =
+        hybrid_profile.incumbent_requested;
 
     incumbent_indices = (int *)calloc((size_t)nc, sizeof(int));
     lagr_scores = (double *)calloc((size_t)nc, sizeof(double));
@@ -397,11 +405,13 @@ static int solve_scp_from_int_matrix(
     }
     for (int c = 0; c < nc; ++c) reverse_map[c] = -1;
 
-    solvePIchart_lagrangian_prepare(
+    solvePIchart_lagrangian_prepare_with_incumbent(
         (int *)p_chart,
         nc,
         nr,
         NULL,
+        initial_indices,
+        initial_solmin,
         incumbent_indices,
         &incumbent_size,
         &lagr_lb,
@@ -589,6 +599,8 @@ static Rboolean solvePIchart_hybrid_active_impl(
     int nrows,
     int ncols,
     const unsigned char *active,
+    const int *initial_indices,
+    int initial_solmin,
     int *indices,
     int *solmin
 ) {
@@ -600,6 +612,8 @@ static Rboolean solvePIchart_hybrid_active_impl(
 
     int *solution = (int *)calloc((size_t)compact_ncols, sizeof(int));
     int *compact_map = NULL;
+    int *reverse_map = NULL;
+    int *compact_initial = NULL;
     int *compact_chart = NULL;
     const int *solver_chart = chart;
     if (solution == NULL) {
@@ -608,18 +622,22 @@ static Rboolean solvePIchart_hybrid_active_impl(
 
     if (compact_ncols != ncols) {
         compact_map = (int *)malloc((size_t)compact_ncols * sizeof(int));
+        reverse_map = (int *)malloc((size_t)ncols * sizeof(int));
         compact_chart = (int *)malloc(
             (size_t)nrows * (size_t)compact_ncols * sizeof(int)
         );
-        if (compact_map == NULL || compact_chart == NULL) {
+        if (compact_map == NULL || reverse_map == NULL || compact_chart == NULL) {
             free(solution);
             free(compact_map);
+            free(reverse_map);
             free(compact_chart);
             return FALSE;
         }
+        for (int c = 0; c < ncols; ++c) reverse_map[c] = -1;
         for (int c = 0, cc = 0; c < ncols; ++c) {
             if (active != NULL && !active[c]) continue;
             compact_map[cc] = c;
+            reverse_map[c] = cc;
             memcpy(
                 &compact_chart[(size_t)cc * nrows],
                 &chart[(size_t)c * nrows],
@@ -630,10 +648,41 @@ static Rboolean solvePIchart_hybrid_active_impl(
         solver_chart = compact_chart;
     }
 
-    if (!solve_scp_from_int_matrix(solver_chart, nrows, compact_ncols, solution)) {
+    if (initial_indices && initial_solmin > 0) {
+        compact_initial = (int *)malloc((size_t)initial_solmin * sizeof(int));
+        if (!compact_initial) {
+            free(solution);
+            free(compact_map);
+            free(reverse_map);
+            free(compact_chart);
+            return FALSE;
+        }
+        for (int i = 0; i < initial_solmin; ++i) {
+            int col = initial_indices[i];
+            int compact_col = compact_map == NULL
+                ? col
+                : (col >= 0 && col < ncols ? reverse_map[col] : -1);
+            if (compact_col < 0 || compact_col >= compact_ncols) {
+                free(solution);
+                free(compact_map);
+                free(reverse_map);
+                free(compact_chart);
+                free(compact_initial);
+                return FALSE;
+            }
+            compact_initial[i] = compact_col;
+        }
+    }
+
+    if (!solve_scp_from_int_matrix(
+        solver_chart, nrows, compact_ncols,
+        compact_initial, initial_solmin, solution
+    )) {
         free(solution);
         free(compact_map);
+        free(reverse_map);
         free(compact_chart);
+        free(compact_initial);
         return FALSE;
     }
     hybrid_profile.original_columns = ncols;
@@ -649,7 +698,9 @@ static Rboolean solvePIchart_hybrid_active_impl(
 
     free(solution);
     free(compact_map);
+    free(reverse_map);
     free(compact_chart);
+    free(compact_initial);
     return TRUE;
 }
 
@@ -662,7 +713,23 @@ Rboolean solvePIchart_hybrid_active(
     int *solmin
 ) {
     return solvePIchart_hybrid_active_impl(
-        chart, nrows, ncols, active, indices, solmin
+        chart, nrows, ncols, active, NULL, 0, indices, solmin
+    );
+}
+
+Rboolean solvePIchart_hybrid_active_with_incumbent(
+    const int *chart,
+    int nrows,
+    int ncols,
+    const unsigned char *active,
+    const int *initial_indices,
+    int initial_solmin,
+    int *indices,
+    int *solmin
+) {
+    return solvePIchart_hybrid_active_impl(
+        chart, nrows, ncols, active,
+        initial_indices, initial_solmin, indices, solmin
     );
 }
 
@@ -683,7 +750,7 @@ Rboolean solvePIchart_hybrid(
         return FALSE;
     }
     Rboolean ok = solvePIchart_hybrid_active_impl(
-        chart, nrows, ncols, active, indices, solmin
+        chart, nrows, ncols, active, NULL, 0, indices, solmin
     );
     free(active);
     return ok;
@@ -691,8 +758,8 @@ Rboolean solvePIchart_hybrid(
 
 SEXP C_getScpProfile(void) {
     qca_scp_profile profile = qca_scp_profile_get();
-    SEXP out = PROTECT(allocVector(VECSXP, 19));
-    SEXP names = PROTECT(allocVector(STRSXP, 19));
+    SEXP out = PROTECT(allocVector(VECSXP, 21));
+    SEXP names = PROTECT(allocVector(STRSXP, 21));
 
     SET_STRING_ELT(names, 0, mkChar("total_seconds"));
     SET_STRING_ELT(names, 1, mkChar("reductions_seconds"));
@@ -713,6 +780,8 @@ SEXP C_getScpProfile(void) {
     SET_STRING_ELT(names, 16, mkChar("root_branches_total"));
     SET_STRING_ELT(names, 17, mkChar("root_branches_completed"));
     SET_STRING_ELT(names, 18, mkChar("adaptive_extensions"));
+    SET_STRING_ELT(names, 19, mkChar("incumbent_requested"));
+    SET_STRING_ELT(names, 20, mkChar("incumbent_accepted"));
 
     SET_VECTOR_ELT(out, 0, ScalarReal(profile.total_seconds));
     SET_VECTOR_ELT(out, 1, ScalarReal(profile.reductions_seconds));
@@ -733,6 +802,8 @@ SEXP C_getScpProfile(void) {
     SET_VECTOR_ELT(out, 16, ScalarReal((double) profile.root_branches_total));
     SET_VECTOR_ELT(out, 17, ScalarReal((double) profile.root_branches_completed));
     SET_VECTOR_ELT(out, 18, ScalarReal((double) profile.adaptive_extensions));
+    SET_VECTOR_ELT(out, 19, ScalarLogical(hybrid_profile.incumbent_requested));
+    SET_VECTOR_ELT(out, 20, ScalarLogical(hybrid_profile.incumbent_accepted));
     setAttrib(out, R_NamesSymbol, names);
 
     UNPROTECT(2);

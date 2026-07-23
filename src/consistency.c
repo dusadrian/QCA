@@ -1,4 +1,5 @@
-#include <R_ext/RS.h> // for R_Calloc, R_free, Memset etc.
+#include <stdlib.h>
+#include <math.h>
 #include "qca_r.h"
 #include "utils.h"
 
@@ -13,8 +14,10 @@ double consistency(
     int fuzzy[]
 ) {
     
-    double *p_y = (double *) R_Calloc(nrowsx * k, double);
-    // memset(p_y, 0, nrowsx * k * sizeof(double));
+    double *p_y = (double *) calloc((size_t)nrowsx * (size_t)k, sizeof(double));
+    if (p_y == NULL) {
+        return NAN;
+    }
     
     
     for (int c = 0; c < k; c++) {
@@ -50,6 +53,6 @@ double consistency(
         
     }
     
-    R_Free(p_y);
+    free(p_y);
     return(sumxy / sumx);
 }

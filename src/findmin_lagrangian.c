@@ -3630,7 +3630,9 @@ static void solvePIchart_lagrangian_level(
     double *lagr_score_out,
     int effort_level,
     unsigned char *improving_core_out,
-    int *improving_core_size_out
+    int *improving_core_size_out,
+    const int *initial_solution,
+    int initial_solmin
 ) {
     if (solmin) *solmin = -1;
     if (best_lb_out) *best_lb_out = -DBL_MAX;
@@ -3717,8 +3719,8 @@ static void solvePIchart_lagrangian_level(
         colsCoveringCount,
         weights,
         &baseline,
-        NULL,
-        0,
+        initial_solution,
+        initial_solmin,
         solution,
         solmin,
         scores
@@ -3926,7 +3928,7 @@ void solvePIchart_lagrangian(
     solvePIchart_lagrangian_level(
         pichart, foundPI, ON_minterms, weights,
         solution, solmin, best_lb_out, lagr_score_out,
-        2, NULL, NULL
+        2, NULL, NULL, NULL, 0
     );
 }
 
@@ -3945,7 +3947,29 @@ void solvePIchart_lagrangian_prepare(
     solvePIchart_lagrangian_level(
         pichart, foundPI, ON_minterms, weights,
         solution, solmin, best_lb_out, lagr_score_out,
-        2, improving_core_out, improving_core_size_out
+        2, improving_core_out, improving_core_size_out, NULL, 0
+    );
+}
+
+void solvePIchart_lagrangian_prepare_with_incumbent(
+    int pichart[],
+    const int foundPI,
+    const int ON_minterms,
+    const double weights[],
+    const int *initial_solution,
+    int initial_solmin,
+    int *solution,
+    int *solmin,
+    double *best_lb_out,
+    double *lagr_score_out,
+    unsigned char *improving_core_out,
+    int *improving_core_size_out
+) {
+    solvePIchart_lagrangian_level(
+        pichart, foundPI, ON_minterms, weights,
+        solution, solmin, best_lb_out, lagr_score_out,
+        2, improving_core_out, improving_core_size_out,
+        initial_solution, initial_solmin
     );
 }
 

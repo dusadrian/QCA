@@ -30,6 +30,14 @@ static void *qca_range_thread_main(void *arg) {
 #endif
 
 int qca_default_thread_count(void) {
+    const char *requested = getenv("QCA_NUM_THREADS");
+    if (requested != NULL && requested[0] != '\0') {
+        char *end = NULL;
+        long parsed = strtol(requested, &end, 10);
+        if (end != requested && *end == '\0' && parsed > 0) {
+            return parsed > QCA_THREAD_LIMIT ? QCA_THREAD_LIMIT : (int)parsed;
+        }
+    }
 #if defined(HAVE_PTHREAD)
     #if defined(_WIN32)
     SYSTEM_INFO info;

@@ -21,3 +21,13 @@ bool solvePIchart_gurobi_active(
     int indices[],
     int *solmin
 );
+bool solvePIchart_gurobi_active_with_incumbent(
+    const int pichart[],
+    int foundPI,
+    int on_minterms,
+    const unsigned char active[],
+    const int initial_indices[],
+    int initial_solmin,
+    int indices[],
+    int *solmin
+);

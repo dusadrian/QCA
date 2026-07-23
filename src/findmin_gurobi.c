@@ -259,6 +259,82 @@ QUIT:
     return error == 0 && solmin != NULL && *solmin > 0;
 }
 
+static bool solvePIchart_gurobi_with_incumbent(
+    const int pichart[],
+    int foundPI,
+    int on_minterms,
+    const int initial_indices[],
+    int initial_solmin,
+    int indices[],
+    int *solmin
+) {
+    int error = 0;
+    GRBmodel *model = NULL;
+    int *ind = NULL;
+    double *coeffs = NULL;
+    double *solution = NULL;
+    double *start = NULL;
+    if (solmin) *solmin = 0;
+
+    ind = (int *)R_Calloc((size_t)foundPI, int);
+    coeffs = (double *)R_Calloc((size_t)foundPI, double);
+    solution = (double *)R_Calloc((size_t)foundPI, double);
+    start = (double *)R_Calloc((size_t)foundPI, double);
+    if (!ind || !coeffs || !solution || !start || !qca_gurobi_env_ready()) {
+        error = 1;
+        goto QUIT;
+    }
+
+    error = GRBnewmodel(qca_gurobi_env, &model, "QCASetCover",
+                        foundPI, NULL, NULL, NULL, NULL, NULL);
+    if (error) goto QUIT;
+    for (int j = 0; j < foundPI; ++j) {
+        error = GRBsetcharattrelement(model, GRB_CHAR_ATTR_VTYPE, j, GRB_BINARY);
+        if (error) goto QUIT;
+    }
+    for (int i = 0; i < on_minterms; ++i) {
+        int nz = 0;
+        for (int j = 0; j < foundPI; ++j) {
+            if (pichart[i + on_minterms * j]) {
+                ind[nz] = j;
+                coeffs[nz++] = 1.0;
+            }
+        }
+        error = GRBaddconstr(model, nz, ind, coeffs, GRB_GREATER_EQUAL, 1.0, NULL);
+        if (error) goto QUIT;
+    }
+    for (int j = 0; j < foundPI; ++j) {
+        ind[j] = j;
+        coeffs[j] = 1.0;
+        start[j] = 0.0;
+    }
+    error = GRBsetobjectiven(model, 0, 1, 1.0, 0.0, 0.0,
+                             "mincols", 0.0, foundPI, ind, coeffs);
+    if (error) goto QUIT;
+    for (int i = 0; i < initial_solmin; ++i) start[initial_indices[i]] = 1.0;
+    error = GRBsetdblattrarray(model, GRB_DBL_ATTR_START, 0, foundPI, start);
+    if (error) goto QUIT;
+    error = GRBoptimize(model);
+    if (error) goto QUIT;
+    double objval = 0.0;
+    error = GRBgetdblattr(model, GRB_DBL_ATTR_OBJVAL, &objval);
+    if (error) goto QUIT;
+    error = GRBgetdblattrarray(model, GRB_DBL_ATTR_X, 0, foundPI, solution);
+    if (error) goto QUIT;
+    *solmin = (int)objval;
+    for (int j = 0, pos = 0; j < foundPI; ++j) {
+        if (solution[j] > 0.9) indices[pos++] = j;
+    }
+
+QUIT:
+    if (ind) R_Free(ind);
+    if (coeffs) R_Free(coeffs);
+    if (solution) R_Free(solution);
+    if (start) R_Free(start);
+    if (model) GRBfreemodel(model);
+    return error == 0 && solmin && *solmin > 0;
+}
+
 bool solvePIchart_gurobi_active(
     const int pichart[],
     int foundPI,
@@ -328,6 +404,66 @@ bool solvePIchart_gurobi_active(
     return ok;
 }
 
+bool solvePIchart_gurobi_active_with_incumbent(
+    const int pichart[],
+    int foundPI,
+    int on_minterms,
+    const unsigned char active[],
+    const int initial_indices[],
+    int initial_solmin,
+    int indices[],
+    int *solmin
+) {
+    if (!initial_indices || initial_solmin <= 0) {
+        return solvePIchart_gurobi_active(
+            pichart, foundPI, on_minterms, active, indices, solmin
+        );
+    }
+    int compact_foundPI = 0;
+    for (int c = 0; c < foundPI; ++c) {
+        compact_foundPI += active == NULL || active[c] != 0;
+    }
+    int *map = (int *)R_Calloc((size_t)compact_foundPI, int);
+    int *reverse = (int *)R_Calloc((size_t)foundPI, int);
+    int *compact_chart = (int *)R_Calloc(
+        (size_t)on_minterms * (size_t)compact_foundPI, int
+    );
+    int *compact_initial = (int *)R_Calloc((size_t)initial_solmin, int);
+    int *compact_indices = (int *)R_Calloc((size_t)compact_foundPI, int);
+    bool ok = false;
+    if (!map || !reverse || !compact_chart || !compact_initial || !compact_indices) goto DONE;
+    for (int c = 0; c < foundPI; ++c) reverse[c] = -1;
+    for (int c = 0, cc = 0; c < foundPI; ++c) {
+        if (active && !active[c]) continue;
+        map[cc] = c;
+        reverse[c] = cc;
+        Memcpy(&compact_chart[(size_t)cc * on_minterms],
+               &pichart[(size_t)c * on_minterms], on_minterms);
+        ++cc;
+    }
+    for (int i = 0; i < initial_solmin; ++i) {
+        int col = initial_indices[i];
+        if (col < 0 || col >= foundPI || reverse[col] < 0) goto DONE;
+        compact_initial[i] = reverse[col];
+    }
+    int compact_solmin = 0;
+    ok = solvePIchart_gurobi_with_incumbent(
+        compact_chart, compact_foundPI, on_minterms,
+        compact_initial, initial_solmin, compact_indices, &compact_solmin
+    );
+    if (ok) {
+        *solmin = compact_solmin;
+        for (int i = 0; i < compact_solmin; ++i) indices[i] = map[compact_indices[i]];
+    }
+DONE:
+    if (map) R_Free(map);
+    if (reverse) R_Free(reverse);
+    if (compact_chart) R_Free(compact_chart);
+    if (compact_initial) R_Free(compact_initial);
+    if (compact_indices) R_Free(compact_indices);
+    return ok;
+}
+
 #else
 
 bool gurobi_runtime_available(void) {
@@ -381,6 +517,18 @@ bool solvePIchart_gurobi_active(
     (void) indices;
     if (solmin) *solmin = 0;
     return false;
+}
+
+bool solvePIchart_gurobi_active_with_incumbent(
+    const int pichart[], int foundPI, int on_minterms,
+    const unsigned char active[], const int initial_indices[],
+    int initial_solmin, int indices[], int *solmin
+) {
+    (void)initial_indices;
+    (void)initial_solmin;
+    return solvePIchart_gurobi_active(
+        pichart, foundPI, on_minterms, active, indices, solmin
+    );
 }
 
 #endif

@@ -21,5 +21,15 @@ Rboolean solvePIchart_hybrid_active(
     int *indices,
     int *solmin
 );
+Rboolean solvePIchart_hybrid_active_with_incumbent(
+    const int *chart,
+    int nrows,
+    int ncols,
+    const unsigned char *active,
+    const int *initial_indices,
+    int initial_solmin,
+    int *indices,
+    int *solmin
+);
 
 #endif
