@@ -26,6 +26,20 @@ void solvePIchart_lagrangian_prepare(
     unsigned char *improving_core_out,
     int *improving_core_size_out
 );
+void solvePIchart_lagrangian_prepare_with_incumbent(
+    int pichart[],
+    const int foundPI,
+    const int ON_minterms,
+    const double weights[],
+    const int *initial_solution,
+    int initial_solmin,
+    int *solution,
+    int *solmin,
+    double *best_lb_out,
+    double *lagr_score_out,
+    unsigned char *improving_core_out,
+    int *improving_core_size_out
+);
 
 SEXP C_findminLagrangian(SEXP chart);
 SEXP C_findminLagrangianInfo(SEXP chart);

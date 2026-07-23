@@ -91,3 +91,54 @@ test_that("a warned F_t search cannot end uncertified at pi.depth", {
     )
   }
 })
+
+
+test_that("serial and parallel PI generation retain the same chart and models", {
+  previous <- Sys.getenv("QCA_NUM_THREADS", unset = NA_character_)
+  on.exit({
+    if (is.na(previous)) {
+      Sys.unsetenv("QCA_NUM_THREADS")
+    } else {
+      Sys.setenv(QCA_NUM_THREADS = previous)
+    }
+  }, add = TRUE)
+
+  data(d.represent, package = "QCA")
+
+  Sys.setenv(QCA_NUM_THREADS = "1")
+  serial <- minimize(
+    d.represent,
+    outcome = "WNP",
+    include = "?",
+    details = TRUE
+  )
+
+  Sys.setenv(QCA_NUM_THREADS = "4")
+  parallel <- minimize(
+    d.represent,
+    outcome = "WNP",
+    include = "?",
+    details = TRUE
+  )
+
+  expect_equal(parallel$PIchart, serial$PIchart)
+  expect_equal(parallel$solution, serial$solution)
+})
+
+
+test_that("CCubes transfers a validated cover between complexity levels", {
+  data(d.represent, package = "QCA")
+  .Call("C_resetScpProfile", PACKAGE = "QCA")
+
+  minimize(
+    d.represent,
+    outcome = "WNP",
+    include = "?",
+    details = TRUE,
+    first.min = TRUE
+  )
+  profile <- .Call("C_getScpProfile", PACKAGE = "QCA")
+
+  expect_true(profile$incumbent_requested)
+  expect_true(profile$incumbent_accepted)
+})
