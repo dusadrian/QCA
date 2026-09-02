@@ -59,17 +59,13 @@ void *clean_realloc(void *oldptr, int width, size_t newsize, int oldsize)
 {
   newsize *= width;
   oldsize *= width;
-  /* this works around valgrind reporting a realloc(3) call with size = 0.
-     According to https://linux.die.net/man/3/realloc glibc frees the
-     memory in this case, and (maybe?) returns NULL:
-     > if size is equal to zero, and ptr is not NULL, then the call
-     > is equivalent to free(ptr). */
-#ifdef __linux__
-  if (oldptr != NULL && newsize == 0) {
-    free(oldptr);
+  /* A zero-size reallocation is used when releasing LUSOL work arrays.
+     R_Realloc(ptr, 0, ...) is platform-dependent and raises an error on
+     Windows, so release the allocation explicitly on every platform. */
+  if (newsize == 0) {
+    LUSOL_FREE(oldptr);
     return NULL;
   }
-#endif
   oldptr = LUSOL_REALLOC(oldptr, newsize);
   if(newsize > oldsize)
 /*    MEMCLEAR(oldptr+oldsize, newsize-oldsize); */

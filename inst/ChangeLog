@@ -1,4 +1,4 @@
-Version 3.25.2
+Version 3.25.4
     o CCubes now uses adaptive stopping for supported binary truth-table
       minimizations: the first unchanged minimum triggers a deterministic
       delayed-pair diagnostic, and warned cases continue to a global
@@ -23,6 +23,8 @@ Version 3.25.2
       type = "conservative", since both available methods are exact
     o All set covering backends now return proven minimum covers; the
       choice of backend only affects solving time, never the solutions
+    o Bug fix in R_Realloc() on Windows, crashing findmin()
+      (thanks to Yuki Toyoda for the report)
 
 Version 3.25
     o Now using a trimmed down version of lp_solve for exact covers
