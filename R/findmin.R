@@ -40,7 +40,7 @@
             solution <- .Call(
                 "C_findminNativeInternal",
                 matrix(as.logical(chart), nrow = nrow(chart)),
-                2L,
+                5L,
                 PACKAGE = "QCA"
             )
         } else if (identical(type, "hybrid")) {

@@ -15,6 +15,7 @@ typedef struct {
     int target_propagation;
     const double *initial_row_dual;
     int lagrangian_iterations;
+    int selective_bounds; /* cheap propagation, Lagrangian, then dominance */
 } qca_scp_problem;
 
 typedef struct {
@@ -42,6 +43,14 @@ typedef struct {
     unsigned long long lagrangian_prunes;
     unsigned long long lagrangian_fixed_columns;
     double lagrangian_seconds;
+    unsigned long long dual_reduction_calls;
+    unsigned long long dual_reduction_fixed;
+    double dual_reduction_seconds; /* included in reductions_seconds */
+    unsigned long long incumbent_improvements;
+    unsigned long long last_improvement_node;
+    double last_improvement_seconds; /* since search started, not root prep */
+    int initial_size;
+    unsigned long long lagrangian_iterations;
 } qca_scp_profile;
 
 typedef enum {
