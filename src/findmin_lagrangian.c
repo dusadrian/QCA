@@ -2931,7 +2931,8 @@ static void solve_scp_lagrangian_config(
     int initial_solmin,
     int *solution,
     int *solmin,
-    double *ls_out /* optional: reduced costs at the best multipliers */
+    double *ls_out, /* optional: reduced costs at the best multipliers */
+    double *row_dual_out
 ) {
     if (solmin) *solmin = -1;
     lagr_stats_begin(rows, cols, 0);
@@ -3602,6 +3603,7 @@ static void solve_scp_lagrangian_config(
         );
     }
 
+    if (row_dual_out) memcpy(row_dual_out, t_best, (size_t)rows * sizeof(double));
     *solmin = best_sol_size;
     lagr_stats_finish(best_sol_size, bestLB, bestZLB, lastZLB, step_coef, iterations, stop_reason);
 
@@ -3632,8 +3634,12 @@ static void solvePIchart_lagrangian_level(
     unsigned char *improving_core_out,
     int *improving_core_size_out,
     const int *initial_solution,
-    int initial_solmin
+    int initial_solmin,
+    double *row_dual_out
 ) {
+    if (row_dual_out && ON_minterms > 0) {
+        memset(row_dual_out, 0, (size_t)ON_minterms * sizeof(double));
+    }
     if (solmin) *solmin = -1;
     if (best_lb_out) *best_lb_out = -DBL_MAX;
     if (improving_core_size_out) *improving_core_size_out = 0;
@@ -3702,6 +3708,7 @@ static void solvePIchart_lagrangian_level(
     /* reduced costs paired with their dual value, for the exact completion */
     double *scores = need_scores ? (double*)malloc((size_t)foundPI * sizeof(double)) : NULL;
     double *candidate_scores = NULL;
+    double *candidate_dual = NULL;
     double scores_zlb = -DBL_MAX;
     int *candidate = NULL;
 
@@ -3723,7 +3730,8 @@ static void solvePIchart_lagrangian_level(
         initial_solmin,
         solution,
         solmin,
-        scores
+        scores,
+        row_dual_out
     );
 
     LagrangianStats merged_stats = *lagrangian_last_stats();
@@ -3756,7 +3764,9 @@ static void solvePIchart_lagrangian_level(
         if (need_scores) {
             candidate_scores = (double*)malloc((size_t)foundPI * sizeof(double));
         }
-        if (!candidate || (need_scores && !candidate_scores)) {
+        if (row_dual_out) candidate_dual = (double*)calloc((size_t)ON_minterms, sizeof(double));
+        if (!candidate || (need_scores && !candidate_scores) ||
+            (row_dual_out && !candidate_dual)) {
             goto completion;
         }
 
@@ -3777,7 +3787,8 @@ static void solvePIchart_lagrangian_level(
                 best_solmin,
                 candidate,
                 &candidate_solmin,
-                candidate_scores
+                candidate_scores,
+                candidate_dual
             );
 
             const LagrangianStats *candidate_stats = lagrangian_last_stats();
@@ -3799,6 +3810,7 @@ static void solvePIchart_lagrangian_level(
                    drives the reduced-cost fixing of the completion */
                 memcpy(scores, candidate_scores, (size_t)foundPI * sizeof(double));
                 scores_zlb = candidate_stats->best_zlb;
+                if (row_dual_out) memcpy(row_dual_out, candidate_dual, (size_t)ON_minterms * sizeof(double));
             }
 
             if (candidate_solmin >= 0 && candidate_solmin < best_solmin) {
@@ -3904,6 +3916,7 @@ completion:
 
     free(candidate);
     free(candidate_scores);
+    free(candidate_dual);
     free(scores);
     free_adjacency(
         rowsCovered,
@@ -3928,7 +3941,7 @@ void solvePIchart_lagrangian(
     solvePIchart_lagrangian_level(
         pichart, foundPI, ON_minterms, weights,
         solution, solmin, best_lb_out, lagr_score_out,
-        2, NULL, NULL, NULL, 0
+        2, NULL, NULL, NULL, 0, NULL
     );
 }
 
@@ -3947,7 +3960,7 @@ void solvePIchart_lagrangian_prepare(
     solvePIchart_lagrangian_level(
         pichart, foundPI, ON_minterms, weights,
         solution, solmin, best_lb_out, lagr_score_out,
-        2, improving_core_out, improving_core_size_out, NULL, 0
+        2, improving_core_out, improving_core_size_out, NULL, 0, NULL
     );
 }
 
@@ -3969,7 +3982,22 @@ void solvePIchart_lagrangian_prepare_with_incumbent(
         pichart, foundPI, ON_minterms, weights,
         solution, solmin, best_lb_out, lagr_score_out,
         2, improving_core_out, improving_core_size_out,
-        initial_solution, initial_solmin
+        initial_solution, initial_solmin, NULL
+    );
+}
+
+void solvePIchart_lagrangian_prepare_native(
+    int pichart[], int foundPI, int ON_minterms, const double weights[],
+    const int *initial_solution, int initial_solmin, int *solution, int *solmin,
+    double *best_lb_out, double *lagr_score_out,
+    unsigned char *improving_core_out, int *improving_core_size_out,
+    double *row_dual_out
+) {
+    solvePIchart_lagrangian_level(
+        pichart, foundPI, ON_minterms, weights,
+        solution, solmin, best_lb_out, lagr_score_out,
+        2, improving_core_out, improving_core_size_out,
+        initial_solution, initial_solmin, row_dual_out
     );
 }
 

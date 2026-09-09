@@ -1,6 +1,7 @@
 #include "scp_relaxation.h"
 
 #include <math.h>
+#include <limits.h>
 #include <R_ext/RS.h>
 #include <string.h>
 
@@ -231,4 +232,84 @@ int qca_scp_relaxation_dual_lb(
     const qca_scp_state *state
 ) {
     return (int) ceil(qca_scp_relaxation_dual_info(problem, state, NULL) - 1e-12);
+}
+
+/*
+For the residual binary cover, any y >= 0 gives
+  L(y) = sum_r y[r] + sum_j min(0, 1 - sum_r A[r,j] y[r]).
+Selecting j increases this lower bound by max(0, reduced_cost[j]).
+All proof arithmetic below uses integers scaled by 65536; floating-point
+subgradient steps only choose the next nonnegative integer multipliers.
+Covered/deleted rows contribute zero, and excluded columns never contribute.
+*/
+int qca_scp_lagrangian_lb(
+    const qca_scp_problem *problem, qca_scp_state *state,
+    int64_t *dual, int target, int iterations,
+    int64_t *costs, int *gradient, int64_t *best_dual,
+    int *fixed_columns
+) {
+    const int64_t scale = QCA_SCP_DUAL_SCALE;
+    const int64_t cutoff = (int64_t)target * scale;
+    int64_t best = 0;
+    *fixed_columns = 0;
+    memcpy(best_dual, dual, (size_t)problem->nr * sizeof(int64_t));
+
+    for (int iteration = 0; iteration < iterations; ++iteration) {
+        int64_t bound = 0;
+        for (int col = 0; col < problem->nc; ++col) costs[col] = scale;
+        for (int row = 0; row < problem->nr; ++row) {
+            if (!row_is_uncovered_relax(state, row)) {
+                dual[row] = 0;
+                gradient[row] = 0;
+                continue;
+            }
+            gradient[row] = 1;
+            bound += dual[row];
+            for (int i = problem->row_starts[row]; i < problem->row_starts[row + 1]; ++i) {
+                int col = problem->row_cols[i];
+                if (state->active[col]) costs[col] -= dual[row];
+            }
+        }
+        for (int col = 0; col < problem->nc; ++col) {
+            if (state->active[col] && costs[col] < 0) {
+                /* Impractically large charts still cannot overflow a proof. */
+                if (bound < INT64_MIN - costs[col]) return 0;
+                bound += costs[col];
+            }
+        }
+        if (bound > best) {
+            best = bound;
+            memcpy(best_dual, dual, (size_t)problem->nr * sizeof(int64_t));
+        }
+        if (bound > cutoff) break;
+
+        for (int col = 0; col < problem->nc; ++col) {
+            if (state->active[col] && costs[col] > 0 &&
+                bound > cutoff - costs[col]) {
+                state->active[col] = 0;
+                ++*fixed_columns;
+            }
+        }
+
+        double norm = 0.0;
+        for (int row = 0; row < problem->nr; ++row) {
+            if (!row_is_uncovered_relax(state, row)) continue;
+            for (int i = problem->row_starts[row]; i < problem->row_starts[row + 1]; ++i) {
+                int col = problem->row_cols[i];
+                if (state->active[col] && costs[col] < 0) --gradient[row];
+            }
+            norm += (double)gradient[row] * gradient[row];
+        }
+        if (norm == 0.0 || iteration + 1 == iterations) break;
+        double alpha = iteration < 4 ? 1.0 : 0.5;
+        double step = alpha * ((double)cutoff + scale - (double)bound) / norm;
+        for (int row = 0; row < problem->nr; ++row) {
+            if (!row_is_uncovered_relax(state, row)) continue;
+            double next = (double)dual[row] + step * gradient[row];
+            dual[row] = next <= 0.0 ? 0 : next >= (double)scale
+                ? scale : (int64_t)next;
+        }
+    }
+    memcpy(dual, best_dual, (size_t)problem->nr * sizeof(int64_t));
+    return (int)((best + scale - 1) / scale);
 }

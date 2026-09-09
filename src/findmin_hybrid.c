@@ -357,7 +357,8 @@ static int solve_scp_from_int_matrix(
     const int nc,
     const int *initial_indices,
     int initial_solmin,
-    int *solution
+    int *solution,
+    int strategy /* -1: hybrid; 0: native baseline; 1: target; 2: Lagrangian */
 ) {
     int ok = 0;
     int solution_size = 0;
@@ -382,6 +383,7 @@ static int solve_scp_from_int_matrix(
     unsigned long long *col_masks = NULL;
     double *lagr_scores = NULL;
     double *core_priority = NULL;
+    double *row_dual = NULL;
 
     if (p_chart == NULL || solution == NULL || nr <= 0 || nc <= 0) {
         return 0;
@@ -395,6 +397,7 @@ static int solve_scp_from_int_matrix(
     hybrid_profile.incumbent_accepted =
         hybrid_profile.incumbent_requested;
 
+    if (strategy == 2) row_dual = (double *)calloc((size_t)nr, sizeof(double));
     incumbent_indices = (int *)calloc((size_t)nc, sizeof(int));
     lagr_scores = (double *)calloc((size_t)nc, sizeof(double));
     improving_core = (unsigned char *)calloc((size_t)nc, sizeof(unsigned char));
@@ -405,7 +408,7 @@ static int solve_scp_from_int_matrix(
     }
     for (int c = 0; c < nc; ++c) reverse_map[c] = -1;
 
-    solvePIchart_lagrangian_prepare_with_incumbent(
+    solvePIchart_lagrangian_prepare_native(
         (int *)p_chart,
         nc,
         nr,
@@ -417,7 +420,8 @@ static int solve_scp_from_int_matrix(
         &lagr_lb,
         lagr_scores,
         improving_core,
-        NULL
+        NULL,
+        row_dual
     );
 
     if (incumbent_size <= 0 || incumbent_size > nc) {
@@ -518,7 +522,10 @@ static int solve_scp_from_int_matrix(
             .row_starts = row_starts,
             .row_cols = row_cols,
             .col_masks = col_masks,
-            .branch_priority = core_priority
+            .branch_priority = core_priority,
+            .target_propagation = strategy >= 1,
+            .initial_row_dual = row_dual,
+            .lagrangian_iterations = strategy == 2 ? 8 : 0
         };
         int very_wide = nc >= nr * HYBRID_SCP_VERY_WIDE_RATIO;
         int lower_bound_size = lagr_lb > -1e307
@@ -545,11 +552,11 @@ static int solve_scp_from_int_matrix(
             core_incumbent,
             incumbent_size,
             -1,
-            very_wide
+            strategy >= 0 ? 0ULL : (very_wide
                 ? HYBRID_SCP_WIDE_PROBE_NODE_LIMIT
-                : HYBRID_SCP_PROBE_NODE_LIMIT,
+                : HYBRID_SCP_PROBE_NODE_LIMIT),
             0.0, /* node budgets only: deterministic */
-            hard_node_limit,
+            strategy >= 0 ? 0ULL : hard_node_limit,
             0.0
         );
         if (result == QCA_SCP_SOLUTION) {
@@ -562,6 +569,8 @@ static int solve_scp_from_int_matrix(
         hybrid_profile.scp_limited = result == QCA_SCP_LIMIT;
     }
 
+    /* Native mode must never silently delegate an incomplete proof. */
+    if (strategy >= 0) goto cleanup;
     hybrid_profile.lpsolve_fallback = 1;
     core_lp_indices = (int *)calloc((size_t)core_nc, sizeof(int));
     if (!core_lp_indices) goto cleanup;
@@ -591,6 +600,7 @@ cleanup:
     free(col_masks);
     free(lagr_scores);
     free(core_priority);
+    free(row_dual);
     return ok;
 }
 
@@ -602,7 +612,8 @@ static Rboolean solvePIchart_hybrid_active_impl(
     const int *initial_indices,
     int initial_solmin,
     int *indices,
-    int *solmin
+    int *solmin,
+    int strategy
 ) {
     int compact_ncols = 0;
     for (int c = 0; c < ncols; ++c) {
@@ -676,7 +687,7 @@ static Rboolean solvePIchart_hybrid_active_impl(
 
     if (!solve_scp_from_int_matrix(
         solver_chart, nrows, compact_ncols,
-        compact_initial, initial_solmin, solution
+        compact_initial, initial_solmin, solution, strategy
     )) {
         free(solution);
         free(compact_map);
@@ -713,7 +724,7 @@ Rboolean solvePIchart_hybrid_active(
     int *solmin
 ) {
     return solvePIchart_hybrid_active_impl(
-        chart, nrows, ncols, active, NULL, 0, indices, solmin
+        chart, nrows, ncols, active, NULL, 0, indices, solmin, -1
     );
 }
 
@@ -729,16 +740,17 @@ Rboolean solvePIchart_hybrid_active_with_incumbent(
 ) {
     return solvePIchart_hybrid_active_impl(
         chart, nrows, ncols, active,
-        initial_indices, initial_solmin, indices, solmin
+        initial_indices, initial_solmin, indices, solmin, -1
     );
 }
 
-Rboolean solvePIchart_hybrid(
+static Rboolean solvePIchart_mode(
     const int *chart,
     int nrows,
     int ncols,
     int *indices,
-    int *solmin
+    int *solmin,
+    int strategy
 ) {
     unsigned char *active = (unsigned char *)malloc((size_t)ncols);
     if (active == NULL) return FALSE;
@@ -750,16 +762,22 @@ Rboolean solvePIchart_hybrid(
         return FALSE;
     }
     Rboolean ok = solvePIchart_hybrid_active_impl(
-        chart, nrows, ncols, active, NULL, 0, indices, solmin
+        chart, nrows, ncols, active, NULL, 0, indices, solmin, strategy
     );
     free(active);
     return ok;
 }
 
+Rboolean solvePIchart_hybrid(
+    const int *chart, int nrows, int ncols, int *indices, int *solmin
+) {
+    return solvePIchart_mode(chart, nrows, ncols, indices, solmin, -1);
+}
+
 SEXP C_getScpProfile(void) {
     qca_scp_profile profile = qca_scp_profile_get();
-    SEXP out = PROTECT(allocVector(VECSXP, 21));
-    SEXP names = PROTECT(allocVector(STRSXP, 21));
+    SEXP out = PROTECT(allocVector(VECSXP, 25));
+    SEXP names = PROTECT(allocVector(STRSXP, 25));
 
     SET_STRING_ELT(names, 0, mkChar("total_seconds"));
     SET_STRING_ELT(names, 1, mkChar("reductions_seconds"));
@@ -804,6 +822,14 @@ SEXP C_getScpProfile(void) {
     SET_VECTOR_ELT(out, 18, ScalarReal((double) profile.adaptive_extensions));
     SET_VECTOR_ELT(out, 19, ScalarLogical(hybrid_profile.incumbent_requested));
     SET_VECTOR_ELT(out, 20, ScalarLogical(hybrid_profile.incumbent_accepted));
+    SET_STRING_ELT(names, 21, mkChar("lagrangian_calls"));
+    SET_STRING_ELT(names, 22, mkChar("lagrangian_prunes"));
+    SET_STRING_ELT(names, 23, mkChar("lagrangian_fixed_columns"));
+    SET_STRING_ELT(names, 24, mkChar("lagrangian_seconds"));
+    SET_VECTOR_ELT(out, 21, ScalarReal((double)profile.lagrangian_calls));
+    SET_VECTOR_ELT(out, 22, ScalarReal((double)profile.lagrangian_prunes));
+    SET_VECTOR_ELT(out, 23, ScalarReal((double)profile.lagrangian_fixed_columns));
+    SET_VECTOR_ELT(out, 24, ScalarReal(profile.lagrangian_seconds));
     setAttrib(out, R_NamesSymbol, names);
 
     UNPROTECT(2);
@@ -816,14 +842,20 @@ SEXP C_resetScpProfile(void) {
     return R_NilValue;
 }
 
-SEXP C_findminHybridInternal(SEXP chart) {
+static SEXP findmin_internal(SEXP chart, int strategy) {
     if (!isMatrix(chart) || TYPEOF(chart) != LGLSXP) {
-        error("C_findminHybridInternal expects a logical matrix.");
+        error("Internal chart solver expects a logical matrix.");
     }
 
     const int nr = nrows(chart);
     const int nc = ncols(chart);
     const int *p_chart = LOGICAL(chart);
+    if (strategy >= 0) {
+        if (nr <= 0 || nc <= 0) error("Native solver expects a nonempty chart.");
+        for (R_xlen_t i = 0; i < XLENGTH(chart); ++i) {
+            if (p_chart[i] == NA_LOGICAL) error("Native chart must not contain missing values.");
+        }
+    }
     int *solution = (int *) R_Calloc((size_t) nc, int);
     if (solution == NULL) {
         error("Failed to allocate SCP solver solution vector.");
@@ -831,7 +863,7 @@ SEXP C_findminHybridInternal(SEXP chart) {
 
     int *indices = (int *)R_Calloc((size_t)nc, int);
     int solmin = 0;
-    if (indices == NULL || !solvePIchart_hybrid(p_chart, nr, nc, indices, &solmin)) {
+    if (indices == NULL || !solvePIchart_mode(p_chart, nr, nc, indices, &solmin, strategy)) {
         if (indices != NULL) R_Free(indices);
         R_Free(solution);
         error("Internal SCP solver failed to find a feasible exact cover.");
@@ -850,4 +882,20 @@ SEXP C_findminHybridInternal(SEXP chart) {
     R_Free(solution);
     UNPROTECT(1);
     return out;
+}
+
+SEXP C_findminHybridInternal(SEXP chart) {
+    return findmin_internal(chart, -1);
+}
+
+SEXP C_findminScpInternal(SEXP chart) {
+    return findmin_internal(chart, 0);
+}
+
+SEXP C_findminNativeInternal(SEXP chart, SEXP strategy) {
+    if (TYPEOF(strategy) != INTSXP || XLENGTH(strategy) != 1 ||
+        INTEGER(strategy)[0] < 0 || INTEGER(strategy)[0] > 2) {
+        error("Native strategy must be 0 (baseline), 1 (target), or 2 (Lagrangian).");
+    }
+    return findmin_internal(chart, INTEGER(strategy)[0]);
 }

@@ -4,6 +4,8 @@
 #include "qca_rinternals.h"
 
 SEXP C_findminHybridInternal(SEXP chart);
+SEXP C_findminNativeInternal(SEXP chart, SEXP strategy);
+SEXP C_findminScpInternal(SEXP chart);
 SEXP C_getScpProfile(void);
 SEXP C_resetScpProfile(void);
 Rboolean solvePIchart_hybrid(

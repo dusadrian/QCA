@@ -10,8 +10,8 @@
 ^.*\.tar\.gz$
 (^|/)\.DS_Store$
 ^tests$
+^tools$
 ^Vignettes$
 ^vignettes$
 ^tools/(benchmark_lag_gap1|build-cran-source|profile_scp_solver|validate_scp_solver)[.]R$
-^tools/benchmarks$
 ^(?!R/).*[.]R$

@@ -11,6 +11,10 @@ typedef struct {
     int *row_cols;
     unsigned long long *col_masks;
     const double *branch_priority;
+    /* Optional native-completion features; zero preserves the baseline. */
+    int target_propagation;
+    const double *initial_row_dual;
+    int lagrangian_iterations;
 } qca_scp_problem;
 
 typedef struct {
@@ -34,6 +38,10 @@ typedef struct {
     unsigned long long root_branches_total;
     unsigned long long root_branches_completed;
     unsigned long long adaptive_extensions;
+    unsigned long long lagrangian_calls;
+    unsigned long long lagrangian_prunes;
+    unsigned long long lagrangian_fixed_columns;
+    double lagrangian_seconds;
 } qca_scp_profile;
 
 typedef enum {

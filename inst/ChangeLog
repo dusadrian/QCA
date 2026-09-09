@@ -1,4 +1,4 @@
-Version 3.25.4
+Version 3.26
     o CCubes now uses adaptive stopping for supported binary truth-table
       minimizations: the first unchanged minimum triggers a deterministic
       delayed-pair diagnostic, and warned cases continue to a global
@@ -20,9 +20,9 @@ Version 3.25.4
       use type = "conservative" or hybrid = FALSE to select the integer
       programming backend explicitly
     o Renamed: findmin() argument type = "exact" is now
-      type = "conservative", since both available methods are exact
-    o All set covering backends now return proven minimum covers; the
-      choice of backend only affects solving time, never the solutions
+      type = "conservative", since all available methods are exact
+    o New: type "internal" to solve the set covering problem using
+      exclusively internal code, independent of both Gurobi and lp_solve
     o Bug fix in R_Realloc() on Windows, crashing findmin()
       (thanks to Yuki Toyoda for the report)
 
