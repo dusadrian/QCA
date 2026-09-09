@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "findmin_hybrid.h"
 #include "findmin_lpsolve.h"
@@ -27,6 +28,11 @@ active columns), which is equally deterministic.
 #define HYBRID_SCP_NODE_SCALE_COLUMNS 2000
 #define HYBRID_SCP_VERY_WIDE_RATIO 10
 #define DENSE_MASK_ROWS 20
+/* A small deterministic budget avoids paying for full preparation on easy
+   charts. Bounds on both dimensions also cap the cost of a probe node. */
+#define NATIVE_EARLY_MAX_ROWS 64
+#define NATIVE_EARLY_MAX_COLUMNS 256
+#define NATIVE_EARLY_NODE_LIMIT 32ULL
 
 typedef struct {
     int original_columns;
@@ -37,6 +43,14 @@ typedef struct {
     int lpsolve_fallback;
     int incumbent_requested;
     int incumbent_accepted;
+    int root_incumbent_size;
+    double root_lower_bound;
+    double lagrangian_prepare_seconds;
+    int early_attempted;
+    int early_proved;
+    int early_limited;
+    unsigned long long early_nodes;
+    double early_seconds;
 } qca_hybrid_profile;
 
 static qca_hybrid_profile hybrid_profile = {0};
@@ -351,6 +365,47 @@ int qca_reduce_active_columns(
     return active_count;
 }
 
+/* The input is already presolved. Use the same exact engine, without root
+   Lagrangian preparation. R owns this small temporary workspace on interrupts. */
+static qca_scp_result native_early_probe(
+    const int *chart, int nr, int nc,
+    const int *initial_indices, int initial_size,
+    int *solution, int *solution_size, unsigned long long node_limit
+) {
+    int words = (nr + 63) / 64;
+    int *starts = (int *)R_alloc((size_t)nr + 1, sizeof(int));
+    int *cols = (int *)R_alloc((size_t)nr * nc, sizeof(int));
+    unsigned long long *masks = (unsigned long long *)R_alloc(
+        (size_t)nc * words, sizeof(unsigned long long)
+    );
+    int *initial = NULL;
+    memset(masks, 0, (size_t)nc * words * sizeof(unsigned long long));
+    int count = 0;
+    for (int r = 0; r < nr; ++r) {
+        starts[r] = count;
+        for (int c = 0; c < nc; ++c) {
+            if (!chart[(size_t)c * nr + r]) continue;
+            cols[count++] = c;
+            masks[(size_t)c * words + (r >> 6)] |= 1ULL << (r & 63);
+        }
+    }
+    starts[nr] = count;
+    if (initial_indices && initial_size > 0) {
+        initial = (int *)R_alloc((size_t)nc, sizeof(int));
+        memset(initial, 0, (size_t)nc * sizeof(int));
+        for (int i = 0; i < initial_size; ++i) initial[initial_indices[i]] = 1;
+    }
+    qca_scp_problem problem = {
+        .nr = nr, .nc = nc, .nwords_rows = words,
+        .row_starts = starts, .row_cols = cols, .col_masks = masks,
+        .target_propagation = 1, .selective_bounds = 1
+    };
+    return qca_scp_solve_exact_with_incumbent_bounded(
+        &problem, solution, solution_size, initial, initial_size, -1,
+        node_limit, 0.0
+    );
+}
+
 static int solve_scp_from_int_matrix(
     const int *p_chart,
     const int nr,
@@ -358,7 +413,7 @@ static int solve_scp_from_int_matrix(
     const int *initial_indices,
     int initial_solmin,
     int *solution,
-    int strategy /* -1: hybrid; 0: native baseline; 1: target; 2: Lagrangian */
+    int strategy /* -1: hybrid; 0: baseline; 1: target; 2: fixed; 3: selective; 4-6: early probes */
 ) {
     int ok = 0;
     int solution_size = 0;
@@ -397,7 +452,38 @@ static int solve_scp_from_int_matrix(
     hybrid_profile.incumbent_accepted =
         hybrid_profile.incumbent_requested;
 
-    if (strategy == 2) row_dual = (double *)calloc((size_t)nr, sizeof(double));
+    if (strategy >= 4 && nr <= NATIVE_EARLY_MAX_ROWS &&
+        nc <= NATIVE_EARLY_MAX_COLUMNS) {
+        const unsigned long long early_limits[] = {NATIVE_EARLY_NODE_LIMIT, 128ULL, 256ULL};
+        qca_scp_profile before = qca_scp_profile_get();
+        clock_t early_started = clock();
+        hybrid_profile.early_attempted = 1;
+        qca_scp_result early = native_early_probe(
+            p_chart, nr, nc, initial_indices, initial_solmin,
+            solution, &solution_size, early_limits[strategy - 4]
+        );
+        hybrid_profile.early_nodes = qca_scp_profile_get().nodes - before.nodes;
+        hybrid_profile.early_seconds =
+            (double)(clock() - early_started) / CLOCKS_PER_SEC;
+        hybrid_profile.early_proved = early == QCA_SCP_SOLUTION;
+        hybrid_profile.early_limited = early == QCA_SCP_LIMIT;
+        if (early == QCA_SCP_SOLUTION) return 1;
+        if (early == QCA_SCP_NO_SOLUTION || early == QCA_SCP_ERROR) return 0;
+        /* A limit is not a proof. Retain a better cover as an upper bound,
+           then run the existing native completion on the full input chart. */
+        if (solution_size > 0 &&
+            (!initial_indices || solution_size < initial_solmin)) {
+            int *early_indices = (int *)R_alloc((size_t)solution_size, sizeof(int));
+            for (int c = 0, i = 0; c < nc; ++c) {
+                if (solution[c]) early_indices[i++] = c;
+            }
+            initial_indices = early_indices;
+            initial_solmin = solution_size;
+        }
+        memset(solution, 0, (size_t)nc * sizeof(int));
+    }
+
+    if (strategy >= 2) row_dual = (double *)calloc((size_t)nr, sizeof(double));
     incumbent_indices = (int *)calloc((size_t)nc, sizeof(int));
     lagr_scores = (double *)calloc((size_t)nc, sizeof(double));
     improving_core = (unsigned char *)calloc((size_t)nc, sizeof(unsigned char));
@@ -408,6 +494,7 @@ static int solve_scp_from_int_matrix(
     }
     for (int c = 0; c < nc; ++c) reverse_map[c] = -1;
 
+    clock_t preparation_started = clock();
     solvePIchart_lagrangian_prepare_native(
         (int *)p_chart,
         nc,
@@ -423,6 +510,10 @@ static int solve_scp_from_int_matrix(
         NULL,
         row_dual
     );
+    hybrid_profile.lagrangian_prepare_seconds =
+        (double)(clock() - preparation_started) / CLOCKS_PER_SEC;
+    hybrid_profile.root_incumbent_size = incumbent_size;
+    hybrid_profile.root_lower_bound = lagr_lb;
 
     if (incumbent_size <= 0 || incumbent_size > nc) {
         goto cleanup;
@@ -525,7 +616,8 @@ static int solve_scp_from_int_matrix(
             .branch_priority = core_priority,
             .target_propagation = strategy >= 1,
             .initial_row_dual = row_dual,
-            .lagrangian_iterations = strategy == 2 ? 8 : 0
+            .lagrangian_iterations = strategy >= 2 ? 8 : 0,
+            .selective_bounds = strategy >= 3
         };
         int very_wide = nc >= nr * HYBRID_SCP_VERY_WIDE_RATIO;
         int lower_bound_size = lagr_lb > -1e307
@@ -776,8 +868,8 @@ Rboolean solvePIchart_hybrid(
 
 SEXP C_getScpProfile(void) {
     qca_scp_profile profile = qca_scp_profile_get();
-    SEXP out = PROTECT(allocVector(VECSXP, 25));
-    SEXP names = PROTECT(allocVector(STRSXP, 25));
+    SEXP out = PROTECT(allocVector(VECSXP, 41));
+    SEXP names = PROTECT(allocVector(STRSXP, 41));
 
     SET_STRING_ELT(names, 0, mkChar("total_seconds"));
     SET_STRING_ELT(names, 1, mkChar("reductions_seconds"));
@@ -830,6 +922,38 @@ SEXP C_getScpProfile(void) {
     SET_VECTOR_ELT(out, 22, ScalarReal((double)profile.lagrangian_prunes));
     SET_VECTOR_ELT(out, 23, ScalarReal((double)profile.lagrangian_fixed_columns));
     SET_VECTOR_ELT(out, 24, ScalarReal(profile.lagrangian_seconds));
+    SET_STRING_ELT(names, 25, mkChar("dual_reduction_calls"));
+    SET_STRING_ELT(names, 26, mkChar("dual_reduction_fixed"));
+    SET_STRING_ELT(names, 27, mkChar("dual_reduction_seconds"));
+    SET_STRING_ELT(names, 28, mkChar("incumbent_improvements"));
+    SET_STRING_ELT(names, 29, mkChar("last_improvement_node"));
+    SET_STRING_ELT(names, 30, mkChar("last_improvement_seconds"));
+    SET_STRING_ELT(names, 31, mkChar("initial_size"));
+    SET_VECTOR_ELT(out, 25, ScalarReal((double)profile.dual_reduction_calls));
+    SET_VECTOR_ELT(out, 26, ScalarReal((double)profile.dual_reduction_fixed));
+    SET_VECTOR_ELT(out, 27, ScalarReal(profile.dual_reduction_seconds));
+    SET_VECTOR_ELT(out, 28, ScalarReal((double)profile.incumbent_improvements));
+    SET_VECTOR_ELT(out, 29, ScalarReal((double)profile.last_improvement_node));
+    SET_VECTOR_ELT(out, 30, ScalarReal(profile.last_improvement_seconds));
+    SET_VECTOR_ELT(out, 31, ScalarInteger(profile.initial_size));
+    SET_STRING_ELT(names, 32, mkChar("lagrangian_iterations"));
+    SET_VECTOR_ELT(out, 32, ScalarReal((double)profile.lagrangian_iterations));
+    SET_STRING_ELT(names, 33, mkChar("root_incumbent_size"));
+    SET_STRING_ELT(names, 34, mkChar("root_lower_bound"));
+    SET_STRING_ELT(names, 35, mkChar("lagrangian_prepare_seconds"));
+    SET_VECTOR_ELT(out, 33, ScalarInteger(hybrid_profile.root_incumbent_size));
+    SET_VECTOR_ELT(out, 34, ScalarReal(hybrid_profile.root_lower_bound));
+    SET_VECTOR_ELT(out, 35, ScalarReal(hybrid_profile.lagrangian_prepare_seconds));
+    SET_STRING_ELT(names, 36, mkChar("early_attempted"));
+    SET_STRING_ELT(names, 37, mkChar("early_proved"));
+    SET_STRING_ELT(names, 38, mkChar("early_limited"));
+    SET_STRING_ELT(names, 39, mkChar("early_nodes"));
+    SET_STRING_ELT(names, 40, mkChar("early_seconds"));
+    SET_VECTOR_ELT(out, 36, ScalarLogical(hybrid_profile.early_attempted));
+    SET_VECTOR_ELT(out, 37, ScalarLogical(hybrid_profile.early_proved));
+    SET_VECTOR_ELT(out, 38, ScalarLogical(hybrid_profile.early_limited));
+    SET_VECTOR_ELT(out, 39, ScalarReal((double)hybrid_profile.early_nodes));
+    SET_VECTOR_ELT(out, 40, ScalarReal(hybrid_profile.early_seconds));
     setAttrib(out, R_NamesSymbol, names);
 
     UNPROTECT(2);
@@ -894,8 +1018,8 @@ SEXP C_findminScpInternal(SEXP chart) {
 
 SEXP C_findminNativeInternal(SEXP chart, SEXP strategy) {
     if (TYPEOF(strategy) != INTSXP || XLENGTH(strategy) != 1 ||
-        INTEGER(strategy)[0] < 0 || INTEGER(strategy)[0] > 2) {
-        error("Native strategy must be 0 (baseline), 1 (target), or 2 (Lagrangian).");
+        INTEGER(strategy)[0] < 0 || INTEGER(strategy)[0] > 6) {
+        error("Native strategy must be 0 (baseline), 1 (target), 2 (Lagrangian), 3 (selective), or 4/5/6 (32/128/256-node probe).");
     }
     return findmin_internal(chart, INTEGER(strategy)[0]);
 }

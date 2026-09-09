@@ -11,7 +11,7 @@ int qca_scp_lagrangian_lb(
     const qca_scp_problem *problem, qca_scp_state *state,
     int64_t *dual, int target, int iterations,
     int64_t *costs, int *gradient, int64_t *best_dual,
-    int *fixed_columns
+    int *fixed_columns, int *iterations_used
 );
 
 int qca_scp_relaxation_dual_lb(

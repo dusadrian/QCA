@@ -271,7 +271,8 @@ static int apply_reductions(
     const qca_scp_problem *problem,
     qca_scp_state *state,
     const qca_scp_search *search,
-    int full_dominance
+    int full_dominance,
+    int cheap_only
 ) {
     double started = now_seconds();
     int changed = 1;
@@ -344,7 +345,7 @@ static int apply_reductions(
             row_support[row] = support;
         }
 
-        int run_dominance = full_dominance || nactive <= 256;
+        int run_dominance = !cheap_only && (full_dominance || nactive <= 256);
         for (int ia = 0; run_dominance && ia < nactive; ia++) {
             int a = active_cols[ia];
             if (!state->active[a]) {
@@ -450,7 +451,9 @@ static int apply_reductions(
                 return 0;
             }
 
-            if (budget_left > 0) {
+            if (budget_left > 0 && !problem->selective_bounds) {
+                double dual_started = now_seconds();
+                ++qca_profile.dual_reduction_calls;
                 double dual_lb = qca_scp_relaxation_dual_info(problem, state, dual_slack);
                 double threshold = (double) budget_left - dual_lb + 1e-12;
 
@@ -460,9 +463,11 @@ static int apply_reductions(
                     }
                     if (dual_slack[col] > threshold) {
                         state->active[col] = 0;
+                        ++qca_profile.dual_reduction_fixed;
                         changed = 1;
                     }
                 }
+                qca_profile.dual_reduction_seconds += now_seconds() - dual_started;
             }
         }
 
@@ -1030,6 +1035,9 @@ static int keep_greedy_candidate(
     }
 
     search->best_size = candidate_size;
+    ++qca_profile.incumbent_improvements;
+    qca_profile.last_improvement_node = search->nodes;
+    qca_profile.last_improvement_seconds = now_seconds() - search->started;
     memcpy(
         search->best_solution,
         candidate_solution,
@@ -1127,7 +1135,7 @@ static void search_exact(
         }
     }
 
-    if (!apply_reductions(problem, state, search, depth == 0)) {
+    if (!apply_reductions(problem, state, search, depth == 0, problem->selective_bounds)) {
         qca_profile.leaves++;
         return;
     }
@@ -1140,6 +1148,8 @@ static void search_exact(
     if (problem->lagrangian_iterations > 0) {
         double bound_started = now_seconds();
         int fixed_columns = 0;
+        int iterations_used = 0;
+        int iterations = depth % 3 == 0 ? problem->lagrangian_iterations : 1;
         int target = search->best_size - state->chosen_count - 1;
         if (search->proof_target_size >= 0 &&
             search->proof_target_size - state->chosen_count < target) {
@@ -1147,10 +1157,11 @@ static void search_exact(
         }
         int residual_lb = qca_scp_lagrangian_lb(
             problem, state, workspace->dual, target,
-            depth % 3 == 0 ? problem->lagrangian_iterations : 1,
+            iterations,
             search->lagrangian_costs, search->gradient, search->best_dual,
-            &fixed_columns
+            &fixed_columns, &iterations_used
         );
+        qca_profile.lagrangian_iterations += iterations_used;
         ++qca_profile.lagrangian_calls;
         qca_profile.lagrangian_fixed_columns += fixed_columns;
         qca_profile.lagrangian_seconds += now_seconds() - bound_started;
@@ -1159,6 +1170,13 @@ static void search_exact(
             ++qca_profile.leaves;
             return;
         }
+    }
+
+    if (problem->selective_bounds &&
+        (!apply_reductions(problem, state, search, depth == 0, 0) ||
+         state->chosen_count >= search->best_size)) {
+        ++qca_profile.leaves;
+        return;
     }
 
     if (search->best_size > state->chosen_count + 1) {
@@ -1181,6 +1199,11 @@ static void search_exact(
 
     if (bitset_count(state->uncovered, problem->nwords_rows) == 0) {
         qca_profile.leaves++;
+        if (state->chosen_count < search->best_size) {
+            ++qca_profile.incumbent_improvements;
+            qca_profile.last_improvement_node = search->nodes;
+            qca_profile.last_improvement_seconds = now_seconds() - search->started;
+        }
         search->best_size = state->chosen_count;
         for (int c = 0; c < problem->nc; c++) {
             search->best_solution[c] = state->chosen[c];
@@ -1626,6 +1649,7 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
         }
     }
     search.checkpoint_best_size = search.best_size;
+    qca_profile.initial_size = search.best_size;
 
     qca_scp_run run = {&search, &state, max_depth};
     /* An unlimited proof can be interrupted from R. Release its recursive

@@ -246,15 +246,17 @@ int qca_scp_lagrangian_lb(
     const qca_scp_problem *problem, qca_scp_state *state,
     int64_t *dual, int target, int iterations,
     int64_t *costs, int *gradient, int64_t *best_dual,
-    int *fixed_columns
+    int *fixed_columns, int *iterations_used
 ) {
     const int64_t scale = QCA_SCP_DUAL_SCALE;
     const int64_t cutoff = (int64_t)target * scale;
     int64_t best = 0;
     *fixed_columns = 0;
+    *iterations_used = 0;
     memcpy(best_dual, dual, (size_t)problem->nr * sizeof(int64_t));
 
     for (int iteration = 0; iteration < iterations; ++iteration) {
+        ++*iterations_used;
         int64_t bound = 0;
         for (int col = 0; col < problem->nc; ++col) costs[col] = scale;
         for (int row = 0; row < problem->nr; ++row) {
