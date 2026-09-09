@@ -4,6 +4,8 @@
 
 extern SEXP C_findminLpSolveInternal(SEXP chart);
 extern SEXP C_findminHybridInternal(SEXP chart);
+extern SEXP C_findminNativeInternal(SEXP chart, SEXP strategy);
+extern SEXP C_findminScpInternal(SEXP chart);
 extern SEXP C_findminLagrangianInfo(SEXP chart);
 extern SEXP C_findminLagrangian(SEXP chart);
 extern SEXP C_gurobiRuntimeAvailable(void);
@@ -31,7 +33,8 @@ extern SEXP C_truthTable(SEXP x, SEXP vo, SEXP tt, SEXP fuz);
 static const R_CallMethodDef CallEntries[] = {
   {"C_findminLpSolveInternal", (DL_FUNC) &C_findminLpSolveInternal, 1},
   {"C_findminHybridInternal", (DL_FUNC) &C_findminHybridInternal, 1},
-  {"C_findminScpInternal", (DL_FUNC) &C_findminHybridInternal, 1},
+  {"C_findminScpInternal", (DL_FUNC) &C_findminScpInternal, 1},
+  {"C_findminNativeInternal", (DL_FUNC) &C_findminNativeInternal, 2},
   {"C_findminLagrangianInfo", (DL_FUNC) &C_findminLagrangianInfo, 1},
   {"C_findminLagrangian", (DL_FUNC) &C_findminLagrangian, 1},
   {"C_gurobiRuntimeAvailable", (DL_FUNC) &C_gurobiRuntimeAvailable, 0},

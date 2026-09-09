@@ -2,7 +2,9 @@
 #include "scp_relaxation.h"
 
 #include <limits.h>
+#include <math.h>
 #include <R_ext/RS.h>
+#include <Rinternals.h>
 #include <R_ext/Utils.h>
 #include <time.h>
 #include <string.h>
@@ -22,6 +24,7 @@ typedef struct {
     int *branch_cols;
     int *gains;
     int *candidate_solution;
+    int64_t *dual;
 } qca_scp_workspace;
 
 typedef struct {
@@ -49,7 +52,20 @@ typedef struct {
     int *reduction_active_cols;
     double *reduction_dual_slack;
     int *branching_row_heuristic;
+    int64_t *lagrangian_costs;
+    int64_t *best_dual;
+    int *gradient;
 } qca_scp_search;
+
+/* The incumbent cutoff tightens in the same tree, without target restarts. */
+static int propagation_target(const qca_scp_search *search) {
+    int target = search->proof_target_size;
+    if (search->problem->target_propagation &&
+        (target < 0 || search->best_size - 1 < target)) {
+        target = search->best_size - 1;
+    }
+    return target;
+}
 
 static qca_scp_profile qca_profile = {0};
 
@@ -293,6 +309,30 @@ static int apply_reductions(
             active_cols[nactive++] = col;
         }
 
+        if (propagation_target(search) >= 0) {
+            int slots = propagation_target(search) - state->chosen_count;
+            int uncovered = bitset_count(state->uncovered, problem->nwords_rows);
+            int max_gain = 0;
+            for (int i = 0; i < nactive; ++i) {
+                if (gains[active_cols[i]] > max_gain) max_gain = gains[active_cols[i]];
+            }
+            if (slots < 0 || (long long)slots * max_gain < uncovered) {
+                qca_profile.reductions_seconds += now_seconds() - started;
+                return 0;
+            }
+            /* A selected column plus all remaining slots must cover every
+               residual row. Apply this necessary condition before singleton
+               and dominance propagation, not just when choosing branches. */
+            long long minimum_gain = (long long)uncovered - (long long)(slots - 1) * max_gain;
+            for (int i = 0; i < nactive; ++i) {
+                int col = active_cols[i];
+                if (gains[col] < minimum_gain) {
+                    state->active[col] = 0;
+                    changed = 1;
+                }
+            }
+        }
+
         for (int row = 0; row < problem->nr; ++row) {
             int support = 0;
             if (row_is_uncovered(state, row)) {
@@ -399,8 +439,8 @@ static int apply_reductions(
             }
         }
 
-        if (search != NULL && search->proof_target_size >= 0) {
-            int budget_left = search->proof_target_size - state->chosen_count;
+        if (search != NULL && propagation_target(search) >= 0) {
+            int budget_left = propagation_target(search) - state->chosen_count;
             if (budget_left < 0) {
                 qca_profile.reductions_seconds += now_seconds() - started;
                 return 0;
@@ -1079,9 +1119,9 @@ static void search_exact(
         R_CheckUserInterrupt();
     }
 
-    if (search->proof_target_size >= 0) {
+    if (propagation_target(search) >= 0) {
         int fast_lb = coverage_lower_bound(problem, state);
-        if (state->chosen_count + fast_lb > search->proof_target_size) {
+        if (state->chosen_count + fast_lb > propagation_target(search)) {
             qca_profile.leaves++;
             return;
         }
@@ -1095,6 +1135,30 @@ static void search_exact(
     if (state->chosen_count >= search->best_size) {
         qca_profile.leaves++;
         return;
+    }
+
+    if (problem->lagrangian_iterations > 0) {
+        double bound_started = now_seconds();
+        int fixed_columns = 0;
+        int target = search->best_size - state->chosen_count - 1;
+        if (search->proof_target_size >= 0 &&
+            search->proof_target_size - state->chosen_count < target) {
+            target = search->proof_target_size - state->chosen_count;
+        }
+        int residual_lb = qca_scp_lagrangian_lb(
+            problem, state, workspace->dual, target,
+            depth % 3 == 0 ? problem->lagrangian_iterations : 1,
+            search->lagrangian_costs, search->gradient, search->best_dual,
+            &fixed_columns
+        );
+        ++qca_profile.lagrangian_calls;
+        qca_profile.lagrangian_fixed_columns += fixed_columns;
+        qca_profile.lagrangian_seconds += now_seconds() - bound_started;
+        if (residual_lb > target) {
+            ++qca_profile.lagrangian_prunes;
+            ++qca_profile.leaves;
+            return;
+        }
     }
 
     if (search->best_size > state->chosen_count + 1) {
@@ -1213,6 +1277,10 @@ static void search_exact(
            revisited in many selection orders. */
         copy_state(problem, state, child);
         cover_with_column(problem, child, col);
+        if (problem->lagrangian_iterations > 0) {
+            memcpy(search->workspaces[depth + 1].dual, workspace->dual,
+                (size_t)problem->nr * sizeof(int64_t));
+        }
         search_exact(search, child, depth + 1);
         if (search->limit_reached) {
             for (int j = 0; j < nbranch; j++) {
@@ -1236,6 +1304,44 @@ static void search_exact(
     for (int i = 0; i < nbranch; i++) {
         state->active[branch_cols[i]] = 1;
     }
+}
+
+typedef struct {
+    qca_scp_search *search;
+    qca_scp_state *state;
+    int max_depth;
+} qca_scp_run;
+
+static SEXP run_exact_search(void *data) {
+    qca_scp_run *run = (qca_scp_run *)data;
+    search_exact(run->search, run->state, 0);
+    return R_NilValue;
+}
+
+static void free_exact_search(void *data) {
+    qca_scp_run *run = (qca_scp_run *)data;
+    qca_scp_free(run->state->uncovered);
+    qca_scp_free(run->state->active);
+    qca_scp_free(run->state->chosen);
+    for (int depth = 0; depth < run->max_depth; depth++) {
+        qca_scp_free(run->search->workspaces[depth].state.uncovered);
+        qca_scp_free(run->search->workspaces[depth].state.active);
+        qca_scp_free(run->search->workspaces[depth].state.chosen);
+        qca_scp_free(run->search->workspaces[depth].branch_cols);
+        qca_scp_free(run->search->workspaces[depth].gains);
+        qca_scp_free(run->search->workspaces[depth].candidate_solution);
+        qca_scp_free(run->search->workspaces[depth].dual);
+    }
+    qca_scp_free(run->search->workspaces);
+    qca_scp_free(run->search->reduction_row_marks);
+    qca_scp_free(run->search->reduction_row_support);
+    qca_scp_free(run->search->reduction_gains);
+    qca_scp_free(run->search->reduction_active_cols);
+    qca_scp_free(run->search->reduction_dual_slack);
+    qca_scp_free(run->search->branching_row_heuristic);
+    qca_scp_free(run->search->lagrangian_costs);
+    qca_scp_free(run->search->best_dual);
+    qca_scp_free(run->search->gradient);
 }
 
 qca_scp_result qca_scp_solve_exact(
@@ -1382,12 +1488,20 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
         sizeof(int)
     );
 
+    if (problem->lagrangian_iterations > 0) {
+        search.lagrangian_costs = qca_scp_calloc((size_t)problem->nc, sizeof(int64_t));
+        search.best_dual = qca_scp_calloc((size_t)problem->nr, sizeof(int64_t));
+        search.gradient = qca_scp_calloc((size_t)problem->nr, sizeof(int));
+    }
+
     if (state.uncovered == NULL || state.active == NULL || state.chosen == NULL ||
         workspaces == NULL || search.reduction_row_marks == NULL ||
         search.reduction_row_support == NULL || search.reduction_gains == NULL ||
         search.reduction_active_cols == NULL ||
         search.reduction_dual_slack == NULL ||
-        search.branching_row_heuristic == NULL) {
+        search.branching_row_heuristic == NULL ||
+        (problem->lagrangian_iterations > 0 && (!search.lagrangian_costs ||
+            !search.best_dual || !search.gradient))) {
         qca_scp_free(state.uncovered);
         qca_scp_free(state.active);
         qca_scp_free(state.chosen);
@@ -1398,6 +1512,9 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
         qca_scp_free(search.reduction_dual_slack);
         qca_scp_free(search.reduction_row_support);
         qca_scp_free(search.branching_row_heuristic);
+        qca_scp_free(search.lagrangian_costs);
+        qca_scp_free(search.best_dual);
+        qca_scp_free(search.gradient);
         return QCA_SCP_ERROR;
     }
 
@@ -1422,6 +1539,9 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
             (size_t) problem->nc,
             sizeof(int)
         );
+        if (problem->lagrangian_iterations > 0) {
+            workspaces[depth].dual = qca_scp_calloc((size_t)problem->nr, sizeof(int64_t));
+        }
         workspaces[depth].candidate_solution = (int *) qca_scp_calloc(
             (size_t) problem->nc,
             sizeof(int)
@@ -1432,7 +1552,8 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
             workspaces[depth].state.chosen == NULL ||
             workspaces[depth].branch_cols == NULL ||
             workspaces[depth].gains == NULL ||
-            workspaces[depth].candidate_solution == NULL) {
+            workspaces[depth].candidate_solution == NULL ||
+            (problem->lagrangian_iterations > 0 && !workspaces[depth].dual)) {
             for (int i = 0; i <= depth; i++) {
                 qca_scp_free(workspaces[i].state.uncovered);
                 qca_scp_free(workspaces[i].state.active);
@@ -1440,6 +1561,7 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
                 qca_scp_free(workspaces[i].branch_cols);
                 qca_scp_free(workspaces[i].gains);
                 qca_scp_free(workspaces[i].candidate_solution);
+                qca_scp_free(workspaces[i].dual);
             }
             qca_scp_free(state.uncovered);
             qca_scp_free(state.active);
@@ -1451,6 +1573,9 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
             qca_scp_free(search.reduction_active_cols);
             qca_scp_free(search.reduction_dual_slack);
             qca_scp_free(search.branching_row_heuristic);
+            qca_scp_free(search.lagrangian_costs);
+            qca_scp_free(search.best_dual);
+            qca_scp_free(search.gradient);
             return QCA_SCP_ERROR;
         }
     }
@@ -1461,6 +1586,14 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
     memset(state.active, 1, (size_t) problem->nc * sizeof(unsigned char));
     memset(state.chosen, 0, (size_t) problem->nc * sizeof(unsigned char));
     state.chosen_count = 0;
+
+    if (problem->lagrangian_iterations > 0) {
+        for (int row = 0; row < problem->nr; ++row) {
+            double y = problem->initial_row_dual ? problem->initial_row_dual[row] : 0.0;
+            workspaces[0].dual[row] = !isfinite(y) || y <= 0.0 ? 0 : y >= 1.0
+                ? QCA_SCP_DUAL_SCALE : (int64_t)(y * QCA_SCP_DUAL_SCALE);
+        }
+    }
 
     search.problem = problem;
     search.best_solution = solution;
@@ -1488,29 +1621,17 @@ qca_scp_result qca_scp_solve_exact_with_incumbent_adaptive(
         initial_size <= problem->nc) {
         memcpy(solution, initial_solution, (size_t) problem->nc * sizeof(int));
         search.best_size = initial_size;
+        if (proof_target_size >= 0 && initial_size <= proof_target_size) {
+            search.found_target = 1;
+        }
     }
     search.checkpoint_best_size = search.best_size;
 
-    search_exact(&search, &state, 0);
+    qca_scp_run run = {&search, &state, max_depth};
+    /* An unlimited proof can be interrupted from R. Release its recursive
+       workspaces on that exit as well as on normal completion. */
+    R_ExecWithCleanup(run_exact_search, &run, free_exact_search, &run);
 
-    qca_scp_free(state.uncovered);
-    qca_scp_free(state.active);
-    qca_scp_free(state.chosen);
-    for (int depth = 0; depth < max_depth; depth++) {
-        qca_scp_free(workspaces[depth].state.uncovered);
-        qca_scp_free(workspaces[depth].state.active);
-        qca_scp_free(workspaces[depth].state.chosen);
-        qca_scp_free(workspaces[depth].branch_cols);
-        qca_scp_free(workspaces[depth].gains);
-        qca_scp_free(workspaces[depth].candidate_solution);
-    }
-    qca_scp_free(workspaces);
-    qca_scp_free(search.reduction_row_marks);
-    qca_scp_free(search.reduction_row_support);
-    qca_scp_free(search.reduction_gains);
-    qca_scp_free(search.reduction_active_cols);
-    qca_scp_free(search.reduction_dual_slack);
-    qca_scp_free(search.branching_row_heuristic);
 
     if (search.limit_reached) {
         if (search.best_size <= problem->nc) {

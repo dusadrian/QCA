@@ -1,4 +1,4 @@
-`findmin` <- function(chart, type = c("hybrid", "conservative"), ...) {
+`findmin` <- function(chart, type = c("hybrid", "conservative", "native"), ...) {
 
     dots <- list(...)
     verbose <- isTRUE(dots$verbose)
@@ -11,7 +11,7 @@
         type <- "hybrid"
     }
 
-    type <- match.arg(type, c("hybrid", "conservative"))
+    type <- match.arg(type, c("hybrid", "conservative", "native"))
 
     if (!methods::is(chart, "QCA_pic")) {
 
@@ -35,7 +35,15 @@
         gurobi <- !isFALSE(attr(chart, "gurobi")) && !isFALSE(dots$gurobi)
         solution <- NULL
 
-        if (identical(type, "hybrid")) {
+        if (identical(type, "native")) {
+            # Complete the proof internally, without an external solver fallback.
+            solution <- .Call(
+                "C_findminNativeInternal",
+                matrix(as.logical(chart), nrow = nrow(chart)),
+                2L,
+                PACKAGE = "QCA"
+            )
+        } else if (identical(type, "hybrid")) {
             # Low-row coverage-mask dominance first removes solver-equivalent
             # or dominated columns. Level-2 Lagrangian preparation then builds
             # an incumbent, a bound and a reduced core. A bounded internal

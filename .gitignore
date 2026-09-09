@@ -7,11 +7,7 @@
 *.R
 !R/
 !R/*.R
-/tools/benchmark_lag_gap1.R
-/tools/benchmarks/
-/tools/build-cran-source.R
-/tools/profile_scp_solver.R
-/tools/validate_scp_solver.R
+/tools/
 *.Rproj
 *.Rproj.user
 *.Rhistory
