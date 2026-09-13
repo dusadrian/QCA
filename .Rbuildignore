@@ -10,7 +10,7 @@
 ^.*\.tar\.gz$
 (^|/)\.DS_Store$
 ^tests$
-^tools$
+^tools/(?!Makevars(?:[.]win)?[.]in$)
 ^Vignettes$
 ^vignettes$
 ^tools/(benchmark_lag_gap1|build-cran-source|profile_scp_solver|validate_scp_solver)[.]R$
