@@ -42,6 +42,10 @@
     outcome <- admisc::recreate(substitute(outcome), snames = names(data))
     setms <- admisc::recreate(substitute(setms), snames = names(data))
 
+    if (methods::is(setms, "admisc_deMorgan")) {
+        setms <- unlist(setms, use.names = FALSE)
+    }
+
     if (is.null(setms) & !is.null(data)) {
         return(pofind(
             data = data,
@@ -843,4 +847,3 @@
 
     return(list(incl.cov = cbind(incl.cov, toadd), add = add))
 }
-
