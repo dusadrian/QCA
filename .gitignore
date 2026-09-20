@@ -8,6 +8,11 @@
 !R/
 !R/*.R
 /tools/
+!/tools/
+/tools/*
+!/tools/threaded-webr-experiment/
+!/tools/threaded-webr-experiment/**
+/tools/threaded-webr-experiment/build/
 *.Rproj
 *.Rproj.user
 *.Rhistory
