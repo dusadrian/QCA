@@ -93,7 +93,20 @@ EOF
 
 if ${CC} ${CPPFLAGS} ${CFLAGS} ${LDFLAGS} conftest.c -o conftest >/dev/null 2>&1; then
     pthread_cppflags=" -DHAVE_PTHREAD"
-    echo "configure: pthread support enabled"
+    case "${CC}" in
+        *emcc*)
+            # Emscripten can inherit -pthread from R's global flags during the
+            # probe, but package compilation is later driven by rwasm's own
+            # Makevars.  Retain the flag explicitly so every side-module object
+            # is compiled for shared WebAssembly memory.
+            pthread_cflags=" -pthread"
+            pthread_libs=" -pthread"
+            echo "configure: pthread support enabled with -pthread"
+            ;;
+        *)
+            echo "configure: pthread support enabled"
+            ;;
+    esac
 elif ${CC} ${CPPFLAGS} ${CFLAGS} -pthread ${LDFLAGS} conftest.c -o conftest -pthread >/dev/null 2>&1; then
     pthread_cflags=" -pthread"
     pthread_cppflags=" -DHAVE_PTHREAD"

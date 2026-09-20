@@ -4,14 +4,20 @@
 
 #if defined(HAVE_PTHREAD)
     #include <pthread.h>
-    #if defined(_WIN32)
+    #if defined(__EMSCRIPTEN_PTHREADS__)
+        #include <emscripten/threading.h>
+    #elif defined(_WIN32)
         #include <windows.h>
     #else
-    #include <unistd.h>
+        #include <unistd.h>
     #endif
 #endif
 
-#define QCA_THREAD_LIMIT 64
+#if defined(__EMSCRIPTEN_PTHREADS__)
+    #define QCA_THREAD_LIMIT 4
+#else
+    #define QCA_THREAD_LIMIT 64
+#endif
 
 typedef struct {
     qca_range_worker worker;
@@ -39,7 +45,15 @@ int qca_default_thread_count(void) {
         }
     }
 #if defined(HAVE_PTHREAD)
-    #if defined(_WIN32)
+    #if defined(__EMSCRIPTEN_PTHREADS__)
+    if (!emscripten_has_threading_support()) {
+        return 1;
+    }
+    int nprocs = emscripten_num_logical_cores();
+    if (nprocs > 1) {
+        return nprocs > QCA_THREAD_LIMIT ? QCA_THREAD_LIMIT : nprocs;
+    }
+    #elif defined(_WIN32)
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     if (info.dwNumberOfProcessors > 1) {
@@ -83,18 +97,19 @@ int qca_parallel_for(
 
 #if defined(HAVE_PTHREAD)
     if (nthreads > 1) {
-        pthread_t *threads = (pthread_t *) calloc((size_t) nthreads, sizeof(pthread_t));
+        int helper_count = nthreads - 1;
+        pthread_t *threads = (pthread_t *) calloc((size_t) helper_count, sizeof(pthread_t));
         QCARangeTask *tasks = (QCARangeTask *) calloc((size_t) nthreads, sizeof(QCARangeTask));
         unsigned long long base = count / (unsigned long long) nthreads;
         unsigned long long rem = count % (unsigned long long) nthreads;
         unsigned long long start = 0;
         int started = 0;
-        int ok = 1;
 
         if (threads == NULL || tasks == NULL) {
             free(threads);
             free(tasks);
-            return 0;
+            worker(0, count, 0, data);
+            return 1;
         }
 
         for (int i = 0; i < nthreads; i++) {
@@ -105,12 +120,19 @@ int qca_parallel_for(
             tasks[i].end = start + width;
             tasks[i].worker_id = i;
             start += width;
+        }
 
-            if (pthread_create(&threads[i], NULL, qca_range_thread_main, &tasks[i]) != 0) {
-                ok = 0;
+        for (int i = 1; i < nthreads; i++) {
+            if (pthread_create(&threads[started], NULL, qca_range_thread_main, &tasks[i]) != 0) {
                 break;
             }
             started++;
+        }
+
+        tasks[0].worker(tasks[0].start, tasks[0].end, 0, data);
+
+        for (int i = started + 1; i < nthreads; i++) {
+            tasks[i].worker(tasks[i].start, tasks[i].end, i, data);
         }
 
         for (int i = 0; i < started; i++) {
@@ -119,7 +141,7 @@ int qca_parallel_for(
 
         free(threads);
         free(tasks);
-        return ok;
+        return 1;
     }
 #endif
 
