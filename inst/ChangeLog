@@ -1,4 +1,6 @@
 Version 3.26
+    o Fixed: bug excluding existing positive observed configurations
+      (thanks to Philipp Sekol for the report)
     o Experimental: browser-worker parallelism for C computations with a
       compatible pthread-enabled WebR runtime; not yet enabled in DialogQCA
     o Improved: the calling thread now shares parallel work, with serial
@@ -29,6 +31,7 @@ Version 3.26
       exclusively internal code, independent of both Gurobi and lp_solve
     o Bug fix in R_Realloc() on Windows, crashing findmin()
       (thanks to Yuki Toyoda for the report)
+    o Improved: faster enumeration of all equal cardinality mmodels
 
 Version 3.25
     o Now using a trimmed down version of lp_solve for exact covers

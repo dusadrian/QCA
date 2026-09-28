@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.25.6
+Version: 3.25.7
 SystemRequirements: POSIX threads (optional)
 Title: Qualitative Comparative Analysis
 Authors@R: c(
@@ -17,7 +17,7 @@ URL: https://github.com/dusadrian/QCA
 BugReports: https://github.com/dusadrian/QCA/issues
 Depends: R (>= 3.6.0), admisc (> 0.39)
 LazyData: yes
-Imports: methods, declared, venn
+Imports: methods, declared, venn, grid
 Suggests: testthat (>= 3.0.0)
 Description: An extensive set of functions to perform Qualitative Comparative Analysis:
        crisp sets ('csQCA'), temporal ('tQCA'), multi-value ('mvQCA')
