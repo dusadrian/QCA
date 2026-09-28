@@ -394,15 +394,29 @@
         tt <- tt[!obremove, , drop = FALSE]
 
         if (!is.null(exclude)) {
-            excl.matrix <- as.data.frame(getRow(exclude, noflevels))
-            rownames(excl.matrix) <- exclude
-            colnames(excl.matrix) <- conditions
-            excl.matrix$OUT <- 0
-            excl.matrix$n <- 0
-            excl.matrix$incl <- "-"
-            excl.matrix$PRI <- "-"
+            observed.exclude <- intersect(
+                rownames(tt),
+                as.character(exclude)
+            )
+            tt[observed.exclude, "OUT"] <- 0
 
-            tt <- rbind(tt, excl.matrix)
+            unobserved.exclude <- exclude[
+                !is.element(as.character(exclude), rownames(tt))
+            ]
+
+            if (length(unobserved.exclude) > 0) {
+                excl.matrix <- as.data.frame(
+                    getRow(unobserved.exclude, noflevels)
+                )
+                rownames(excl.matrix) <- unobserved.exclude
+                colnames(excl.matrix) <- conditions
+                excl.matrix$OUT <- 0
+                excl.matrix$n <- 0
+                excl.matrix$incl <- "-"
+                excl.matrix$PRI <- "-"
+
+                tt <- rbind(tt, excl.matrix)
+            }
         }
     }
     else {
