@@ -15,3 +15,4 @@
 ^vignettes$
 ^tools/(benchmark_lag_gap1|build-cran-source|profile_scp_solver|validate_scp_solver)[.]R$
 ^(?!R/).*[.]R$
+^AGENTS\.md$
