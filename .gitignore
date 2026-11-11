@@ -21,3 +21,4 @@
 *.DS_Store
 src/*.DS_Store
 src/*.a
+AGENTS.md
