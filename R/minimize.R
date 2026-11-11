@@ -885,7 +885,7 @@
                         i.sol[[index]]$EC <- ECmat
                         i.sol[[index]]$DC <- ECmat
                         i.sol.index <- c.sol
-                        i.sol.index$solution.list[[1]] <- c.sol$solution.list[[1]][[c.s]]
+                        i.sol.index$solution.list[[1]] <- c.sol$solution.list[[1]][c.s]
                     }
                     else {
                         i.sol[[index]]$EC <- EClist[[index]]
