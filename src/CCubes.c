@@ -14,7 +14,7 @@
 #include "findmin_hybrid.h"
 #include "findmin_lpsolve.h"
 #include "pichart_presolve.h"
-#include "qca_stopping.h"
+#include "qca_certify.h"
 #include "cover_validation.h"
 #include "qca_threads.h"
 
@@ -389,18 +389,21 @@ void CCubes(const int p_tt[],          // the truth table
 
     get_noflevels(noflevels, p_tt, nconds, ttrows);
 
-    QCAStoppingState stopping;
-    qca_stopping_state_init(
-        &stopping,
-        posmat,
-        negmat,
-        noflevels,
-        nconds,
-        posrows,
-        negrows,
-        picons,
-        solcons
-    );
+    const Rboolean point_cover = picons == 0 && solcons == 0;
+    const Rboolean minimum_models = point_cover && !firstmin && !allsol && max_value <= 1;
+    int last_level = picons > 0 ? pidepth : nconds;
+    if (point_cover) {
+        // Every literal in a prime term needs a distinct negative row
+        // that would enter the term if that literal were removed.
+        int witness_depth = negrows > 0 ? negrows : 1;
+        if (last_level > witness_depth) last_level = witness_depth;
+    }
+    QcaCertification certificate = {
+        .on = posmat, .off = negmat, .conditions = nconds,
+        .positives = posrows, .negatives = negrows,
+        .resources = {.work_limit = 16000000, .memory_limit = 32u * 1024u * 1024u}
+    };
+    int checked_incumbent = 0, checked_columns = 0;
 
     // preallocating for an estimated large number of 1000 found PIs
     // this number will be iteratively increased when the found PIs reach the upper limit
@@ -478,12 +481,11 @@ void CCubes(const int p_tt[],          // the truth table
 
 
     Rboolean solution_exists = false;
-    int counter = 0; // legacy PI-inactivity patience for complete enumeration
     Rboolean pi_resize_failed = false;
     atomic_bool parallel_resize_failed;
     atomic_init(&parallel_resize_failed, false);
     int k;
-    for (k = 1; k <= pidepth; k++) {
+    for (k = 1; k <= last_level; k++) {
         R_CheckUserInterrupt();
         // Rprintf("====================\nk: %d\n\n", k);
 
@@ -898,12 +900,6 @@ void CCubes(const int p_tt[],          // the truth table
 
             solution_exists = all_covered(p_pichart, posrows, foundPI);
 
-            qca_stopping_observe_coverage(
-                &stopping,
-                k,
-                solution_exists
-            );
-
             if (solution_exists) {
                 stop_searching = *complex;
             }
@@ -911,7 +907,9 @@ void CCubes(const int p_tt[],          // the truth table
             // printf("posrows: %d; foundPI: %d; complex: %d\n", posrows, foundPI, *complex);
             // printf("PI chart can be solved: %d\n", solution_exists);
 
-            if (!stop_searching && solution_exists) { // not too complex
+            Rboolean minimum_plateau =
+                !foundk && solmin > 0 && incumbent_valid && !solind_failed;
+            if (!stop_searching && solution_exists && !minimum_plateau) {
 
                 // SEXP pic = PROTECT(allocMatrix(INTSXP, foundPI, posrows));
 
@@ -991,87 +989,45 @@ void CCubes(const int p_tt[],          // the truth table
 
                 // find_min(p_pichart, posrows, foundPI, &solmin, indices);
 
-                Rboolean minimum_plateau = solmin == prevsolmin;
-                if (minimum_plateau) {
-                    // the minimum did not change in the current level of complexity
-
-                    for (int i = 0; i < solmin; i++) {
-                        indices[i] = previndices[i];
-                    }
-
-                    if (firstmin && !stopping.supported) {
-                        counter += 1;
+                minimum_plateau = solmin > 0 && solmin == prevsolmin;
+                if (!solind_failed && solmin > 0) {
+                    if (minimum_plateau && incumbent_valid) {
+                        for (int i = 0; i < solmin; i++) indices[i] = previndices[i];
+                    } else {
+                        prevsolmin = solmin;
+                        for (int i = 0; i < solmin; i++) previndices[i] = indices[i];
                     }
                 }
-                else {
-                    // this means solmin is in fact smaller than the previously found solmin
-                    // or it is the very first time a solmin was found
-                    // only here it makes sense to overwrite prevsolmin and previndices,
-                    // otherwise they are just as good as the ones from the previous level
+            }
 
-                    prevsolmin = solmin;
-                    for (int i = 0; i < solmin; i++) {
-                        previndices[i] = indices[i];
+            if (!stop_searching && solution_exists && !solind_failed && solmin > 0) {
+                if (point_cover && firstmin && solmin == 1) {
+                    stop_searching = true;
+                } else if (point_cover && k < last_level) {
+                    if (firstmin && minimum_plateau && checked_incumbent != solmin) {
+                        checked_incumbent = solmin;
+                        stop_searching = qca_check_smaller_model(&certificate, solmin) == NSAT_UNSAT;
                     }
-
-                    counter = 0; // this means for sure foundk is true
-                }
-
-                if (minimum_plateau && stopping.supported) {
-                    if (!qca_stopping_observe_plateau(
-                        &stopping,
-                        posmat,
-                        negmat,
-                        nconds,
-                        posrows,
-                        negrows,
-                        p_pichart,
-                        foundPI,
-                        indices,
-                        solmin
-                    )) {
-                        error("Adaptive stopping diagnostic failed.");
-                    }
-                    if (
-                        stopping.certification_required &&
-                        !qca_stopping_prepare_certificate(
-                            &stopping,
-                            posmat,
-                            negmat,
-                            nconds,
-                            posrows,
-                            negrows
-                        )
-                    ) {
-                        error("Adaptive stopping certificate initialization failed.");
-                    }
-                }
-
-                if (!firstmin) {
-                    if (foundk) {
-                        counter = 0;
-                        // prevminPI = foundPI;
-                    }
-                    else {
-                        counter += 1;
-                    }
-                }
-
-                if (stopping.supported) {
-                    const Rboolean boundary_exact = !solind_failed && solmin > 0;
-                    qca_stopping_cardinality_certified(
-                        &stopping,
-                        k,
-                        solmin,
-                        boundary_exact
-                    );
-
-                    if (firstmin && stopping.diagnostic_checked) {
-                        if (!stopping.certification_required) {
-                            stop_searching = true;
-                        }
-                        else if (stopping.cardinality_certified) {
-                            stop_searching = true;
+                    if (!stop_searching && !foundk && checked_columns != foundPI) {
+                        checked_columns = foundPI;
+                        Rboolean minimum_proved =
+                            solmin == 1 || certificate.verified_minimum == solmin;
+                        if (!minimum_models || !minimum_proved)
+                            stop_searching = qca_check_complete_chart(
+                                &certificate, p_pichart, p_implicants, foundPI
+                            );
+                        if (!stop_searching && minimum_models) {
+                            if (!minimum_proved && checked_incumbent != solmin) {
+                                checked_incumbent = solmin;
+                                minimum_proved =
+                                    qca_check_smaller_model(&certificate, solmin) == NSAT_UNSAT;
+                                if (minimum_proved)
+                                    certificate.verified_minimum = solmin;
+                            }
+                            if (minimum_proved)
+                                stop_searching = qca_check_minimum_models(
+                                    &certificate, p_implicants, foundPI, solmin
+                                );
                         }
                     }
                 }
@@ -1084,33 +1040,7 @@ void CCubes(const int p_tt[],          // the truth table
         }
 
 
-        // printf("counter: %d; stop: %d\n", counter, stop_searching * 1);
-        
-        Rboolean legacy_enumeration_stop = counter > 1;
-        if (!firstmin) {
-            stopping.enumeration_complete = legacy_enumeration_stop;
-            if (
-                stopping.supported && stopping.certification_required &&
-                !stopping.cardinality_certified
-            ) {
-                stopping.enumeration_complete = false;
-            }
-            legacy_enumeration_stop = stopping.enumeration_complete;
-        }
-
-        if (stop_searching || legacy_enumeration_stop) {
-            break;
-        }
-    }
-
-    if (
-        stopping.supported && stopping.certification_required &&
-        !stopping.cardinality_certified && !*complex
-    ) {
-        error(
-            "Prime-implicant generation ended before the adaptive stopping "
-            "certificate was established; increase <pi.depth>."
-        );
+        if (stop_searching) break;
     }
 
     int *copy_implicants = R_Calloc(1, int);

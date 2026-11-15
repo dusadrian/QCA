@@ -1,4 +1,12 @@
 Version 3.26
+    o CCubes can certify stopping after one stalled complexity layer.
+      With first.min = TRUE, weighted integer search and native SAT
+      check whether a smaller model can exist.
+      The default checks whether the PI chart is complete before
+      enumerating minimum models. Unresolved searches continue
+      through the applicable systematic depth.
+    o The pi.depth limit applies when filtering prime implicants by
+      consistency (pi.cons > 0).
     o The former Lagrangian relaxation heuristic is now an exact method:
       dominance presolve, reduced-cost fixing at the best dual multipliers
       and a bounded branch-and-bound finish certify optimality in most

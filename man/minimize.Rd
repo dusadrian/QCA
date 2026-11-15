@@ -132,26 +132,21 @@ levels of complexity, when the PI chart was still not too complex.
 In the extreme situation even this is not feasible, the argument \bold{\code{first.min}}
 controls returning only one (the very first found) minimal model, if at all possible.
 
-For ordinary binary truth-table minimization with nonempty positive and negative
-sets, CCubes applies an adaptive stopping policy. With \bold{\code{first.min = TRUE}},
-the first complexity level at which the minimum cover cardinality does not improve
-triggers a deterministic delayed-pair diagnostic. If the current model has no
-compatible private-witness pair requiring a deeper prime implicant, the plateau is
-accepted immediately. This remains a heuristic exit because delayed groups of three
-or more rows can exist even when no delayed pair is found.
+For ordinary truth-table minimization, CCubes uses one stalled complexity level
+as a trigger for exact checks. With \bold{\code{first.min = TRUE}}, a bounded
+weighted integer search and a native SAT solver check whether a smaller binary
+cover can exist. A one-term cover is already minimal for a nonempty outcome.
+When the check finds a smaller cover is possible, generation continues so that the
+systematic chart contains the terms needed for a minimum model.
 
-If a delayed pair is found, the plateau exit is disabled and generation continues
-until the incumbent meets an incompatibility lower bound or an exact boundary solve
-is obtained at the certified generation horizon. This certifies the minimum number
-of terms. It does not by itself certify that every alternative minimum model has
-already been generated. Consequently, the default \bold{\code{first.min = FALSE}}
-path retains its separate PI-enumeration stopping rule and only stops after two
-successive levels add no retained, non-redundant prime implicants; a detected risk
-also prevents that exit until minimum cardinality is certified. Multivalue and
-consistency-based minimizations retain this legacy two-level rule because the current
-certificate is restricted to binary point-set inputs. If an explicit
-\bold{\code{pi.depth}} ends a warned search before certification, CCubes reports an
-error rather than returning the result as certified.
+With the default \bold{\code{first.min = FALSE}}, the check instead asks whether
+a legal term exists that contains none of the chart's prime implicants as a
+subterm. CCubes uses the complete chart to enumerate models. The native checks
+are bounded and apply to ordinary point tables with up to 15 conditions.
+Inconclusive checks and consistency-based searches continue through the
+applicable systematic depth. When \bold{\code{pi.cons > 0}}, the optional
+\bold{\code{pi.depth}} limits the number of conditions in a prime implicant.
+A positive \bold{\code{max.comb}} can limit either type of search.
 
 The arguments \bold{\code{pi.cons}} and \bold{\code{sol.cons}} are not specific to the
 traditional QCA minimization, that uses crisp (truth table) values of 0s and 1s. They
