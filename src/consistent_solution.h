@@ -1,16 +1,29 @@
+#ifndef QCA_CONSISTENT_SOLUTION_H
+#define QCA_CONSISTENT_SOLUTION_H
+
+#include <stddef.h>
 #include "qca_r.h"
 
-Rboolean consistent_solution(
-    const double p_data[],      // the raw, calibrated (fuzzy) data
-    const int ncdata,           // number of columns in the data
-    const int nrdata,           // number of rows in the data
-    const int k,                // level of complexity
-    const int tempk[],          // combination of PIs at the level of complexity k
-    const unsigned int foundPI, // the number of found PIs
-    const int p_implicants[],   // the PIs implicants matrix
-    const int ck[],             // the vector of complexity levels where the PIs were found
-    const int indx[],           // the indices of the PIs in the implicants matrix, at each position in ck
-    const int p_fsconds[],      // boolean, if conditions fuzzy
-    const double solcons,       // the solution consistency threshold
-    const double solcov         // the solution coverage threshold
-);
+typedef struct {
+    const double *data;
+    const int *implicants, *depths, *indices, *fuzzy;
+    int conditions, cases;
+    double consistency, coverage, outcome_sum;
+    double *memberships;
+} QCAConsistentFit;
+
+typedef struct {
+    double *suffix_memberships, *suffix_overlap;
+    size_t overlap_stride;
+    double slack;
+} QCAConsistentBounds;
+
+void qca_cache_pi_memberships(QCAConsistentFit *fit, unsigned int count);
+Rboolean consistent_solution(const QCAConsistentFit *fit, int terms, const int selected[]);
+void qca_prepare_consistent_bounds(const QCAConsistentFit *fit, unsigned int count,
+                                  int max_terms, QCAConsistentBounds *bounds);
+Rboolean qca_consistent_prefix_possible(const QCAConsistentFit *fit,
+                                        const QCAConsistentBounds *bounds,
+                                        const int selected[], int depth, int slots);
+
+#endif

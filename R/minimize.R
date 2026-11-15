@@ -542,10 +542,6 @@
                 extended.data <- rbind(extended.data, cbind(excl.matrix, 0))
             }
 
-            if (sol.cons > 0 & all.sol & sol.depth == 0) {
-                sol.depth <- 7
-            }
-
             # DEBUG:
             # save into an object called "aa"
             # return(list(

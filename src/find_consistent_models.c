@@ -1,65 +1,29 @@
-#include "qca_r.h"
+#include "qca_rinternals.h"
 #include <R_ext/RS.h>
-#include "qca_r.h"
-#include <math.h>
+#include <stdbool.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <stdint.h>
+#include <string.h>
 #include "find_consistent_models.h"
 #include "qca_threads.h"
 #include "utils.h"
 
 typedef struct {
-    const int *p_implicants;
-    const int *indx;
-    const int *ck;
-    const double *p_data;
-    const int *p_fuzzy;
-    int nconds;
-    int nrdata;
-    double solcons;
-    double solcov;
+    const QCAConsistentFit *fit;
+    const QCAConsistentBounds *bounds;
     unsigned int foundPI;
     int k;
     int maxk;
     const int *p_sol;
     const int *cksol;
     unsigned int prevfound;
-    unsigned char *valid;
 } QCAFindConsistentModelsContext;
-
-static void qca_unrank_combination(
-    unsigned long long int task,
-    unsigned int nitems,
-    int k,
-    int tempk[]
-) {
-    unsigned long long int combination = task;
-    int x = 0;
-
-    for (int i = 0; i < k; i++) {
-        while (1) {
-            unsigned long long int cval = nchoosek((int) nitems - (x + 1), k - (i + 1));
-            if (cval == 0 || cval > combination) {
-                break;
-            }
-            combination -= cval;
-            x++;
-        }
-
-        if (x < 0) {
-            x = 0;
-        }
-        if (x >= (int) nitems) {
-            x = (int) nitems - 1;
-        }
-
-        tempk[i] = x;
-        x++;
-    }
-}
 
 static Rboolean qca_consistent_candidate_nonredundant(
     const QCAFindConsistentModelsContext *ctx,
-    const int tempk[]
+    const int tempk[],
+    int terms
 ) {
     Rboolean nonred = true;
     unsigned int i = 0;
@@ -69,7 +33,7 @@ static Rboolean qca_consistent_candidate_nonredundant(
         int v = 0;
 
         while (sumeq == v && v < ctx->cksol[i]) {
-            for (int c = 0; c < ctx->k; c++) {
+            for (int c = 0; c < terms; c++) {
                 if (ctx->p_sol[i * ctx->maxk + v] == tempk[c]) {
                     sumeq++;
                 }
@@ -87,75 +51,207 @@ static Rboolean qca_consistent_candidate_nonredundant(
     return nonred;
 }
 
-static void qca_find_consistent_models_range(
-    unsigned long long start,
-    unsigned long long end,
-    int worker_id,
-    void *data
+/* Each prefix occupies a contiguous interval in lexicographic rank order.
+   Remember passes within the worker's range and jump over rejected prefixes. */
+static unsigned long long qca_skip_failed_prefix(
+    const QCAFindConsistentModelsContext *ctx,
+    unsigned long long rank,
+    const int selected[],
+    const unsigned long long prefix_end[],
+    unsigned long long checked_until[]
 ) {
-    QCAFindConsistentModelsContext *ctx = (QCAFindConsistentModelsContext *) data;
-    (void) worker_id;
+    for (int d = 0; d < ctx->k - 1; ++d) {
+        if (rank < checked_until[d]) continue;
+        checked_until[d] = prefix_end[d];
+        if (prefix_end[d] > rank + 1 &&
+            !qca_consistent_prefix_possible(ctx->fit, ctx->bounds, selected, d + 1, ctx->k - d - 1))
+            return prefix_end[d];
+    }
+    return rank;
+}
 
-    for (unsigned long long int task = start; task < end; task++) {
-        int tempk[ctx->k];
-        qca_unrank_combination(task, ctx->foundPI, ctx->k, tempk);
+/* A worker resumes a lexicographic prefix search after each bounded batch.
+   Storage grows with the models found, never with choose(foundPI, k). */
+typedef struct {
+    int *selected, *models;
+    int depth, root_start, root_end;
+    size_t count, capacity;
+    bool done, failed, larger_possible;
+} QCAConsistentTree;
 
-        if (
-            qca_consistent_candidate_nonredundant(ctx, tempk) &&
-            consistent_solution(
-                ctx->p_data,
-                ctx->nconds,
-                ctx->nrdata,
-                ctx->k,
-                tempk,
-                ctx->foundPI,
-                ctx->p_implicants,
-                ctx->ck,
-                ctx->indx,
-                ctx->p_fuzzy,
-                ctx->solcons,
-                ctx->solcov
-            )
-        ) {
-            ctx->valid[task] = 1;
+typedef struct {
+    QCAFindConsistentModelsContext candidates;
+    QCAConsistentTree *trees;
+} QCAConsistentLevel;
+
+static bool qca_larger_consistent_model_possible(
+    const QCAFindConsistentModelsContext *ctx, const int selected[], int depth
+) {
+    int available = (int)ctx->foundPI - selected[depth - 1] - 1;
+    if (ctx->maxk <= ctx->k || available < ctx->k + 1 - depth) return false;
+    if (!ctx->bounds->suffix_memberships) return true;
+    int slots = ctx->maxk - depth;
+    if (slots > available) slots = available;
+    return qca_consistent_prefix_possible(
+        ctx->fit, ctx->bounds, selected, depth, slots);
+}
+
+static void qca_record_consistent_model(QCAConsistentTree *tree, int terms)
+{
+    size_t limit = (size_t)INT_MAX / terms;
+    if (tree->count == limit) {
+        tree->failed = true;
+        return;
+    }
+    if (tree->count == tree->capacity) {
+        size_t capacity = tree->capacity ? tree->capacity * 2 : 64;
+        if (capacity > limit) capacity = limit;
+        if (capacity > SIZE_MAX / sizeof(int) / terms) {
+            tree->failed = true;
+            return;
         }
+        int *models = realloc(tree->models, capacity * terms * sizeof(int));
+        if (!models) {
+            tree->failed = true;
+            return;
+        }
+        tree->models = models;
+        tree->capacity = capacity;
+    }
+    memcpy(tree->models + tree->count * terms, tree->selected, terms * sizeof(int));
+    ++tree->count;
+}
+
+static void qca_search_consistent_tree(QCAConsistentLevel *level, int tree_id)
+{
+    const QCAFindConsistentModelsContext *ctx = &level->candidates;
+    QCAConsistentTree *tree = &level->trees[tree_id];
+    if (tree->done || tree->failed) return;
+    if (!tree->selected) {
+        tree->selected = malloc((size_t)ctx->k * sizeof(int));
+        if (!tree->selected) {
+            tree->failed = true;
+            return;
+        }
+        tree->selected[0] = tree->root_start - 1;
+    }
+
+    for (int work = 0; work < 4096 && !tree->done && !tree->failed; ++work) {
+        int depth = tree->depth;
+        int last = (int)ctx->foundPI - (ctx->k - depth);
+        if (depth == 0 && last >= tree->root_end) last = tree->root_end - 1;
+        if (++tree->selected[depth] > last) {
+            if (depth == 0) tree->done = true;
+            else --tree->depth;
+            continue;
+        }
+
+        int terms = depth + 1;
+        if (!qca_consistent_candidate_nonredundant(ctx, tree->selected, terms))
+            continue;
+
+        if (terms == ctx->k) {
+            if (consistent_solution(ctx->fit, terms, tree->selected)) {
+                qca_record_consistent_model(tree, terms);
+            } else if (!tree->larger_possible) {
+                tree->larger_possible = qca_larger_consistent_model_possible(
+                    ctx, tree->selected, terms);
+            }
+            continue;
+        }
+
+        if (ctx->bounds->suffix_memberships &&
+            !qca_consistent_prefix_possible(
+                ctx->fit, ctx->bounds, tree->selected, terms, ctx->k - terms)) {
+            /* Failure at this size does not exclude larger models. Check the
+               whole remaining depth before declaring this branch exhausted. */
+            if (!tree->larger_possible)
+                tree->larger_possible = qca_larger_consistent_model_possible(
+                    ctx, tree->selected, terms);
+            continue;
+        }
+        tree->selected[terms] = tree->selected[depth];
+        ++tree->depth;
     }
 }
 
-
-
-void find_consistent_models(
-    const int p_implicants[],
-    const int indx[],
-    const int ck[],
-    const double p_data[],
-    const int p_fuzzy[],
-    const int nconds,
-    const int nrdata,
-    const int posrows,
-    const double solcons,
-    const double solcov,
-    const Rboolean allsol,
-    const int soldepth,
-    const unsigned int foundPI,
-    const double maxcomb,
-    
-    int **solutions,
-    int *nr,
-    int *nc
+static void qca_search_consistent_prefixes(
+    unsigned long long start, unsigned long long end, int worker_id, void *data
 ) {
-    unsigned int estimsol = 1000;
-    
-    int maxk = posrows;
-    if (foundPI < maxk) {
-        maxk = foundPI;
+    (void)worker_id;
+    for (unsigned long long tree = start; tree < end; ++tree)
+        qca_search_consistent_tree(data, (int)tree);
+}
+
+typedef struct {
+    QCAConsistentFit fit;
+    QCAConsistentBounds bounds;
+    unsigned int foundPI;
+    int maxk;
+    double maxcomb;
+    int **solutions;
+    int *nr, *nc;
+    int *models, *sizes;
+    QCAConsistentTree *trees;
+    int workers;
+} QCAConsistentSearch;
+
+static void qca_reserve_consistent_models(
+    QCAConsistentSearch *search, size_t needed, unsigned int *capacity
+) {
+    size_t limit = (size_t)INT_MAX / search->maxk;
+    if (needed > limit) error("Too many consistent models for the solution matrix.");
+    if (needed <= *capacity) return;
+    size_t grown = (size_t)*capacity * 2;
+    if (grown < needed) grown = needed;
+    if (grown > limit) grown = limit;
+    search->models = R_Realloc(search->models, grown * search->maxk, int);
+    search->sizes = R_Realloc(search->sizes, grown, int);
+    *capacity = grown;
+}
+
+static void free_consistent_search(void *data)
+{
+    QCAConsistentSearch *search = data;
+    if (search->trees) {
+        for (int i = 0; i < search->workers; ++i) {
+            free(search->trees[i].selected);
+            free(search->trees[i].models);
+        }
+        free(search->trees);
     }
-    if (soldepth < maxk && soldepth > 0) {
-        maxk = soldepth;
+    R_Free(search->models);
+    R_Free(search->sizes);
+    free(search->fit.memberships);
+    free(search->bounds.suffix_memberships);
+    free(search->bounds.suffix_overlap);
+}
+
+static SEXP search_consistent_models(void *data)
+{
+    QCAConsistentSearch *search = data;
+    const unsigned int foundPI = search->foundPI;
+    const int maxk = search->maxk;
+    const double maxcomb = search->maxcomb;
+    int **solutions = search->solutions;
+    int *nr = search->nr, *nc = search->nc;
+    if (maxk == 0 || foundPI == 0) {
+        R_Free(*solutions);
+        *solutions = R_Calloc(1, int);
+        *nr = 0;
+        *nc = 0;
+        return R_NilValue;
     }
-    
-    int *p_sol = R_Calloc(maxk * estimsol, int);
-    int *cksol = R_Calloc(estimsol, int);
+
+    qca_cache_pi_memberships(&search->fit, foundPI);
+    if (!search->fit.memberships)
+        error("Cannot allocate memberships for consistent-model search.");
+    qca_prepare_consistent_bounds(&search->fit, foundPI, maxk, &search->bounds);
+    unsigned int estimsol = (unsigned int)INT_MAX / maxk;
+    if (estimsol > 1000) estimsol = 1000;
+
+    int *p_sol = search->models = R_Calloc((size_t)maxk * estimsol, int);
+    int *cksol = search->sizes = R_Calloc(estimsol, int);
     
     unsigned int solfound = 0;
     unsigned int prevfound = 0;
@@ -167,173 +263,115 @@ void find_consistent_models(
     Rboolean keep_searching = true;
     int k = 1;
     double counter = 0; // counts combinations only when maxcomb > 0
-    if (maxk == 0 || foundPI == 0) {
-        // Nothing to search; return an empty matrix
-        R_Free(*solutions);
-        *solutions = R_Calloc(1, int);
-        *nr = 0;
-        *nc = 0;
-        R_Free(p_sol);
-        R_Free(cksol);
-        return;
-    }
     // while ((k <= maxk && counter > 0) || solfound == 0) {
     while (keep_searching && k <= maxk) {
+        QCAFindConsistentModelsContext ctx = {
+            .fit = &search->fit, .bounds = &search->bounds,
+            .foundPI = foundPI, .k = k, .maxk = maxk,
+            .p_sol = p_sol, .cksol = cksol, .prevfound = prevfound
+        };
+        const bool possible = !search->bounds.suffix_memberships ||
+            qca_consistent_prefix_possible(&search->fit, &search->bounds, NULL, 0, k);
+        bool larger_possible = true;
         if (maxcomb <= 0) {
-            unsigned long long int maxtasks = nchoosek((int) foundPI, k);
-            unsigned char *valid = R_Calloc(maxtasks, unsigned char);
-            unsigned int found_this_k = 0;
-
-            QCAFindConsistentModelsContext ctx = {
-                .p_implicants = p_implicants,
-                .indx = indx,
-                .ck = ck,
-                .p_data = p_data,
-                .p_fuzzy = p_fuzzy,
-                .nconds = nconds,
-                .nrdata = nrdata,
-                .solcons = solcons,
-                .solcov = solcov,
-                .foundPI = foundPI,
-                .k = k,
-                .maxk = maxk,
-                .p_sol = p_sol,
-                .cksol = cksol,
-                .prevfound = prevfound,
-                .valid = valid
-            };
-
-            if (!qca_parallel_for(maxtasks, 0, qca_find_consistent_models_range, &ctx)) {
-                R_Free(valid);
-                R_Free(p_sol);
-                R_Free(cksol);
-                error("Failed to start pthread workers while finding consistent models.");
+            unsigned int roots = foundPI - k + 1;
+            search->workers = qca_default_thread_count();
+            if ((unsigned int)search->workers > roots) search->workers = roots;
+            search->trees = calloc((size_t)search->workers, sizeof(QCAConsistentTree));
+            if (!search->trees) error("Cannot allocate consistent-model search workers.");
+            unsigned int start = 0;
+            for (int w = 0; w < search->workers; ++w) {
+                unsigned int width = roots / search->workers +
+                    ((unsigned int)w < roots % search->workers);
+                search->trees[w].root_start = start;
+                search->trees[w].root_end = start + width;
+                start += width;
             }
+            QCAConsistentLevel level = {.candidates = ctx, .trees = search->trees};
 
-            for (unsigned long long int task = 0; task < maxtasks; task++) {
-                found_this_k += valid[task] != 0;
-            }
-
-            R_CheckUserInterrupt();
-
-            while (solfound + found_this_k >= estimsol) {
-                resize((void**)&p_sol, 1, 1000, estimsol, maxk);
-                resize((void**)&cksol, 1, 1000, estimsol, 1);
-                estimsol += 1000;
-            }
-
-            for (unsigned long long int task = 0; task < maxtasks; task++) {
-                if (task > 0 && task % 1024 == 0) {
-                    R_CheckUserInterrupt();
+            bool finished = false;
+            while (!finished) {
+                if (!qca_parallel_for(search->workers, search->workers, qca_search_consistent_prefixes, &level))
+                    error("Failed to start consistent-model search workers.");
+                finished = true;
+                for (int w = 0; w < search->workers; ++w) {
+                    if (search->trees[w].failed)
+                        error("Consistent-model output exceeds available memory or matrix limits.");
+                    if (!search->trees[w].done) finished = false;
                 }
-                if (!valid[task]) {
-                    continue;
-                }
-
-                int tempk[k];
-                qca_unrank_combination(task, foundPI, k, tempk);
-
-                for (int c = 0; c < k; c++) {
-                    p_sol[solfound * maxk + c] = tempk[c];
-                }
-                cksol[solfound] = k;
-                solfound++;
+                // Workers have joined, so interrupts cannot leave live threads behind.
+                R_CheckUserInterrupt();
             }
 
-            R_Free(valid);
+            larger_possible = false;
+            for (int w = 0; w < search->workers; ++w) {
+                QCAConsistentTree *tree = &search->trees[w];
+                if (tree->larger_possible) larger_possible = true;
+                qca_reserve_consistent_models(search, solfound + tree->count, &estimsol);
+                p_sol = search->models;
+                cksol = search->sizes;
+                for (size_t m = 0; m < tree->count; ++m) {
+                    memcpy(p_sol + (size_t)solfound * maxk,
+                           tree->models + m * k, (size_t)k * sizeof(int));
+                    cksol[solfound++] = k;
+                }
+                free(tree->selected);
+                free(tree->models);
+                tree->selected = tree->models = NULL;
+            }
+            free(search->trees);
+            search->trees = NULL;
         }
         else {
             int *tempk = R_Calloc(k, int);
-            for (int i = 0; i < k; i++) {
-                tempk[i] = i; // prepopulate with 0, 1, 2, ... , k - 1
-            }
-            
-            tempk[k - 1] -= 1; // the last value is always increased with 1 by the function increment()
-            
-            int e = 0;
-            int h = k;
-            
-            Rboolean last = (foundPI == k);
-            
-            // while ((tempk[0] != foundPI - k) || last) {
+            for (int i = 0; i < k; ++i) tempk[i] = i;
+            --tempk[k - 1]; // increment() advances to the first combination.
+
+            int e = 0, h = k;
+            Rboolean last = foundPI == k;
+            const bool bound = possible && search->bounds.suffix_memberships && k > 1 &&
+                nchoosek((int)foundPI, k) > 1;
+            unsigned long long rank = 0, next_possible = 0;
+            const int prefix_capacity = bound ? k : 1;
+            unsigned long long prefix_end[prefix_capacity], checked_until[prefix_capacity];
+            if (bound) Memzero(checked_until, k);
             while (keep_searching && ((tempk[0] != foundPI - k) || last)) {
                 increment(k, &e, &h, foundPI + last, tempk, 0);
                 last = false;
-        
 
-                Rboolean nonred = true;
-                
-                int i = 0;
-
-                while (i < prevfound && nonred) {
-        // printf("i: %d\n", i);
-                // prevfound activates this loop only when allsol is activated
-                int sumeq = 0;
-                int v = 0;
-                
-                while (sumeq == v && v < cksol[i]) {
-                    for (int c = 0; c < k; c++) {
-        // printf("%d ", p_sol[i * maxk + v]);
-                        if (p_sol[i * maxk + v] == tempk[c]) {
-                            sumeq++;
-                        }
-                    }
-                    v++;
+                if (bound && rank >= next_possible && rank >= checked_until[k - 2]) {
+                    /* Count completions after this rank for each prefix. Use
+                       increment() and charge every rank to max.comb as before. */
+                    prefix_end[k - 1] = rank + 1;
+                    for (int d = k - 1; d > 0; --d)
+                        prefix_end[d - 1] = prefix_end[d] +
+                            nchoosek((int)foundPI - tempk[d] - 1, k - d);
+                    next_possible = qca_skip_failed_prefix(
+                        &ctx, rank, tempk, prefix_end, checked_until);
                 }
-                
-                if (sumeq == v) { // sumeq == ck[i], same thing
-                    nonred = false; // make non-redundant false, the PI _is_ redundant
+                if (possible && rank >= next_possible &&
+                    qca_consistent_candidate_nonredundant(&ctx, tempk, k) &&
+                    consistent_solution(&search->fit, k, tempk)) {
+                    qca_reserve_consistent_models(search, (size_t)solfound + 1, &estimsol);
+                    p_sol = search->models;
+                    cksol = search->sizes;
+                    ctx.p_sol = p_sol;
+                    ctx.cksol = cksol;
+                    for (int c = 0; c < k; ++c) p_sol[(size_t)solfound * maxk + c] = tempk[c];
+                    cksol[solfound++] = k;
                 }
-                
-                i++;
-            }
-            
-        // printf("nonred: %d\n", nonred);
-            if (nonred) {
-                // test consistency and coverage
-
-
-                if (consistent_solution(p_data, nconds, nrdata, k, tempk, foundPI, p_implicants, ck, indx, p_fuzzy, solcons, solcov)) {
-
-        // printf("tempk: ");
-        // for (int kk = 0; kk < k; kk++) {
-        //     printf("%d ", tempk[kk]);
-        // }
-        // printf("\n");
-        // printf("test: %d; incl: %5.3f; cov: %5.3f\n", consistent_solution(p_data, nconds, nrdata, k, tempk, foundPI, p_implicants, ck, indx, p_fuzzy, solcons, solcov), solcons, solcov);
-                    for (int c = 0; c < k; c++) {
-                        p_sol[solfound * maxk + c] = tempk[c];
-                    }
-                    
-                    
-                    cksol[solfound] = k;
-                    
-                    solfound++;
-                    // counter = 2;
-                    
-                    // printf("solfound: %d", solfound);
-                    if (solfound == estimsol) {
-                        
-                        resize((void**)&p_sol, 1, 1000, estimsol, maxk);
-                        resize((void**)&cksol, 1, 1000, estimsol, 1);
-                        
-                        estimsol += 1000;
-                        
-                    }
+                ++rank;
+                if (maxcomb > 0) {
+                    counter += 1.0;
+                    if ((counter / 1000000000.0) >= maxcomb) keep_searching = false;
                 }
             }
-
-            if (maxcomb > 0) {
-                counter += 1.0;
-                if ((counter / 1000000000.0) >= maxcomb) {
-                    keep_searching = false;
-                }
-            }
-            }
-        
             R_Free(tempk);
         }
 
+        // Every larger model has a prefix at this size. Stop only when all
+        // such branches are redundant or cannot meet the fit thresholds.
+        if (!larger_possible) break;
         prevfound = solfound;
         
         k += 1;
@@ -370,8 +408,46 @@ void find_consistent_models(
         *nc = 0;
     }
 
-    R_Free(p_sol);
-    R_Free(cksol);
     R_Free(*solutions);
     *solutions = p_tempmat;
+    return R_NilValue;
+}
+
+void find_consistent_models(
+    const int p_implicants[],
+    const int indx[],
+    const int ck[],
+    const double p_data[],
+    const int p_fuzzy[],
+    const int nconds,
+    const int nrdata,
+    const int posrows,
+    const double solcons,
+    const double solcov,
+    const Rboolean allsol,
+    const int soldepth,
+    const unsigned int foundPI,
+    const double maxcomb,
+
+    int **solutions,
+    int *nr,
+    int *nc
+) {
+    // Any membership union has a representation using at most one maximizer
+    // per case. A larger model has a proper subset with exactly the same fit.
+    // Positive truth-table rows are not a valid bound for fuzzy memberships.
+    int maxk = nrdata;
+    if (foundPI < maxk) maxk = foundPI;
+    if (soldepth > 0 && soldepth < maxk) maxk = soldepth;
+
+    QCAConsistentSearch search = {
+        .fit = {
+            .data = p_data, .implicants = p_implicants, .depths = ck,
+            .indices = indx, .fuzzy = p_fuzzy, .conditions = nconds, .cases = nrdata,
+            .consistency = solcons, .coverage = solcov
+        },
+        .foundPI = foundPI, .maxk = maxk, .maxcomb = maxcomb,
+        .solutions = solutions, .nr = nr, .nc = nc
+    };
+    R_ExecWithCleanup(search_consistent_models, &search, free_consistent_search, &search);
 }

@@ -23,14 +23,17 @@ causalChain(data, ordering = NULL, strict = FALSE, pi.cons = 0, pi.depth = 0,
         act as outcomes for each other.}
   \item{pi.cons}{Numerical fuzzy value between 0 and 1, minimal consistency
         threshold for a prime implicant to be declared as sufficient.}
-  \item{pi.depth}{Integer, a maximum number of causal conditions to be used
-        when searching for conjunctive prime implicants.}
+  \item{pi.depth}{Integer, the maximum number of causal conditions in each
+        prime implicant in the CCubes search. Positive values impose an explicit
+        limit regardless of pi.cons. The default 0 leaves the depth unrestricted
+        by the user and retains automatic stopping.}
   \item{sol.cons}{Numerical fuzzy value between 0 and 1, minimal consistency 
         threshold for a model to be declared as sufficient.}
   \item{sol.cov}{Numerical fuzzy value between 0 and 1, minimal coverage 
         threshold for a model to be declared as necessary.}
-  \item{sol.depth}{Integer, a maximum number of prime implicants to be used when
-        searching for disjunctive models.}
+  \item{sol.depth}{Integer, a maximum number of prime implicants in a
+        consistency-based disjunctive model. The default 0 uses automatic
+        enumeration without a user-imposed term-count limit.}
   \item{...}{Other arguments to be passed to functions \code{\link{minimize}()}
         and \code{\link{truthTable}()}.}
 }
@@ -111,23 +114,47 @@ Consequently, two kinds of depth arguments are provided:
 
 \tabular{rl}{
 \bold{\code{pi.depth}} \tab the maximum number of causal conditions needed to conjunctively\cr
- \tab construct a prime implicant; it is the complexity level where the search\cr
- \tab can be stopped, as long as the PI chart can be solved.\cr
+ \tab construct a prime implicant; a positive value is a hard limit, even\cr
+ \tab if no model can be found within that limit.\cr
 \bold{\code{sol.depth}} \tab the maximum number of prime implicants needed to disjunctively\cr
  \tab build a solution model that covers all initial positive output configurations.
 }
 
-These arguments introduce a possible new way of deriving prime implicants and solution models,
-that can lead to different results (i.e. even more parsimonious) compared to the classical
-Quine-McCluskey. When either of them is modified from the default value of 0, the minimization
-method is automatically set to \bold{\code{"CCubes"}} and the remainders are automatically
-included in the minimization.
+A positive \bold{\code{pi.depth}} limits the number of literals in each term
+in the CCubes search, independently of \bold{\code{pi.cons}} and
+\bold{\code{all.sol}}. For example, \bold{\code{pi.depth = 3}} excludes a term
+such as \bold{\code{A*B*C*D}}, even if that term would reduce the number of
+terms in a model. Any minimum found is relative to the permitted terms; the
+unrestricted minimum can be smaller. The limit is not exceeded when the retained
+prime implicants cannot cover the outcome.
 
-The higher these depths, the higher the search time. Connversely, the search time can be
-significantly shorter if these depths are smaller. Irrespective of how large 
-\bold{\code{pi.depth}} is, the algorithm will always stop at a maximum complexity level
-where no new, non-redundant prime implicants are found. The argument \bold{\code{sol.depth}}
-is relevant only when activating the argument \bold{\code{all.sol}} to solve the PI chart.
+With \bold{\code{pi.depth = 0}}, no user-imposed conjunction limit applies and
+automatic stopping remains active. These depth controls concern the CCubes
+search with remainders, which \bold{\code{causalChain()}} uses by default.
+When calling \bold{\code{minimize()}} directly, include remainders with
+\bold{\code{include = "?"}}.
+
+For ordinary truth-table minimization, the minimum bound is the smallest number
+of prime implicants needed to cover the positive configurations. It is searched
+independently of \bold{\code{all.sol}}. The default
+\bold{\code{all.sol = TRUE}} includes larger irredundant models as well;
+\bold{\code{all.sol = FALSE}} returns only minimum-size models.
+
+A complexity level producing no new prime implicants does not by itself prove
+that the smallest bound has been reached: deeper terms can lower that bound.
+CCubes uses the same automatic certification rules as \code{\link{minimize}}.
+For binary tables, minimum-size enumeration can stop after proving the minimum
+bound and that all models of that size are represented. Enumerating all
+irredundant models instead requires a complete PI chart, established by a
+completeness check or by finishing systematic generation. Proving the smallest
+bound alone does not establish completeness of the larger models.
+
+The certification checks have fixed work and memory budgets. Inconclusive
+checks lead to continued systematic generation, not an assumption of optimality.
+These rules do not impose a dataset-specific conjunction depth or guarantee a
+short runtime on every input. Consistency-based searches do not use these
+ordinary truth-table certificates. See \code{\link{minimize}} for resource
+limits and the effects of explicit depth restrictions.
 
 The argument \bold{\code{sol.cons}} introduces another method of solving the PI chart.
 Normally, once the solution models are found among all possible combinations of
@@ -135,15 +162,34 @@ Normally, once the solution models are found among all possible combinations of
 calculated. When \bold{\code{sol.cons}} is lower than 1, then models are searched
 based on their consistencies, which should be at least equal to this threshold.
 
-Exhaustiveness is guaranteed in package \pkg{QCA} precisely because it uses a truth table
-as an input for the minimization procedure. The only exception is the option of finding
-solutions based on their consistency, with the argument \bold{\code{sol.cons}}: for large
-PI charts, time can quickly increase to infinity, to identify all possible irredundant
-(disjunctions that are not subsets of previously found) disjunctive models. In such a
-situation, the number of combinations of all possible numbers of prime implicants is
-potentially too large to be solved in a polynomial time and if not otherwise specified in
-the argument \bold{\code{sol.depth}} the function \bold{\code{causalChain()}} silently
-sets a complexity level of 7 prime implicants per model.
+With \bold{\code{sol.cons > 0}}, models are searched in increasing numbers of
+terms. The first successful size is the smallest bound for the generated prime
+implicants, because all smaller sizes have already been checked or ruled out.
+With \bold{\code{all.sol = TRUE}}, larger irredundant models are also retained.
+An empty size level does not end the search: larger models can still exist.
+
+When \bold{\code{max.comb = 0}}, automatic enumeration prunes a branch if it
+contains an already accepted model, or if upper bounds on attainable consistency
+and coverage rule it out. After completing a model size, enumeration stops only
+if every remaining branch is redundant or cannot meet the thresholds at any
+larger permitted size. Otherwise it continues. In particular, an unspecified
+\bold{\code{sol.depth}} is no longer replaced by an arbitrary seven-term limit.
+
+There is also a finite data-derived upper limit: a disjunction can be represented
+on the observed data by selecting at most one membership-maximizing term per
+case. A model with more terms therefore contains a proper subset with the same
+memberships and fit. The search need not exceed the smaller of the number of
+cases and the number of generated prime implicants. Positive truth-table row
+count alone is not a valid model-size limit for fuzzy data.
+
+A positive \bold{\code{sol.depth}} explicitly restricts this search. Likewise,
+a positive \bold{\code{pi.depth}} restricts the available terms, and
+\bold{\code{max.comb}} can truncate enumeration. Completeness and minimum-bound
+claims are relative to those restrictions. Automatic enumeration stores the
+models found rather than allocating an entry for every possible combination,
+and checks for interrupts between work batches. It imposes no automatic time or
+enumeration budget: difficult searches and large result sets can still require
+substantial resources. The ordinary truth-table/Petrick path is unchanged.
 
 When minimizing a dataset instead of a truth table, unless otherwise specified, the 
 argument \bold{\code{incl.cut}} is automatically set to 0.5 whenever \bold{\code{pi.cons}}

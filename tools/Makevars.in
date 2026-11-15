@@ -8,6 +8,7 @@ OBJECTS = CCubes.o QCA.o consistency.o consistent_solution.o \
 	cover_validation.o generate_matrix.o qca_certify.o qca_threads.o registerDynamicSymbol.o row_dominance.o \
 	native_sat/native_sat.o native_sat/native_sat_verify.o \
 	native_sat/cover_encoding.o native_sat/cover_domain.o native_sat/ipc_weighted_cover.o \
+	native_sat/ipc_weighted_verify.o \
 	sort_cols.o \
 	sort_matrix.o super_rows.o truthTable.o utils.o \
 	lp_solve/commonlib.o lp_solve/isfixedvar.o lp_solve/lp_Hash.o \

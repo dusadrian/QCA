@@ -143,10 +143,27 @@ With the default \bold{\code{first.min = FALSE}}, the check instead asks whether
 a legal term exists that contains none of the chart's prime implicants as a
 subterm. CCubes uses the complete chart to enumerate models. The native checks
 are bounded and apply to ordinary point tables with up to 15 conditions.
-Inconclusive checks and consistency-based searches continue through the
-applicable systematic depth. When \bold{\code{pi.cons > 0}}, the optional
-\bold{\code{pi.depth}} limits the number of conditions in a prime implicant.
-A positive \bold{\code{max.comb}} can limit either type of search.
+Inconclusive checks continue through the applicable systematic depth.
+Consistency-based PI generation also respects that depth. In the CCubes search with remainders,
+a positive \bold{\code{pi.depth}} imposes a hard limit on the number of conditions
+in each prime implicant, regardless of \bold{\code{pi.cons}} or
+\bold{\code{all.sol}}. The default \bold{\code{pi.depth = 0}} leaves conjunction
+depth unrestricted by the user and retains automatic stopping. A positive limit
+can exclude deeper terms and increase the minimum number of terms in a model;
+any minimum is then relative to the permitted terms. The limit is respected even
+if no cover exists within it. A positive \bold{\code{max.comb}} can also limit
+the search.
+
+With \bold{\code{sol.cons > 0}}, model sizes are searched in increasing order,
+so the first successful size establishes the minimum for the generated prime
+implicants. The default \bold{\code{sol.depth = 0}} no longer imposes a seven-term
+cap. With \bold{\code{max.comb = 0}}, consistency-based enumeration stops once
+all branches are redundant with accepted models or provably unable to meet the
+fit thresholds at any larger size. A size with no new models is not sufficient
+to stop. Larger irredundant models remain available with \bold{\code{all.sol = TRUE}}.
+A positive \bold{\code{sol.depth}} is an explicit model-size limit. See
+\code{\link{causalChain}} for the data-derived upper bound and resource behavior.
+This stopping rule concerns consistency-based enumeration, not Petrick's method.
 
 The arguments \bold{\code{pi.cons}} and \bold{\code{sol.cons}} are not specific to the
 traditional QCA minimization, that uses crisp (truth table) values of 0s and 1s. They

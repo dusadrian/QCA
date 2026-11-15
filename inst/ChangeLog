@@ -1,4 +1,16 @@
 Version 3.26
+    o Fixed PI bit-buffer sizing across word boundaries for binary and
+      multivalue conditions, preventing out-of-bounds writes and missing PIs.
+      Empty negative-row buffers also avoid zero-length variable arrays.
+    o Consistency-based model enumeration now stops when all remaining
+      branches are redundant or cannot satisfy the fit thresholds, replacing
+      the implicit seven-term sol.depth limit. Model sizes are searched in
+      increasing order, retaining larger irredundant models with all.sol = TRUE.
+      Fuzzy model size is no longer capped by positive truth-table row count.
+      Enumeration storage grows with results rather than all combinations.
+    o CCubes now respects a positive pi.depth as a hard conjunction-depth
+      limit regardless of pi.cons. The default pi.depth = 0 retains automatic
+      stopping without a user-imposed depth limit.
     o CCubes can certify stopping after one stalled complexity layer.
       With first.min = TRUE, weighted integer search and native SAT
       check whether a smaller model can exist.

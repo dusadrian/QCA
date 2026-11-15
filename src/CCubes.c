@@ -229,7 +229,7 @@ static void qca_pi_generation_range(
         }
 
         int decpos[ctx->posrows];
-        int decneg[ctx->negrows];
+        int decneg[ctx->negrows > 0 ? ctx->negrows : 1];
         int mbase[k];
         mbase[0] = 1;
         for (int c = 1; c < k; ++c) {
@@ -375,7 +375,7 @@ void CCubes(const int p_tt[],          // the truth table
     // split the list data into two matrices:
     // one for the positive and the other for the negative rows
     int posmat[posrows * nconds];
-    int negmat[nconds * negrows];
+    int negmat[nconds * (negrows > 0 ? negrows : 1)];
     int rowpos = 0, rowneg = 0;
     int max_value = 0;
 
@@ -391,7 +391,9 @@ void CCubes(const int p_tt[],          // the truth table
 
     const Rboolean point_cover = picons == 0 && solcons == 0;
     const Rboolean minimum_models = point_cover && !firstmin && !allsol && max_value <= 1;
-    int last_level = picons > 0 ? pidepth : nconds;
+    // The caller expands an unspecified depth (0) to the number of conditions.
+    // An explicit depth limits PI generation for every consistency setting.
+    int last_level = pidepth;
     if (point_cover) {
         // Every literal in a prime term needs a distinct negative row
         // that would enter the term if that literal were removed.
@@ -420,7 +422,8 @@ void CCubes(const int p_tt[],          // the truth table
 
     int pichart_words = (posrows + BITS_PER_WORD - 1) / BITS_PER_WORD; // Words needed per PI chart columns
     unsigned int *p_pichart_pos = (unsigned int *) calloc((size_t) estimPI * (size_t) pichart_words, sizeof(unsigned int));
-    int implicant_words = (nconds + BITS_PER_WORD - 1) / BITS_PER_WORD; // Words needed per PI representation
+    int conditions_per_word = BITS_PER_WORD / value_bit_width;
+    int implicant_words = (nconds + conditions_per_word - 1) / conditions_per_word;
     unsigned int *p_implicants_pos = (unsigned int *) calloc((size_t) estimPI * (size_t) implicant_words, sizeof(unsigned int));
     unsigned int *p_implicants_val = (unsigned int *) calloc((size_t) estimPI * (size_t) implicant_words, sizeof(unsigned int));
 
@@ -532,7 +535,7 @@ void CCubes(const int p_tt[],          // the truth table
 
             // allocate vectors of decimal row numbers for the positive and negative rows
             int decpos[posrows];
-            int decneg[negrows];
+            int decneg[negrows > 0 ? negrows : 1];
 
             // create the vector of multiple bases, useful when calculating the decimal representation
             // of a particular combination of columns, for each row
@@ -635,7 +638,7 @@ void CCubes(const int p_tt[],          // the truth table
                         int word_index = selected_word_index[c];
                         int bit_index = selected_bit_index[c];
 
-                        fixed_bits[word_index] |= (((1 << value_bit_width) - 1) << bit_index);
+                        fixed_bits[word_index] |= (((1U << value_bit_width) - 1U) << bit_index);
                         value_bits[word_index] |= ((unsigned int)tempc[c] << bit_index);
                     }
 
