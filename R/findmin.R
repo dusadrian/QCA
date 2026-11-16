@@ -1,4 +1,4 @@
-`findmin` <- function(chart, type = c("hybrid", "conservative", "native"), ...) {
+`findmin` <- function(chart, type = c("hybrid", "ilp"), ...) {
 
     dots <- list(...)
     verbose <- isTRUE(dots$verbose)
@@ -11,7 +11,15 @@
         type <- "hybrid"
     }
 
-    type <- match.arg(type, c("hybrid", "conservative", "native"))
+    type <- match.arg(type, c("hybrid", "ilp", "conservative", "native"))
+
+    if (identical(type, "native")) {
+        .Deprecated(
+            old = 'findmin(type = "native")',
+            new = 'findmin(type = "hybrid")',
+            msg = 'The "native" type in findmin() is deprecated. Use type = "hybrid" instead.'
+        )
+    }
 
     if (!methods::is(chart, "QCA_pic")) {
 
