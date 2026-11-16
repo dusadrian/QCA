@@ -83,9 +83,11 @@ NsatStatus qca_check_smaller_model(QcaCertification *table, int incumbent)
         .negatives = (size_t)table->negatives, .target = (size_t)incumbent};
     const uint64_t left = table->resources.work_limit - table->resources.work;
     if (left >= 2) {
-        /* Keep most of the per-minimization allowance for SAT and chart checks. */
+        /* Let weighted verification use up to half the remaining work.
+         * Reserve the rest for SAT and chart checks in this minimization. */
+        const uint64_t weighted_cap = UINT64_C(8000000);
         NsatLimits pricing = limits;
-        pricing.work = left / 2 < 2000000 ? left / 2 : 2000000;
+        pricing.work = left / 2 < weighted_cap ? left / 2 : weighted_cap;
         IpcWeightedCoverResult weighted = ipc_weighted_cover_seed_then_reprice(
             &query, 1, pricing, 4, 256);
         if (weighted.status != NSAT_ERROR) {

@@ -55,6 +55,19 @@ static inline bool nsat_mul(size_t a, size_t b, size_t *out)
     return true;
 }
 
+/* Optional scratch space must leave the mandatory allocation path usable. */
+static inline size_t nsat_memory_available(const NsatBudget *b)
+{
+    size_t available = b->limits.memory_bytes
+        ? b->limits.memory_bytes - b->stats.memory_bytes : SIZE_MAX;
+    const NsatResources *shared = b->limits.shared;
+    if (shared && shared->memory_limit) {
+        size_t remaining = shared->memory_limit - shared->memory;
+        if (remaining < available) available = remaining;
+    }
+    return available;
+}
+
 static inline void *nsat_alloc(NsatBudget *b, size_t count, size_t width)
 {
     size_t bytes;
