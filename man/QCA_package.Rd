@@ -44,8 +44,8 @@ to categorical data.
     \tabular{ll}{
     Package: \tab QCA\cr
     Type:    \tab Package\cr
-    Version: \tab 3.25.8\cr
-    Date:    \tab 2026-11-10\cr
+    Version: \tab 3.26\cr
+    Date:    \tab 2026-11-16\cr
     License: \tab GPL (>= 3)\cr
     }
 }
