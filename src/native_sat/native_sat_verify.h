@@ -75,6 +75,14 @@ NsatStatus nsat_verify_begin(NsatVerifier *v);
 NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
                               const int *lits, size_t count,
                               const NsatClauseId *hints, size_t hint_count);
+/* Optional search context. Only checked live units can be pinned, and their
+ * clauses cannot be deleted. Cached proofs omit pinned hints and must not
+ * assume any pinned variable. Ordinary proofs and model checks are separate. */
+NsatStatus nsat_verify_enable_root_units(NsatVerifier *v);
+NsatStatus nsat_verify_pin_root_unit(NsatVerifier *v, NsatClauseId id, int literal);
+NsatStatus nsat_verify_derive_with_roots(NsatVerifier *v, NsatClauseId id,
+                                        const int *lits, size_t count,
+                                        const NsatClauseId *hints, size_t hint_count);
 NsatStatus nsat_verify_delete(NsatVerifier *v, NsatClauseId id);
 NsatStatus nsat_verify_conclude_unsat(NsatVerifier *v, NsatClauseId id);
 /* One signed literal per variable, in arbitrary order. Check the original

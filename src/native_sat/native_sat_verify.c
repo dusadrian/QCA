@@ -2,7 +2,7 @@
 
 typedef struct {
     size_t count;
-    bool target_bound;
+    bool target_bound, root_unit;
     int lits[];
 } Clause;
 
@@ -20,6 +20,7 @@ struct NsatVerifier {
     ClauseEntry *table;
     size_t capacity, occupied, live;
     signed char *values;
+    signed char *root_values;
     int *assigned;
     size_t assigned_count;
     bool started;
@@ -106,6 +107,7 @@ static bool save(NsatVerifier *v, NsatClauseId id, const int *lits, size_t count
     if (!clause) return false;
     clause->count = count;
     clause->target_bound = false;
+    clause->root_unit = false;
     if (!nsat_copy(b, clause->lits, lits, count * sizeof(int)) ||
         !nsat_poll(b) ||
         !insert(b, v->table, v->capacity, (ClauseEntry){id, clause}, &v->occupied)) {
@@ -143,31 +145,31 @@ static bool require_phase(NsatVerifier *v, int phase)
     return nsat_poll(&v->budget);
 }
 
-static void assign(NsatVerifier *v, int var, int value)
+static void assign(NsatVerifier *v, signed char *values, int var, int value)
 {
-    v->values[var] = (signed char)value;
+    values[var] = (signed char)value;
     v->assigned[v->assigned_count++] = var;
 }
 
-static bool assume_false(NsatVerifier *v, const int *lits, size_t count)
+static bool assume_false(NsatVerifier *v, signed char *values, const int *lits, size_t count)
 {
     if (count > (size_t)v->variables || (count && !lits))
         return nsat_stop(&v->budget, NSAT_ERROR, NSAT_STOP_INPUT);
     for (size_t i = 0; i < count; ++i) {
         if (!nsat_work(&v->budget, 1)) return false;
         int var = nsat_var(lits[i], v->variables);
-        if (!var || v->values[var])
+        if (!var || values[var])
             return nsat_stop(&v->budget, NSAT_ERROR, NSAT_STOP_INPUT);
-        assign(v, var, lits[i] < 0 ? 1 : -1);
+        assign(v, values, var, lits[i] < 0 ? 1 : -1);
     }
     return true;
 }
 
-static bool clear_values(NsatVerifier *v)
+static bool clear_values(NsatVerifier *v, signed char *values)
 {
     while (v->assigned_count) {
         if (!nsat_work(&v->budget, 1)) return false;
-        v->values[v->assigned[--v->assigned_count]] = 0;
+        values[v->assigned[--v->assigned_count]] = 0;
     }
     return true;
 }
@@ -178,7 +180,7 @@ NsatStatus nsat_verify_add_original(NsatVerifier *v, const int *lits, size_t cou
     if (!require_phase(v, LOADING)) return v->budget.status;
     if (v->last_id == UINT64_MAX)
         nsat_stop(&v->budget, NSAT_ERROR, NSAT_STOP_INPUT);
-    else if (assume_false(v, lits, count) && clear_values(v) &&
+    else if (assume_false(v, v->values, lits, count) && clear_values(v, v->values) &&
              save(v, v->last_id + 1, lits, count))
         v->originals = v->last_id;
     return v->budget.status;
@@ -202,9 +204,41 @@ NsatStatus nsat_verify_begin(NsatVerifier *v)
     return v->budget.status;
 }
 
-NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
-                              const int *lits, size_t count,
-                              const NsatClauseId *hints, size_t hint_count)
+NsatStatus nsat_verify_enable_root_units(NsatVerifier *v)
+{
+    if (!v) return NSAT_ERROR;
+    if (!require_phase(v, SEALED)) return v->budget.status;
+    if (!v->started || v->root_values) {
+        nsat_stop(&v->budget, NSAT_ERROR, NSAT_STOP_STATE);
+        return v->budget.status;
+    }
+    size_t count = (size_t)v->variables + 1;
+    v->root_values = nsat_alloc(&v->budget, count, sizeof(*v->root_values));
+    if (v->root_values) nsat_copy(&v->budget, v->root_values, NULL, count);
+    return v->budget.status;
+}
+
+NsatStatus nsat_verify_pin_root_unit(NsatVerifier *v, NsatClauseId id, int literal)
+{
+    if (!v) return NSAT_ERROR;
+    NsatBudget *b = &v->budget;
+    if (!require_phase(v, SEALED)) return b->status;
+    int var = nsat_var(literal, v->variables);
+    ClauseEntry *entry = lookup(v, id, b);
+    if (!v->root_values || !var || !entry || entry->clause->count != 1 ||
+        entry->clause->lits[0] != literal || v->root_values[var]) {
+        nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
+        return b->status;
+    }
+    entry->clause->root_unit = true;
+    /* Do not add this assignment to the temporary proof trail. */
+    v->root_values[var] = literal > 0 ? 1 : -1;
+    return NSAT_OK;
+}
+
+static NsatStatus derive(NsatVerifier *v, NsatClauseId id,
+                         const int *lits, size_t count,
+                         const NsatClauseId *hints, size_t hint_count, bool use_roots)
 {
     if (!v) return NSAT_ERROR;
     NsatBudget *b = &v->budget;
@@ -213,7 +247,12 @@ NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
         nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
         return b->status;
     }
-    if (!assume_false(v, lits, count)) return b->status;
+    signed char *values = use_roots ? v->root_values : v->values;
+    if (!values) {
+        nsat_stop(b, NSAT_ERROR, NSAT_STOP_STATE);
+        return b->status;
+    }
+    if (!assume_false(v, values, lits, count)) return b->status;
 
     for (size_t h = 0; h < hint_count; ++h) {
         ClauseEntry *entry = lookup(v, hints[h], b);
@@ -223,7 +262,7 @@ NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
         for (size_t i = 0; i < clause->count; ++i) {
             if (!nsat_work(b, 1)) return b->status;
             int lit = clause->lits[i];
-            int value = lit > 0 ? v->values[lit] : -v->values[-lit];
+            int value = lit > 0 ? values[lit] : -values[-lit];
             if (value > 0 || (!value && unit)) goto invalid;
             if (!value) unit = lit;
         }
@@ -231,14 +270,28 @@ NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
             if (unit) goto invalid;
         } else {
             if (!unit) goto invalid;
-            assign(v, unit > 0 ? unit : -unit, unit > 0 ? 1 : -1);
+            assign(v, values, unit > 0 ? unit : -unit, unit > 0 ? 1 : -1);
         }
     }
-    if (clear_values(v) && save(v, id, lits, count)) ++b->stats.lemmas_checked;
+    if (clear_values(v, values) && save(v, id, lits, count)) ++b->stats.lemmas_checked;
     return b->status;
 invalid:
     nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
     return b->status;
+}
+
+NsatStatus nsat_verify_derive(NsatVerifier *v, NsatClauseId id,
+                              const int *lits, size_t count,
+                              const NsatClauseId *hints, size_t hint_count)
+{
+    return derive(v, id, lits, count, hints, hint_count, false);
+}
+
+NsatStatus nsat_verify_derive_with_roots(NsatVerifier *v, NsatClauseId id,
+                                        const int *lits, size_t count,
+                                        const NsatClauseId *hints, size_t hint_count)
+{
+    return derive(v, id, lits, count, hints, hint_count, true);
 }
 
 NsatStatus nsat_verify_delete(NsatVerifier *v, NsatClauseId id)
@@ -247,7 +300,7 @@ NsatStatus nsat_verify_delete(NsatVerifier *v, NsatClauseId id)
     NsatBudget *b = &v->budget;
     if (!require_phase(v, SEALED)) return b->status;
     ClauseEntry *entry = id > v->originals ? lookup(v, id, b) : NULL;
-    if (!entry || entry->clause->target_bound) {
+    if (!entry || entry->clause->target_bound || entry->clause->root_unit) {
         nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
         return b->status;
     }
@@ -284,7 +337,7 @@ NsatStatus nsat_verify_conclude_sat(NsatVerifier *v, const int *model, size_t co
         int lit = model[i];
         int var = nsat_var(lit, v->variables);
         if (!var || v->values[var]) goto invalid;
-        assign(v, var, lit > 0 ? 1 : -1);
+        assign(v, v->values, var, lit > 0 ? 1 : -1);
     }
     for (size_t i = 0; i < v->capacity; ++i) {
         if (!nsat_work(b, 1)) return b->status;
@@ -303,7 +356,7 @@ NsatStatus nsat_verify_conclude_sat(NsatVerifier *v, const int *model, size_t co
         if (!satisfied) goto invalid;
     }
     if (v->multivalue_care && !check_multivalue_model(v)) return b->status;
-    if (!clear_values(v) || !nsat_poll(b)) return b->status;
+    if (!clear_values(v, v->values) || !nsat_poll(b)) return b->status;
     v->phase = SAT_CONCLUDED;
     return NSAT_SAT;
 invalid:
@@ -363,6 +416,7 @@ void nsat_verify_destroy(NsatVerifier *v)
     for (size_t i = 0; i < v->capacity; ++i) free(v->table[i].clause);
     free(v->table);
     free(v->values);
+    free(v->root_values);
     free(v->assigned);
     free(v->multivalue_care);
     nsat_release_budget(&v->budget);

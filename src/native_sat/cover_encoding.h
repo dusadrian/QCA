@@ -13,21 +13,32 @@ typedef struct {
     size_t order_count;
 } NsatCoverInput;
 
-typedef enum {
-    NSAT_COVER_BASELINE, NSAT_COVER_GROUPS, NSAT_COVER_ORDERING, NSAT_COVER_COMBINED
-} NsatCoverStrengthening;
-
 typedef struct {
-    size_t pairs, triples, staircase, anchors;
+    size_t pairs, staircase, anchors;
     uint64_t prep_work;
     bool discovery_capped;
 } NsatCoverDomainStats;
 
-/* Build the independently checked query and solve it. The caller destroys
- * both handles, including partially initialized handles on failure. */
-NsatStatus nsat_cover_solve(const NsatCoverInput *input, NsatCoverStrengthening mode,
-                            NsatLimits limits, NsatSolver **solver, NsatVerifier **checker,
-                            NsatStopReason *stop, NsatCoverDomainStats *stats);
+typedef struct {
+    size_t clauses;
+    uint64_t comparisons, work;
+    bool capped;
+    NsatStopReason stop;
+} NsatCoverDistanceStats;
+
+/* Add RUP-checked distance-one shortcuts to the distinguished-slot encoding.
+ * Points use row-major 1/2 values. Call after sealing the originals. */
+NsatStatus nsat_cover_distance_one(const NsatCoverInput *input,
+                                    NsatSolver *solver, NsatVerifier *checker,
+                                    NsatLimits limits, NsatCoverDistanceStats *stats);
+
+/* Build and solve the checked query with anchor exclusions, active-slot pairs,
+ * fewest eligible anchor slots first, positive priority phases, shortest
+ * unsatisfied row branching, and persistent checked root units. The caller
+ * destroys both handles, including partially initialized handles on failure. */
+NsatStatus nsat_cover_solve_default(const NsatCoverInput *input, NsatLimits limits,
+                                    NsatSolver **solver, NsatVerifier **checker,
+                                    NsatStopReason *stop, NsatCoverDomainStats *stats);
 
 /* Load solver originals from the care rows. Compare each emitted clause
  * against the independent checker reconstruction in emission order. */

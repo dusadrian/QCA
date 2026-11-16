@@ -13,12 +13,21 @@ typedef struct {
     /* Optional consecutive variable IDs to branch on before other IDs.
      * They start with a positive decision phase. */
     int priority_first, priority_count;
+    /* Keep priority decision phases positive after negative propagation.
+     * Other variables retain ordinary phase saving. */
+    bool sticky_priority;
+    /* Optional equal-width positive row groups within the priority range.
+     * Prefer the shortest currently unsatisfied row and decide positively.
+     * Zero retains ordinary variable ordering; this is a branching hint only. */
+    int row_width;
+    bool cache_root_units; /* Retain checked root units between proof checks. */
 } NsatSearchOptions;
 
 typedef struct {
     uint64_t decisions, conflicts, binary_propagations, learned;
     uint64_t minimised_literals, restarts, nonchronological_backjumps;
     uint64_t reductions, deleted, compactions, words_reclaimed, moved;
+    uint64_t row_decisions, row_literal_checks;
 } NsatSearchStats;
 
 /* Initial clause loading and root propagation. A root fixed point carries

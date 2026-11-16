@@ -1,4 +1,14 @@
 Version 3.26
+    o The SAT verifier retains checked root units between proof steps during
+      smaller-cover and minimum-model certification, reducing repeated work.
+    o Smaller-cover SAT certification now branches on the uncovered truth-table
+      row with the fewest remaining cube slots, updating this choice during
+      search. The policy is automatic and retains independently checked results.
+    o SAT certification now automatically combines anchor exclusions,
+      active-slot pair pruning, constrained-row ordering and positive
+      assignment phases. Minimum-model completeness checks also use checked
+      distance-one shortcuts alongside slot symmetry. No tuning options
+      are required; proof verification and shared resource limits remain.
     o Fixed PI bit-buffer sizing across word boundaries for binary and
       multivalue conditions, preventing out-of-bounds writes and missing PIs.
       Empty negative-row buffers also avoid zero-length variable arrays.

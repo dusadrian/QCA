@@ -270,7 +270,8 @@ NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *q, NsatLimits limits
         int assignments = (int)(q->positives * q->target);
         NsatSearchOptions options = {
             .priority_first = nsat_verify_variables(*checker) - 2 * assignments + 1,
-            .priority_count = assignments
+            .priority_count = assignments, .row_width = (int)q->target,
+            .sticky_priority = true, .cache_root_units = true
         };
         status = nsat_solve(*solver, *checker, options);
         *stop = nsat_stats(*solver).stop;

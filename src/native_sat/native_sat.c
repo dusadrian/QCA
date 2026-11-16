@@ -180,8 +180,17 @@ static NsatStatus checker_status(NsatSolver *s, NsatVerifier *v, NsatStatus stat
     return status;
 }
 
-/* The reason contains the forced literal or is entirely false. Cite the
- * already checked root units, then the intact reason under its own ID. */
+static NsatStatus check_search_proof(NsatSolver *s, NsatVerifier *v, NsatClauseId id,
+                                     const int *lits, size_t count, size_t hints)
+{
+    NsatStatus status = s->options.cache_root_units
+        ? nsat_verify_derive_with_roots(v, id, lits, count, s->hints, hints)
+        : nsat_verify_derive(v, id, lits, count, s->hints, hints);
+    return checker_status(s, v, status);
+}
+
+/* The reason contains the forced literal or is entirely false. Replay it
+ * against checked roots, citing the unit IDs when no cache is in use. */
 static NsatStatus root_event(NsatSolver *s, NsatVerifier *v, size_t index, int forced)
 {
     NsatBudget *b = &s->budget;
@@ -195,7 +204,7 @@ static NsatStatus root_event(NsatSolver *s, NsatVerifier *v, size_t index, int f
     if (!reuse) {
         size_t used = 0;
         int implied = forced && !lit_value(s, forced) ? forced : 0;
-        for (size_t i = 0; i < reason->count; ++i) {
+        for (size_t i = 0; !s->options.cache_root_units && i < reason->count; ++i) {
             if (!nsat_work(b, 1)) return b->status;
             int lit = s->words[reason->offset + i];
             if (lit == implied) continue;
@@ -212,18 +221,21 @@ static NsatStatus root_event(NsatSolver *s, NsatVerifier *v, size_t index, int f
             return b->status;
         }
         id = ++s->last_id;
-        NsatStatus status = nsat_verify_derive(v, id, &implied, implied != 0,
-                                               s->hints, used);
-        if (status != NSAT_OK) return checker_status(s, v, status);
+        NsatStatus status = check_search_proof(s, v, id, &implied, implied != 0, used);
+        if (status != NSAT_OK) return status;
         if (!implied)
             return checker_status(s, v, nsat_verify_conclude_unsat(v, id));
-    } else {
+    } else if (!s->options.cache_root_units) {
         const int *lits;
         size_t count;
         if (!nsat_verify_clause(v, id, &lits, &count) || count != 1 || lits[0] != forced) {
             nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
             return b->status;
         }
+    }
+    if (s->options.cache_root_units) {
+        NsatStatus status = nsat_verify_pin_root_unit(v, id, forced);
+        if (status != NSAT_OK) return checker_status(s, v, status);
     }
     int var = forced > 0 ? forced : -forced;
     set_value(s, forced, 1);
@@ -290,13 +302,20 @@ static void watch_clause(NsatSolver *s, size_t index)
     link_watch(s, index, 1, s->words[clause->offset + 1]);
 }
 
+static int tier(const NsatSolver *s, int variable)
+{
+    return s->priority_count && variable >= s->priority_first &&
+        variable - s->priority_first < s->priority_count;
+}
+
 static NsatStatus enqueue(NsatSolver *s, NsatVerifier *v, int lit, size_t ref)
 {
     if (!s->level) return root_event(s, v, ref - 1, lit);
     Variable *var = &s->vars[variable(lit)];
     var->level = s->level;
     var->reason = ref;
-    var->phase = lit > 0 ? 1 : -1;
+    if (!s->options.sticky_priority || !tier(s, variable(lit)))
+        var->phase = lit > 0 ? 1 : -1;
     set_value(s, lit, 1);
     s->trail[s->trail_size++] = lit;
     return NSAT_OK;
@@ -364,12 +383,6 @@ static NsatStatus propagate(NsatSolver *s, NsatVerifier *v, size_t *conflict)
     return NSAT_OK;
 }
 
-static int tier(const NsatSolver *s, int variable)
-{
-    return s->priority_count && variable >= s->priority_first &&
-        variable - s->priority_first < s->priority_count;
-}
-
 static NsatStatus prepare_search(NsatSolver *s, NsatSearchOptions options)
 {
     NsatBudget *b = &s->budget;
@@ -388,7 +401,9 @@ static NsatStatus prepare_search(NsatSolver *s, NsatSearchOptions options)
     if (options.priority_count < 0 ||
         (options.priority_count && (options.priority_first < 1 ||
          options.priority_first > s->variables ||
-         options.priority_count - 1 > s->variables - options.priority_first)))
+         options.priority_count - 1 > s->variables - options.priority_first)) ||
+        options.row_width < 0 || (options.row_width &&
+         (!options.priority_count || options.priority_count % options.row_width)))
         return solver_error(s, NSAT_STOP_INPUT);
     s->priority_first = options.priority_first;
     s->priority_count = options.priority_count;
@@ -414,6 +429,10 @@ static NsatStatus start_root(NsatSolver *s, NsatVerifier *v, bool search)
     if (!nsat_poll(b)) return b->status;
     NsatStatus ready = bind_checker(s, v);
     if (ready != NSAT_OK) return ready;
+    if (s->options.cache_root_units) {
+        NsatStatus status = nsat_verify_enable_root_units(v);
+        if (status != NSAT_OK) return checker_status(s, v, status);
+    }
     s->started = true;
     s->pinned_count = s->count;
     size_t slots = (size_t)s->variables + 1;
@@ -613,6 +632,7 @@ static bool proof_chain(NsatSolver *s, size_t conflict, size_t *length)
         }
         int dep = variable(s->words[reason->offset + frame->next_literal++]);
         if (dep == var || (s->vars[dep].marks & (SOURCE | NEEDED))) continue;
+        if (s->options.cache_root_units && !s->vars[dep].level) continue;
         mark(s, dep, NEEDED);
         s->frames[depth++] = (ReasonFrame){.variable = dep};
     }
@@ -673,9 +693,8 @@ static NsatStatus learn(NsatSolver *s, NsatVerifier *v, size_t conflict,
             ++glue;
         }
     }
-    NsatStatus status = nsat_verify_derive(v, id, s->learned, s->learned_count,
-                                          s->hints, hints);
-    if (status != NSAT_OK) return checker_status(s, v, status);
+    NsatStatus status = check_search_proof(s, v, id, s->learned, s->learned_count, hints);
+    if (status != NSAT_OK) return status;
     status = store_clause(s, id, s->learned, s->learned_count);
     if (status != NSAT_OK) return status;
     s->clauses[s->count - 1].glue = glue;
@@ -767,6 +786,40 @@ static void advance_restart(RestartSchedule *r, uint64_t base, uint64_t conflict
         ? UINT64_MAX : conflicts + base * r->scale;
 }
 
+/* Recompute from the current assignment, so propagation, backjumps, restarts
+ * and tighter-cover resumption need no separate row-state maintenance.
+ * VMTF stamps break ties both within and between equally short rows. */
+static int shortest_row_variable(NsatSolver *s)
+{
+    const int width = s->options.row_width;
+    int best = 0, shortest = width;
+    for (int offset = 0; offset < s->priority_count; offset += width) {
+        int candidate = 0, available = 0;
+        bool satisfied = false;
+        for (int t = 0; t < width; ++t) {
+            if (!nsat_work(&s->budget, 1)) return 0;
+            ++s->search.row_literal_checks;
+            int var = s->priority_first + offset + t;
+            int value = lit_value(s, var);
+            if (value > 0) {
+                satisfied = true;
+                break;
+            }
+            if (value < 0) continue;
+            /* Further literals cannot make this row shorter. */
+            if (++available > shortest) break;
+            if (!candidate || s->vars[var].stamp > s->vars[candidate].stamp)
+                candidate = var;
+        }
+        if (!satisfied && candidate && available <= shortest &&
+            (!best || available < shortest || s->vars[candidate].stamp > s->vars[best].stamp)) {
+            best = candidate;
+            shortest = available;
+        }
+    }
+    return best;
+}
+
 static NsatStatus search(NsatSolver *s, NsatVerifier *v)
 {
     NsatBudget *b = &s->budget;
@@ -812,7 +865,9 @@ static NsatStatus search(NsatSolver *s, NsatVerifier *v)
             if (status != NSAT_OK) return status;
             last_reduction = s->search.conflicts;
         }
-        int next = 0;
+        int next = options.row_width ? shortest_row_variable(s) : 0;
+        if (b->status != NSAT_OK) return b->status;
+        bool row_choice = next != 0;
         for (int group = 1; group >= 0 && !next; --group) {
             int *scan = &s->queue_scan[group];
             while (*scan && lit_value(s, *scan)) {
@@ -825,17 +880,19 @@ static NsatStatus search(NsatSolver *s, NsatVerifier *v)
         if (!nsat_work(b, 1)) return b->status;
         s->level_start[++s->level] = s->trail_size;
         ++s->search.decisions;
-        enqueue(s, v, s->vars[next].phase * next, 0);
+        if (row_choice) ++s->search.row_decisions;
+        enqueue(s, v, row_choice ? next : s->vars[next].phase * next, 0);
     }
 }
 
 NsatStatus nsat_solve(NsatSolver *s, NsatVerifier *v, NsatSearchOptions options)
 {
+    if (!s) return NSAT_ERROR;
+    s->options = options;
     NsatStatus status = start_root(s, v, true);
     if (status != NSAT_ROOT_FIXED_POINT) return status;
     status = prepare_search(s, options);
     if (status != NSAT_OK) return status;
-    s->options = options;
     return search(s, v);
 }
 

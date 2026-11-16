@@ -131,7 +131,7 @@ NsatStatus qca_check_smaller_model(QcaCertification *table, int incumbent)
     NsatVerifier *checker = NULL;
     NsatStopReason stop;
     NsatCoverDomainStats stats;
-    status = nsat_cover_solve(&query, NSAT_COVER_ORDERING, limits, &solver, &checker, &stop, &stats);
+    status = nsat_cover_solve_default(&query, limits, &solver, &checker, &stop, &stats);
     nsat_destroy(solver);
     nsat_verify_destroy(checker);
 done:
@@ -257,8 +257,88 @@ static bool add_minimum_cover(const QcaCertification *table, int minimum, int li
     return add_clause(checker, solver, lits, positives);
 }
 
-bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
-                              int columns, int minimum)
+/* Order first assigned ON rows among slots 1..minimum-1. Slot zero keeps
+ * its separate missing-PI role and need not precede any other slot.
+ * A cover can assign each row to one covering term, retain an assignment
+ * to slot zero, and permute the remaining used slots by their first row.
+ * Unused slots follow them. Thus these original encoding constraints
+ * preserve satisfiability; they are not RUP consequences of the old CNF. */
+static bool order_minimum_slots(const QcaCertification *table, int minimum,
+                                int literal_vars, NsatVerifier *checker,
+                                NsatSolver *solver)
+{
+    if (minimum < 3) return true;
+    const int prefixes = minimum - 2;
+    const int first_prefix = literal_vars + table->positives * minimum + 1;
+    for (int r = 0; r < table->positives; ++r) {
+        for (int t = 1; t < minimum; ++t) {
+            int assigned = literal_vars + r * minimum + t + 1;
+            if (t < minimum - 1) {
+                int used = first_prefix + r * prefixes + t - 1;
+                if (!add_clause(checker, solver, (int[]){-assigned, used}, 2))
+                    return false;
+                if (!r) {
+                    if (!add_clause(checker, solver, (int[]){-used, assigned}, 2))
+                        return false;
+                } else {
+                    int previous = used - prefixes;
+                    if (!add_clause(checker, solver, (int[]){-previous, used}, 2) ||
+                        !add_clause(checker, solver, (int[]){-used, previous, assigned}, 3))
+                        return false;
+                }
+            }
+            if (t > 1) {
+                if (!r) {
+                    if (!add_clause(checker, solver, (int[]){-assigned}, 1)) return false;
+                } else {
+                    int earlier = first_prefix + (r - 1) * prefixes + t - 2;
+                    if (!add_clause(checker, solver, (int[]){-assigned, earlier}, 2))
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static NsatStatus minimum_distance_one(const QcaCertification *table, int minimum,
+                                       NsatSolver *solver, NsatVerifier *checker,
+                                       NsatLimits limits)
+{
+    size_t cells, width = (size_t)table->conditions;
+    if (!nsat_mul(width, (size_t)table->positives + (size_t)table->negatives, &cells))
+        return NSAT_ERROR;
+    NsatBudget budget = {.limits = limits};
+    int *points = nsat_alloc(&budget, cells, sizeof(*points));
+    if (!points) return budget.status;
+    size_t on_cells = width * (size_t)table->positives;
+    NsatStatus status = NSAT_OK;
+    for (int side = 0; side < 2; ++side) {
+        const int *source = side ? table->off : table->on;
+        int rows = side ? table->negatives : table->positives;
+        int *destination = points + (side ? on_cells : 0);
+        for (int r = 0; r < rows; ++r) {
+            for (size_t c = 0; c < width; ++c) {
+                if (!nsat_work(&budget, 1)) {
+                    status = budget.status;
+                    goto done;
+                }
+                destination[(size_t)r * width + c] = source[c * rows + r] + 1;
+            }
+        }
+    }
+    NsatCoverInput query = {.on = points, .off = points + on_cells, .inputs = width,
+        .positives = (size_t)table->positives, .negatives = (size_t)table->negatives,
+        .target = (size_t)minimum};
+    NsatCoverDistanceStats stats;
+    status = nsat_cover_distance_one(&query, solver, checker, limits, &stats);
+done:
+    nsat_free(&budget, points, cells * sizeof(*points));
+    return status;
+}
+
+static bool check_minimum_models(QcaCertification *table, const int *implicants,
+                                 int columns, int minimum, bool ordering, bool distance)
 {
     if (!available(table) || columns <= 0 || minimum < 1 || minimum > table->positives)
         return false;
@@ -268,7 +348,12 @@ bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
         minimum > INT_MAX / (2 * width + positives))
         return false;
     const int literal_vars = 2 * width * minimum;
-    const int variables = literal_vars + positives * minimum;
+    int variables = literal_vars + positives * minimum;
+    if (ordering && minimum > 2) {
+        size_t extra = (size_t)positives * (size_t)(minimum - 2);
+        if (extra > (size_t)(INT_MAX - variables)) return false;
+        variables += (int)extra;
+    }
     const size_t capacity = width > positives ? (size_t)width : (size_t)positives;
     NsatLimits limits = {.shared = &table->resources};
     NsatBudget budget = {.limits = limits};
@@ -295,11 +380,20 @@ bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
         }
         if (!add_clause(checker, solver, lits, count)) goto done;
     }
+    if (ordering && !order_minimum_slots(table, minimum, literal_vars, checker, solver))
+        goto done;
     complete = nsat_verify_seal_originals(checker) == NSAT_OK &&
-        nsat_solve(solver, checker, (NsatSearchOptions){0}) == NSAT_UNSAT;
+        (!distance || minimum_distance_one(table, minimum, solver, checker, limits) == NSAT_OK) &&
+        nsat_solve(solver, checker, (NsatSearchOptions){.cache_root_units = true}) == NSAT_UNSAT;
 done:
     nsat_destroy(solver);
     nsat_verify_destroy(checker);
     nsat_free(&budget, lits, capacity * sizeof(*lits));
     return complete;
+}
+
+bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
+                              int columns, int minimum)
+{
+    return check_minimum_models(table, implicants, columns, minimum, true, true);
 }
