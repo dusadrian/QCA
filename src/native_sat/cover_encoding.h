@@ -36,4 +36,19 @@ NsatStatus nsat_cover_load_solver(NsatSolver **out, const NsatCoverInput *input,
                                   NsatStopReason *stop);
 int nsat_cover_selector(int inputs, int term, int input, int value);
 
+/* Equality literals for categorical conditions. Points are row-major, with
+ * values 1..levels[c]; no selected value means a wildcard. This separate
+ * layout does not use the binary pricing or pair-discovery policies. */
+typedef struct {
+    const int *on, *off, *levels;
+    size_t inputs, positives, negatives, target;
+} NsatMultivalueInput;
+
+NsatStatus nsat_multivalue_load_solver(NsatSolver **out, const NsatMultivalueInput *input,
+                                      const NsatVerifier *checker, NsatLimits limits,
+                                      NsatStopReason *stop);
+NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *input, NsatLimits limits,
+                                NsatSolver **solver, NsatVerifier **checker,
+                                NsatStopReason *stop);
+
 #endif

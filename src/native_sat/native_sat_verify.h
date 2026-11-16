@@ -60,6 +60,12 @@ NsatStatus nsat_verify_init_cover(NsatVerifier **out, const int *on, const int *
                                   size_t target, const size_t *row_order,
                                   size_t order_count, NsatLimits limits);
 NsatStatus nsat_verify_add_original(NsatVerifier *v, const int *lits, size_t count);
+/* Independent categorical reconstruction; owns copies of the care table
+ * and domains for an additional geometric check of a returned SAT model.
+ * Row-major values are 1..levels[c]. Tightening is not supported here. */
+NsatStatus nsat_verify_init_multivalue(NsatVerifier **out, const int *on, const int *off,
+                                      const int *levels, size_t n, size_t positives,
+                                      size_t negatives, size_t target, NsatLimits limits);
 NsatStatus nsat_verify_seal_originals(NsatVerifier *v);
 /* Bind a freshly sealed checker at the start of a solve session. */
 NsatStatus nsat_verify_begin(NsatVerifier *v);

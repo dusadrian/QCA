@@ -60,11 +60,15 @@ NsatStatus qca_check_smaller_model(QcaCertification *table, int incumbent)
 
     size_t width = (size_t)table->conditions, on_cells = (size_t)table->positives * width;
     size_t cells;
-    if (!nsat_mul(width, (size_t)table->positives + (size_t)table->negatives, &cells))
+    if (!nsat_mul(width, (size_t)table->positives + (size_t)table->negatives + 1, &cells))
         return NSAT_UNKNOWN;
     int *points = nsat_alloc(&budget, cells, sizeof(*points));
     if (!points) return budget.status;
     NsatStatus status = NSAT_UNKNOWN;
+    int *levels = points + cells - width;
+    bool multivalue = false;
+    if (!nsat_work(&budget, width)) goto done;
+    for (size_t c = 0; c < width; ++c) levels[c] = 1;
     for (int side = 0; side < 2; ++side) {
         const int *source = side ? table->off : table->on;
         int rows = side ? table->negatives : table->positives;
@@ -73,10 +77,27 @@ NsatStatus qca_check_smaller_model(QcaCertification *table, int incumbent)
             for (size_t c = 0; c < width; ++c) {
                 if (!nsat_work(&budget, 1)) goto done;
                 int value = source[c * rows + r];
-                if (value != 0 && value != 1) goto done;
+                if (value < 0 || value == INT_MAX) goto done;
+                if (value > 1) multivalue = true;
+                if (levels[c] < value + 1) levels[c] = value + 1;
                 destination[(size_t)r * width + c] = value + 1;
             }
         }
+    }
+    if (multivalue) {
+        /* Categories absent from the care rows need not be represented:
+         * fixing such a value cannot cover an ON row. Values are equality
+         * literals, never unions of categories within a condition. */
+        NsatMultivalueInput query = {.on = points, .off = points + on_cells,
+            .levels = levels, .inputs = width, .positives = (size_t)table->positives,
+            .negatives = (size_t)table->negatives, .target = (size_t)(incumbent - 1)};
+        NsatSolver *solver = NULL;
+        NsatVerifier *checker = NULL;
+        NsatStopReason stop;
+        status = nsat_multivalue_solve(&query, limits, &solver, &checker, &stop);
+        nsat_destroy(solver);
+        nsat_verify_destroy(checker);
+        goto done;
     }
     NsatCoverInput query = {.on = points, .off = points + on_cells,
         .inputs = width, .positives = (size_t)table->positives,

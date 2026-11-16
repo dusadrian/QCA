@@ -24,7 +24,11 @@ struct NsatVerifier {
     size_t assigned_count;
     bool started;
     size_t cover_slots, cover_target;
+    int *multivalue_care;
+    size_t mv_inputs, mv_positives, mv_negatives, mv_slots, mv_values;
 };
+
+static bool check_multivalue_model(NsatVerifier *v);
 
 static size_t hash(NsatClauseId id)
 {
@@ -298,6 +302,7 @@ NsatStatus nsat_verify_conclude_sat(NsatVerifier *v, const int *model, size_t co
         }
         if (!satisfied) goto invalid;
     }
+    if (v->multivalue_care && !check_multivalue_model(v)) return b->status;
     if (!clear_values(v) || !nsat_poll(b)) return b->status;
     v->phase = SAT_CONCLUDED;
     return NSAT_SAT;
@@ -359,12 +364,13 @@ void nsat_verify_destroy(NsatVerifier *v)
     free(v->table);
     free(v->values);
     free(v->assigned);
+    free(v->multivalue_care);
     nsat_release_budget(&v->budget);
     free(v);
 }
 
 static bool valid_care(NsatVerifier *v, const int *on, const int *off,
-                       size_t n, size_t on_count, size_t off_count)
+                       size_t n, size_t on_count, size_t off_count, const int *levels)
 {
     NsatBudget *b = &v->budget;
     size_t capacity = 16;
@@ -383,7 +389,7 @@ static bool valid_care(NsatVerifier *v, const int *on, const int *off,
             uint64_t key = UINT64_C(14695981039346656037);
             for (size_t i = 0; i < n; ++i) {
                 if (!nsat_work(b, 1)) goto done;
-                if (point[i] != 1 && point[i] != 2) goto invalid;
+                if (point[i] < 1 || point[i] > (levels ? levels[i] : 2)) goto invalid;
                 key = (key ^ (unsigned)point[i]) * UINT64_C(1099511628211);
             }
             size_t pos = hash(key) & (capacity - 1);
@@ -504,7 +510,7 @@ NsatStatus nsat_verify_init_cover(NsatVerifier **out, const int *on, const int *
         }
         if (!nsat_copy(b, v->values, NULL, on_count)) return b->status;
     }
-    if (!valid_care(v, on, off, n, on_count, off_count)) return b->status;
+    if (!valid_care(v, on, off, n, on_count, off_count, NULL)) return b->status;
     size_t width = n > target ? n : target;
     int *scratch = nsat_alloc(b, width, sizeof(*scratch));
     if (!scratch) return b->status;
@@ -512,4 +518,166 @@ NsatStatus nsat_verify_init_cover(NsatVerifier **out, const int *on, const int *
     nsat_free(b, scratch, width * sizeof(*scratch));
     v->cover_slots = v->cover_target = target;
     return nsat_verify_seal_originals(v);
+}
+
+/* Reconstruct categorical originals here, without encoder routines or
+ * solver clauses. Selector numbering is slot-major, then condition/value;
+ * assignment and first-use prefix blocks follow all selectors. */
+static void multivalue_originals(NsatVerifier *v, int *clause)
+{
+    const size_t n = v->mv_inputs, p = v->mv_positives, k = v->mv_slots;
+    const int *levels = v->multivalue_care;
+    const int *on = levels + n, *off = on + n * p;
+    int selectors = (int)(v->mv_values * k);
+    for (size_t r = 0; r < p; ++r) {
+        for (size_t t = 0; t < k; ++t) {
+            if (!nsat_work(&v->budget, 1)) return;
+            clause[t] = selectors + (int)(r * k + t) + 1;
+        }
+        if (nsat_verify_add_original(v, clause, k) != NSAT_OK) return;
+        for (size_t t = 0; t < k; ++t) {
+            int a = selectors + (int)(r * k + t) + 1;
+            int used = a + (int)(p * k);
+            int selector = (int)(t * v->mv_values) + 1;
+            for (size_t c = 0; c < n; ++c) {
+                for (int value = 1; value <= levels[c]; ++value, ++selector) {
+                    if (!nsat_work(&v->budget, 1)) return;
+                    if (value == on[r * n + c]) continue;
+                    if (nsat_verify_add_original(v, (int[]){-a, -selector}, 2) != NSAT_OK)
+                        return;
+                }
+            }
+            if (nsat_verify_add_original(v, (int[]){-a, used}, 2) != NSAT_OK) return;
+            if (r == 0) {
+                if (nsat_verify_add_original(v, (int[]){-used, a}, 2) != NSAT_OK) return;
+                if (t > 0 && nsat_verify_add_original(v, (int[]){-a}, 1) != NSAT_OK) return;
+            } else {
+                int before = used - (int)k;
+                if (nsat_verify_add_original(v, (int[]){-before, used}, 2) != NSAT_OK ||
+                    nsat_verify_add_original(v, (int[]){-used, before, a}, 3) != NSAT_OK)
+                    return;
+                if (t > 0 && nsat_verify_add_original(v, (int[]){-a, before - 1}, 2) != NSAT_OK)
+                    return;
+            }
+        }
+    }
+    for (size_t t = 0; t < k; ++t) {
+        int offset = (int)(t * v->mv_values);
+        for (size_t c = 0; c < n; ++c) {
+            for (int a = 1; a <= levels[c]; ++a) {
+                if (!nsat_work(&v->budget, 1)) return;
+                for (int b = a + 1; b <= levels[c]; ++b) {
+                    int pair[2] = {-offset - a, -offset - b};
+                    if (nsat_verify_add_original(v, pair, 2) != NSAT_OK) return;
+                }
+            }
+            offset += levels[c];
+        }
+        for (size_t r = 0; r < v->mv_negatives; ++r) {
+            size_t length = 0;
+            int selector = (int)(t * v->mv_values) + 1;
+            for (size_t c = 0; c < n; ++c) {
+                for (int value = 1; value <= levels[c]; ++value, ++selector) {
+                    if (!nsat_work(&v->budget, 1)) return;
+                    if (value != off[r * n + c]) clause[length++] = selector;
+                }
+            }
+            if (nsat_verify_add_original(v, clause, length) != NSAT_OK) return;
+        }
+    }
+}
+
+NsatStatus nsat_verify_init_multivalue(NsatVerifier **out, const int *on, const int *off,
+                                      const int *levels, size_t n, size_t p,
+                                      size_t q, size_t k, NsatLimits limits)
+{
+    if (!out) return NSAT_ERROR;
+    *out = NULL;
+    size_t cells, values = 0;
+    if (!on || !off || !levels || !n || !p || !q || !k ||
+        n > INT_MAX || p > (size_t)INT_MAX / 2 || k > INT_MAX ||
+        q > SIZE_MAX - p - 1 || !nsat_mul(n, p + q + 1, &cells) ||
+        cells > SIZE_MAX / sizeof(int)) return NSAT_ERROR;
+    NsatBudget dimensions = {.limits = limits};
+    for (size_t c = 0; c < n; ++c) {
+        if (!nsat_work(&dimensions, 1)) return dimensions.status;
+        if (levels[c] < 1 || (size_t)levels[c] > (size_t)INT_MAX - values)
+            return NSAT_ERROR;
+        values += (size_t)levels[c];
+    }
+    if (values > (size_t)INT_MAX - 2 * p ||
+        k > (size_t)INT_MAX / (values + 2 * p)) return NSAT_ERROR;
+    NsatLimits remaining = limits;
+    if (limits.work) {
+        if (dimensions.stats.work == limits.work) return NSAT_UNKNOWN;
+        remaining.work -= dimensions.stats.work;
+    }
+    NsatStatus status = nsat_verify_init_cnf(out, (int)((values + 2 * p) * k), remaining);
+    if (!*out) return status;
+    NsatVerifier *v = *out;
+    NsatBudget *b = &v->budget;
+    b->limits = limits;
+    b->stats.work += dimensions.stats.work;
+    if (status != NSAT_OK) return status;
+    v->mv_inputs = n;
+    v->mv_positives = p;
+    v->mv_negatives = q;
+    v->mv_slots = k;
+    v->mv_values = values;
+    v->multivalue_care = nsat_alloc(b, cells, sizeof(int));
+    if (!v->multivalue_care ||
+        !nsat_copy(b, v->multivalue_care, levels, n * sizeof(int)) ||
+        !nsat_copy(b, v->multivalue_care + n, on, n * p * sizeof(int)) ||
+        !nsat_copy(b, v->multivalue_care + n * (p + 1), off, n * q * sizeof(int)))
+        return b->status;
+    if (!valid_care(v, v->multivalue_care + n, v->multivalue_care + n * (p + 1),
+                    n, p, q, v->multivalue_care)) return b->status;
+    size_t width = values > k ? values : k;
+    int *clause = nsat_alloc(b, width, sizeof(int));
+    if (!clause) return b->status;
+    multivalue_originals(v, clause);
+    nsat_free(b, clause, width * sizeof(int));
+    return nsat_verify_seal_originals(v);
+}
+
+/* A second SAT check uses categorical matching directly, independently of
+ * assignment variables and CNF evaluation. The care table is verifier-owned. */
+static bool check_multivalue_model(NsatVerifier *v)
+{
+    const size_t n = v->mv_inputs;
+    const int *levels = v->multivalue_care;
+    NsatBudget *b = &v->budget;
+    for (size_t t = 0; t < v->mv_slots; ++t) {
+        size_t variable = t * v->mv_values + 1;
+        for (size_t c = 0; c < n; ++c) {
+            int selected = 0;
+            for (int value = 1; value <= levels[c]; ++value, ++variable) {
+                if (!nsat_work(b, 1)) return false;
+                if (v->values[variable] > 0 && ++selected > 1)
+                    return nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
+            }
+        }
+    }
+    for (int side = 0; side < 2; ++side) {
+        size_t rows = side ? v->mv_negatives : v->mv_positives;
+        const int *points = levels + n + (side ? n * v->mv_positives : 0);
+        for (size_t r = 0; r < rows; ++r) {
+            bool covered = false;
+            for (size_t t = 0; t < v->mv_slots && !covered; ++t) {
+                size_t variable = t * v->mv_values + 1;
+                bool matches = true;
+                for (size_t c = 0; c < n; ++c) {
+                    for (int value = 1; value <= levels[c]; ++value, ++variable) {
+                        if (!nsat_work(b, 1)) return false;
+                        if (v->values[variable] > 0 && value != points[r * n + c])
+                            matches = false;
+                    }
+                }
+                covered = matches;
+            }
+            if (covered == (side != 0))
+                return nsat_stop(b, NSAT_ERROR, NSAT_STOP_PROOF);
+        }
+    }
+    return true;
 }

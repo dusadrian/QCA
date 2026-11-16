@@ -10,7 +10,9 @@ typedef struct {
     int verified_minimum; /* Checked bound with a witness for this table. */
 } QcaCertification;
 
-/* NSAT_UNSAT proves the incumbent cardinality globally minimal. */
+/* For binary or categorical equality terms, NSAT_UNSAT rules out every
+ * smaller cover. The caller supplies a feasible incumbent of this size.
+ * UNKNOWN and ERROR provide no minimum certificate. */
 NsatStatus qca_check_smaller_model(QcaCertification *table, int incumbent);
 
 /* Prove that every legal term covering an ON row contains a chart PI. */
