@@ -12,6 +12,8 @@
 #include "qca_threads.h"
 #include "sort_matrix.h"
 #include "CCubes.h"
+#include "qca_consistency_verify.h"
+#include "native_sat/native_sat_support.h"
 
 // IMPORTANT!
 // memset() works <ONLY> with FALSE logical vectors...!!
@@ -2518,7 +2520,7 @@ SEXP C_Cubes(SEXP list) {
         SET_VECTOR_ELT(out, 2, solmat = allocMatrix(INTSXP, solrows, solcols));
 
         int *p_solmat = INTEGER(solmat);
-        if (firstmin) {
+        if (firstmin && solcons == 0) {
             for (int i = 0; i < solrows; i++) {
                 // p_solmat[i] = i + 1;
                 // Rprintf("%d ", p_models[i]);
@@ -2534,7 +2536,63 @@ SEXP C_Cubes(SEXP list) {
     SET_VECTOR_ELT(out, 3, complex = allocVector(LGLSXP, 1));
     LOGICAL(complex)[0] = complexpic;
 
-    // Rprintf("over\n");
+    if ((picons > 0 || solcons > 0) && solrows > 0 && solcols > 0) {
+        /* Verify a smallest returned witness against the original input,
+         * never against fit scores or pruning decisions supplied by search. */
+        NsatResources resources = {.work_limit = 16000000,
+            .memory_limit = 32u * 1024u * 1024u};
+        NsatBudget preparation = {.limits = {.shared = &resources}};
+        int best = 0, terms = 0;
+        const int *returned = INTEGER(VECTOR_ELT(out, 2));
+        for (int model = 0; model < solcols; ++model) {
+            if (!nsat_work(&preparation, (uint64_t)solrows)) break;
+            int size = 0;
+            for (int r = 0; r < solrows; ++r)
+                if (returned[(size_t)model * solrows + r] > 0) ++size;
+            if (size > 0 && (terms == 0 || size < terms)) { terms = size; best = model; }
+        }
+        NsatStatus status = NSAT_UNKNOWN;
+        if (terms > 0 && preparation.status == NSAT_OK) {
+            int *selected = nsat_alloc(&preparation, (size_t)terms, sizeof(int));
+            if (selected && nsat_work(&preparation, (uint64_t)solrows)) {
+                int index = 0;
+                for (int r = 0; r < solrows; ++r) {
+                    int value = returned[(size_t)best * solrows + r];
+                    if (value > 0) selected[index++] = value - 1;
+                }
+                QcaConsistencyQuery query = {
+                    .tt = p_tt, .data = p_data, .fuzzy = p_fsconds,
+                    .conditions = nconds, .rows = ttrows, .cases = nrdata, .depth = pidepth,
+                    .pi_cons = picons, .sol_cons = solcons, .sol_cov = solcov
+                };
+                status = qca_verify_consistency_minimum(&query, p_impmat, foundPI,
+                    selected, terms, (NsatLimits){.shared = &resources});
+            }
+            nsat_free(&preparation, selected, (size_t)terms * sizeof(int));
+            if (preparation.status != NSAT_OK) status = preparation.status;
+        }
+        SEXP proof = PROTECT(allocVector(VECSXP, 6));
+        SEXP names = PROTECT(allocVector(STRSXP, 6));
+        const char *labels[] = {"status", "minimum", "scope", "domain", "work", "stop"};
+        for (int i = 0; i < 6; ++i) SET_STRING_ELT(names, i, mkChar(labels[i]));
+        setAttrib(proof, R_NamesSymbol, names);
+        const char *state = status == NSAT_UNSAT ? "certified" :
+            status == NSAT_SAT ? "smaller-model-exists" :
+            status == NSAT_ERROR && resources.stop != NSAT_STOP_ALLOCATION
+                ? "verification-failed" : "inconclusive";
+        SET_VECTOR_ELT(proof, 0, mkString(state));
+        SET_VECTOR_ELT(proof, 1, ScalarInteger(status == NSAT_UNSAT ? terms : NA_INTEGER));
+        SET_VECTOR_ELT(proof, 2, mkString(pidepth < nconds ? "pi.depth" : "global"));
+        SET_VECTOR_ELT(proof, 3, mkString("prime-implicant models"));
+        SET_VECTOR_ELT(proof, 4, ScalarReal((double)resources.work));
+        const char *reason = resources.stop == NSAT_STOP_WORK ? "work" :
+            resources.stop == NSAT_STOP_MEMORY ? "memory" :
+            resources.stop == NSAT_STOP_ALLOCATION ? "allocation" :
+            resources.stop == NSAT_STOP_CANCELLED ? "cancelled" : "none";
+        SET_VECTOR_ELT(proof, 5, mkString(reason));
+        setAttrib(out, install("certification"), proof);
+        UNPROTECT(2);
+    }
 
     R_Free(p_pichart);
     R_Free(p_impmat);

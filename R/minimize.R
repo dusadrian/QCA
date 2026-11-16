@@ -592,6 +592,7 @@
                             gurobi = use_native_gurobi,
                             solind = !isFALSE(dots$solind)),
                             PACKAGE = "QCA")
+            output$certification <- attr(expressions, "certification", exact = TRUE)
             # dyn.unload("~/Lucru/_R/QCA/src/QCA.so")
             # return(expressions)
         }

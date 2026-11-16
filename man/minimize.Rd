@@ -144,6 +144,27 @@ a legal term exists that contains none of the chart's prime implicants as a
 subterm. CCubes uses the complete chart to enumerate models. The native checks
 are bounded and apply to ordinary point tables with up to 15 conditions.
 Inconclusive checks continue through the applicable systematic depth.
+For searches using \bold{\code{pi.cons}} or \bold{\code{sol.cons}}, an
+independent finite-domain verifier reconstructs eligible prime implicants from
+the truth table and calibrated cases. A complete-family proof may end PI
+generation at a stalled level. After model search, the verifier checks a
+smallest returned model and exhaustively excludes all smaller PI models.
+It uses the same ordered double sums, membership operations and threshold
+tolerances as QCA, with no rounded integer weights or floating-point pruning
+bounds. With \bold{\code{sol.cons > 0}}, feasibility uses the case-wise union's
+consistency and \bold{\code{sol.cov}}; otherwise it requires covering the positive
+truth-table rows. The domain consists of eligible prime implicants, not arbitrary
+narrower conjunctions that might have better fit.
+
+The returned \bold{\code{certification}} component reports whether minimum size
+was independently certified. Its scope is global when PI depth is unrestricted,
+or relative to \bold{\code{pi.depth}} otherwise. A minimum-size certificate does
+not assert that all returned irredundant models have that size, or that all
+minimum models have been enumerated under other search limits. Verification
+uses bounded work and memory: exhaustion leaves the existing search and
+PI-chart fallbacks, including lp_solve, available and reports an inconclusive
+certificate. It never changes an inconclusive check into a minimum claim.
+
 Consistency-based PI generation also respects that depth. In the CCubes search with remainders,
 a positive \bold{\code{pi.depth}} imposes a hard limit on the number of conditions
 in each prime implicant, regardless of \bold{\code{pi.cons}} or
@@ -182,6 +203,12 @@ when using multiple outcomes. These objects are lists having the following compo
 \item{PIchart}{A list containing the PI chart(s).}
 \item{primes}{The prime implicant(s).}
 \item{solution}{A list of solution model(s).}
+\item{certification}{For consistency-based CCubes searches with returned models,
+a list with \code{status} (\code{certified}, \code{inconclusive},
+\code{smaller-model-exists}, or \code{verification-failed}), \code{minimum}
+(the independently proved size, otherwise \code{NA}), \code{scope}
+(\code{global} or \code{pi.depth}), \code{domain}, verification \code{work},
+and resource \code{stop} reason.}
 \item{essential}{A list of essential PI(s).}
 \item{pims}{A list of PI membership scores.}
 \item{IC}{The matrix containing the inclusion and coverage scores for the model(s).}

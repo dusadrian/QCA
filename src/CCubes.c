@@ -15,6 +15,7 @@
 #include "findmin_lpsolve.h"
 #include "pichart_presolve.h"
 #include "qca_certify.h"
+#include "qca_consistency_verify.h"
 #include "cover_validation.h"
 #include "qca_threads.h"
 
@@ -406,6 +407,15 @@ void CCubes(const int p_tt[],          // the truth table
         .resources = {.work_limit = 16000000, .memory_limit = 32u * 1024u * 1024u}
     };
     int checked_incumbent = 0, checked_columns = 0;
+    QcaConsistencyQuery consistency_query = {
+        .tt = p_tt, .data = p_data, .fuzzy = p_fsconds,
+        .conditions = nconds, .rows = ttrows, .cases = nrdata, .depth = pidepth,
+        .pi_cons = picons, .sol_cons = solcons, .sol_cov = solcov
+    };
+    NsatResources consistency_resources = {
+        .work_limit = 16000000, .memory_limit = 32u * 1024u * 1024u
+    };
+    int checked_consistency_columns = -1;
 
     // preallocating for an estimated large number of 1000 found PIs
     // this number will be iteratively increased when the found PIs reach the upper limit
@@ -1043,6 +1053,16 @@ void CCubes(const int p_tt[],          // the truth table
         }
 
 
+        if (!point_cover && !stop_searching && !foundk && k < last_level &&
+            checked_consistency_columns != foundPI) {
+            checked_consistency_columns = foundPI;
+            /* A consistency plateau is not evidence of completeness. Only
+             * an independently rebuilt, identical PI family permits stopping. */
+            stop_searching = qca_verify_consistency_chart(
+                &consistency_query, p_implicants, (size_t)foundPI,
+                (NsatLimits){.work = 4000000, .shared = &consistency_resources}
+            ) == NSAT_UNSAT;
+        }
         if (stop_searching) break;
     }
 
