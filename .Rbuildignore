@@ -9,10 +9,10 @@
 ^clean\.sh$
 ^.*\.tar\.gz$
 (^|/)\.DS_Store$
+^internal$
 ^tests$
 ^tools/(?!Makevars(?:[.]win)?[.]in$)
 ^Vignettes$
 ^vignettes$
-^tools/(benchmark_lag_gap1|build-cran-source|profile_scp_solver|validate_scp_solver)[.]R$
 ^(?!R/).*[.]R$
 ^AGENTS\.md$

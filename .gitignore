@@ -7,12 +7,11 @@
 *.R
 !R/
 !R/*.R
-/tools/
-!/tools/
+/internal/
+/tests/
 /tools/*
-!/tools/threaded-webr-experiment/
-!/tools/threaded-webr-experiment/**
-/tools/threaded-webr-experiment/build/
+!/tools/Makevars.in
+!/tools/Makevars.win.in
 *.Rproj
 *.Rproj.user
 *.Rhistory
