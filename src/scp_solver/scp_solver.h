@@ -16,6 +16,8 @@ typedef struct {
     const double *initial_row_dual;
     int lagrangian_iterations;
     int selective_bounds; /* cheap propagation, Lagrangian, then dominance */
+    int improve_incumbent; /* bounded cover search before the exact tree */
+    int warm_pricing; /* bounded fixed-chart completion after the first nodes */
 } qca_scp_problem;
 
 typedef struct {
@@ -51,6 +53,14 @@ typedef struct {
     double last_improvement_seconds; /* since search started, not root prep */
     int initial_size;
     unsigned long long lagrangian_iterations;
+    double incumbent_search_seconds;
+    unsigned long long incumbent_search_steps;
+    unsigned long long incumbent_search_work;
+    unsigned long long incumbent_search_improvements;
+    double warm_seconds;
+    unsigned long long warm_attempted, warm_proved, warm_nodes, warm_repriced, warm_work;
+    unsigned long long warm_extensions, warm_tasks;
+    unsigned warm_threads;
 } qca_scp_profile;
 
 typedef enum {

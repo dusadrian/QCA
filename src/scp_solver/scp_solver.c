@@ -1,11 +1,15 @@
 #include "scp_solver.h"
 #include "scp_relaxation.h"
+#include "../native_sat/ipc_weighted_cover.h"
+#include "../qca_threads.h"
 
 #include <limits.h>
+#include <stdlib.h>
 #include <math.h>
 #include <R_ext/RS.h>
 #include <Rinternals.h>
 #include <R_ext/Utils.h>
+#include <R_ext/Memory.h>
 #include <time.h>
 #include <string.h>
 
@@ -33,11 +37,14 @@ typedef struct {
     int best_size;
     int proof_target_size;
     int found_target;
+    int proved_optimum;
     int limit_reached;
     unsigned long long nodes;
     unsigned long long node_limit;
     unsigned long long hard_node_limit;
     double started;
+    double warm_interrupt_poll;
+    int warm_interrupted;
     double time_limit_seconds;
     double hard_time_limit_seconds;
     int adaptive_limits;
@@ -70,7 +77,13 @@ static int propagation_target(const qca_scp_search *search) {
 static qca_scp_profile qca_profile = {0};
 
 static double now_seconds(void) {
-    return (double) clock() / (double) CLOCKS_PER_SEC;
+    struct timespec timestamp;
+#if defined(CLOCK_MONOTONIC)
+    if (clock_gettime(CLOCK_MONOTONIC, &timestamp) == 0)
+        return (double)timestamp.tv_sec + (double)timestamp.tv_nsec / 1e9;
+#endif
+    timespec_get(&timestamp, TIME_UTC);
+    return (double)timestamp.tv_sec + (double)timestamp.tv_nsec / 1e9;
 }
 
 static int popcount_ull(unsigned long long x) {
@@ -1051,6 +1064,178 @@ static int keep_greedy_candidate(
     return 0;
 }
 
+static uint32_t incumbent_random(uint32_t *state) {
+    *state ^= *state << 13;
+    *state ^= *state >> 17;
+    *state ^= *state << 5;
+    return *state;
+}
+
+/* Improve only the upper bound. A fixed-size, temporarily infeasible cover
+   can cross plateaus that drop-and-greedy-repair cannot. Uncovered rows gain
+   weight, and a short tabu tenure discourages immediately undoing a swap.
+   Every accepted incumbent covers the full problem; none of these weights
+   or unsuccessful attempts are used for proof or column elimination. */
+static void improve_initial_cover(qca_scp_search *search) {
+    const qca_scp_problem *problem = search->problem;
+    const int words = problem->nwords_rows;
+    const int max_steps = 16384;
+    const unsigned long long max_work = 8000000ULL;
+    unsigned long long work = 0;
+    uint32_t random = UINT32_C(0x9e3779b9);
+
+    if (search->best_size <= 1 || search->best_size > problem->nc) {
+        return;
+    }
+
+    /* R owns these temporary arrays, including on interruption. */
+    int *candidate = (int *)R_alloc((size_t)problem->nc, sizeof(int));
+    int *selected = (int *)R_alloc((size_t)search->best_size, sizeof(int));
+    int *coverage = (int *)R_alloc((size_t)problem->nr, sizeof(int));
+    int *weight = (int *)R_alloc((size_t)problem->nr, sizeof(int));
+    int *tabu = (int *)R_alloc((size_t)problem->nc, sizeof(int));
+    int *missing = (int *)R_alloc((size_t)problem->nr, sizeof(int));
+    unsigned long long *unique = (unsigned long long *)R_alloc(
+        (size_t)search->best_size * words, sizeof(unsigned long long)
+    );
+    memcpy(candidate, search->best_solution, (size_t)problem->nc * sizeof(int));
+    memset(tabu, 0, (size_t)problem->nc * sizeof(int));
+    for (int row = 0; row < problem->nr; row++) {
+        weight[row] = 1;
+    }
+
+    int size = cleanup_solution(problem, candidate, coverage);
+    int count = 0;
+    for (int col = 0; col < problem->nc; col++) {
+        if (candidate[col]) {
+            selected[count++] = col;
+        }
+    }
+    if (size < search->best_size) {
+        if (keep_greedy_candidate(search, candidate, size)) {
+            return;
+        }
+    }
+    if (size <= 1) {
+        return;
+    }
+
+    /* Drop one PI, then repair using exchanges that keep this smaller size. */
+    int removed = selected[--size];
+    candidate[removed] = 0;
+    const unsigned long long *mask = problem->col_masks + (size_t)removed * words;
+    for (int row = 0; row < problem->nr; row++) {
+        if (mask[row_word(row)] & row_mask(row)) {
+            coverage[row]--;
+        }
+    }
+
+    for (int step = 0; step < max_steps && work < max_work; step++) {
+        qca_profile.incumbent_search_steps++;
+        if ((step & 63) == 0) {
+            R_CheckUserInterrupt();
+        }
+        int nmissing = 0;
+        for (int row = 0; row < problem->nr; row++) {
+            if (coverage[row] == 0) {
+                missing[nmissing++] = row;
+            }
+        }
+        if (nmissing == 0) {
+            keep_greedy_candidate(search, candidate, size);
+            return;
+        }
+
+        memset(unique, 0, (size_t)size * words * sizeof(unsigned long long));
+        for (int i = 0; i < size; i++) {
+            mask = problem->col_masks + (size_t)selected[i] * words;
+            for (int w = 0; w < words; w++) {
+                unsigned long long bits = mask[w];
+                while (bits) {
+                    int row = w * 64 + __builtin_ctzll(bits);
+                    if (coverage[row] == 1) {
+                        unique[(size_t)i * words + w] |= row_mask(row);
+                    }
+                    bits &= bits - 1ULL;
+                }
+            }
+        }
+
+        int row = missing[incumbent_random(&random) % (unsigned int)nmissing];
+        int best_in = -1;
+        int best_out = -1;
+        int64_t best_score = INT64_MIN;
+        uint32_t ties = 0;
+        for (int j = problem->row_starts[row]; j < problem->row_starts[row + 1]; j++) {
+            int col = problem->row_cols[j];
+            mask = problem->col_masks + (size_t)col * words;
+            int64_t gain = 0;
+            int covered = 0;
+            for (int i = 0; i < nmissing; i++) {
+                int r = missing[i];
+                if (mask[row_word(r)] & row_mask(r)) {
+                    gain += weight[r];
+                    covered++;
+                }
+            }
+            for (int i = 0; i < size && work < max_work; i++) {
+                int64_t loss = 0;
+                int lost = 0;
+                for (int w = 0; w < words; w++) {
+                    unsigned long long bits = unique[(size_t)i * words + w] & ~mask[w];
+                    while (bits) {
+                        int r = w * 64 + __builtin_ctzll(bits);
+                        loss += weight[r];
+                        lost++;
+                        bits &= bits - 1ULL;
+                    }
+                }
+                work += words;
+                qca_profile.incumbent_search_work += words;
+                if (tabu[col] > step && nmissing - covered + lost > 0) {
+                    continue;
+                }
+                int64_t score = gain - loss;
+                if (score > best_score) {
+                    best_score = score;
+                    ties = 0;
+                }
+                if (score == best_score && incumbent_random(&random) % ++ties == 0) {
+                    best_in = col;
+                    best_out = i;
+                }
+            }
+        }
+
+        if (best_in >= 0) {
+            removed = selected[best_out];
+            candidate[removed] = 0;
+            candidate[best_in] = 1;
+            selected[best_out] = best_in;
+            tabu[removed] = step + 5 + incumbent_random(&random) % 5U;
+            const unsigned long long *out_mask =
+                problem->col_masks + (size_t)removed * words;
+            mask = problem->col_masks + (size_t)best_in * words;
+            for (int r = 0; r < problem->nr; r++) {
+                coverage[r] += (mask[row_word(r)] & row_mask(r)) != 0ULL;
+                coverage[r] -= (out_mask[row_word(r)] & row_mask(r)) != 0ULL;
+            }
+        }
+        for (int r = 0; r < problem->nr; r++) {
+            if (coverage[r] == 0) {
+                weight[r]++;
+            }
+        }
+    }
+    /* Also retain a cover completed on the last permitted exchange. */
+    for (int row = 0; row < problem->nr; row++) {
+        if (coverage[row] == 0) {
+            return;
+        }
+    }
+    keep_greedy_candidate(search, candidate, size);
+}
+
 static int search_limit_is_reached(qca_scp_search *search) {
     double elapsed = now_seconds() - search->started;
     int hard_node_reached = search->hard_node_limit > 0 &&
@@ -1104,6 +1289,75 @@ static int search_limit_is_reached(qca_scp_search *search) {
     return 0;
 }
 
+static void warm_check_interrupt(void *unused) {
+    (void)unused;
+    R_CheckUserInterrupt();
+}
+
+static bool warm_deadline(void *context) {
+    qca_scp_search *search = (qca_scp_search *)context;
+    double now = now_seconds();
+    if (now - search->warm_interrupt_poll >= 0.05) {
+        search->warm_interrupt_poll = now;
+        if (!R_ToplevelExec(warm_check_interrupt, NULL)) search->warm_interrupted = 1;
+    }
+    return search->warm_interrupted || (search->hard_time_limit_seconds > 0.0 &&
+        now - search->started >= search->hard_time_limit_seconds);
+}
+
+static unsigned warm_thread_count(void) {
+    /* Allow proof experiments without also changing the existing parallel
+       Lagrangian initialization and other package workers. */
+    const char *value = getenv("QCA_WARM_THREADS");
+    if (value && *value) {
+        char *end = NULL;
+        long count = strtol(value, &end, 10);
+        if (end != value && !*end && count > 0) return count > 8 ? 8 : (unsigned)count;
+    }
+    unsigned count = (unsigned)qca_default_thread_count();
+    return count > 8 ? 8 : count;
+}
+
+static void complete_with_warm_pricing(qca_scp_search *search) {
+    const qca_scp_problem *problem = search->problem;
+    /* Leave cheap charts to the ordinary tree. Bound both the extra work
+       and the row-square basis storage before trying a different proof. */
+    if (!problem->warm_pricing || search->nodes != 128 ||
+        search->proof_target_size >= 0 || search->best_size > problem->nc ||
+        problem->nr < 32 || problem->nr > 128 || problem->nc > 1024) {
+        return;
+    }
+    double started = now_seconds();
+    /* The first allowance remains small. Further allowances require completed
+       proof branches, with a separate hard cap even when progress continues. */
+    NsatLimits limits = {.work = UINT64_C(16000000000),
+        .memory_bytes = 32u * 1024u * 1024u,
+        .poll = warm_deadline, .context = search};
+    ++qca_profile.warm_attempted;
+    IpcChartCoverResult result = ipc_chart_cover_parallel(problem->nr, problem->nc,
+        problem->col_masks, search->best_solution, limits, 4, 256, UINT64_C(4000000000), warm_thread_count());
+    if (result.terms > 0 && result.terms < search->best_size) {
+        search->best_size = result.terms;
+        ++qca_profile.incumbent_improvements;
+        qca_profile.last_improvement_node = search->nodes;
+        qca_profile.last_improvement_seconds = now_seconds() - search->started;
+    }
+    qca_profile.warm_seconds += now_seconds() - started;
+    qca_profile.warm_nodes += result.nodes;
+    qca_profile.warm_repriced += result.repriced;
+    qca_profile.warm_work += result.stats.work;
+    qca_profile.warm_extensions += result.extensions;
+    qca_profile.warm_threads = result.threads;
+    qca_profile.warm_tasks += result.tasks;
+    if (result.status == NSAT_UNSAT) {
+        search->proved_optimum = 1;
+        ++qca_profile.warm_proved;
+    }
+    /* Workers have joined and pricing allocations are freed before an R long jump. */
+    if (search->warm_interrupted) error("Interrupted during warm-pricing proof.");
+    R_CheckUserInterrupt();
+}
+
 static void search_exact(
     qca_scp_search *search,
     qca_scp_state *state,
@@ -1112,7 +1366,7 @@ static void search_exact(
     const qca_scp_problem *problem = search->problem;
     qca_scp_workspace *workspace = search->workspaces + depth;
 
-    if (search->found_target || search->limit_reached) {
+    if (search->found_target || search->proved_optimum || search->limit_reached) {
         return;
     }
 
@@ -1123,6 +1377,8 @@ static void search_exact(
 
     search->nodes++;
     qca_profile.nodes++;
+    complete_with_warm_pricing(search);
+    if (search->proved_optimum) return;
     if ((search->nodes & 1023ULL) == 0ULL) {
         R_CheckUserInterrupt();
     }
@@ -1150,6 +1406,11 @@ static void search_exact(
         int fixed_columns = 0;
         int iterations_used = 0;
         int iterations = depth % 3 == 0 ? problem->lagrangian_iterations : 1;
+        if (problem->selective_bounds) {
+            /* Each residual problem needs its own refined dual. Spending
+               more work here avoids large trees built on inherited bounds. */
+            iterations = 8 * problem->lagrangian_iterations;
+        }
         int target = search->best_size - state->chosen_count - 1;
         if (search->proof_target_size >= 0 &&
             search->proof_target_size - state->chosen_count < target) {
@@ -1315,7 +1576,7 @@ static void search_exact(
             search->root_branches_completed++;
             qca_profile.root_branches_completed++;
         }
-        if (search->found_target) {
+        if (search->found_target || search->proved_optimum) {
             for (int j = 0; j < nbranch; j++) {
                 state->active[branch_cols[j]] = 1;
             }
@@ -1337,6 +1598,18 @@ typedef struct {
 
 static SEXP run_exact_search(void *data) {
     qca_scp_run *run = (qca_scp_run *)data;
+    if (run->search->problem->improve_incumbent && !run->search->found_target) {
+        double started = now_seconds();
+        int previous_size = run->search->best_size;
+        void *temporary = vmaxget();
+        improve_initial_cover(run->search);
+        vmaxset(temporary);
+        /* Probe extensions measure progress made by the proof search,
+           not the improvement already obtained before its first node. */
+        run->search->checkpoint_best_size = run->search->best_size;
+        qca_profile.incumbent_search_seconds += now_seconds() - started;
+        qca_profile.incumbent_search_improvements += run->search->best_size < previous_size;
+    }
     search_exact(run->search, run->state, 0);
     return R_NilValue;
 }

@@ -483,7 +483,9 @@ static int solve_scp_from_int_matrix(
         memset(solution, 0, (size_t)nc * sizeof(int));
     }
 
-    if (strategy >= 2) row_dual = (double *)calloc((size_t)nr, sizeof(double));
+    if (strategy == -1 || strategy >= 2) {
+        row_dual = (double *)calloc((size_t)nr, sizeof(double));
+    }
     incumbent_indices = (int *)calloc((size_t)nc, sizeof(int));
     lagr_scores = (double *)calloc((size_t)nc, sizeof(double));
     improving_core = (unsigned char *)calloc((size_t)nc, sizeof(unsigned char));
@@ -614,10 +616,12 @@ static int solve_scp_from_int_matrix(
             .row_cols = row_cols,
             .col_masks = col_masks,
             .branch_priority = core_priority,
-            .target_propagation = strategy >= 1,
+            .target_propagation = strategy == -1 || strategy >= 1,
             .initial_row_dual = row_dual,
-            .lagrangian_iterations = strategy >= 2 ? 8 : 0,
-            .selective_bounds = strategy >= 3
+            .lagrangian_iterations = strategy == -1 || strategy >= 2 ? 8 : 0,
+            .selective_bounds = strategy == -1 || strategy >= 3,
+            .improve_incumbent = strategy == -1 || strategy >= 3,
+            .warm_pricing = strategy == -1 || strategy >= 3
         };
         int very_wide = nc >= nr * HYBRID_SCP_VERY_WIDE_RATIO;
         int lower_bound_size = lagr_lb > -1e307
@@ -868,8 +872,8 @@ Rboolean solvePIchart_hybrid(
 
 SEXP C_getScpProfile(void) {
     qca_scp_profile profile = qca_scp_profile_get();
-    SEXP out = PROTECT(allocVector(VECSXP, 41));
-    SEXP names = PROTECT(allocVector(STRSXP, 41));
+    SEXP out = PROTECT(allocVector(VECSXP, 54));
+    SEXP names = PROTECT(allocVector(STRSXP, 54));
 
     SET_STRING_ELT(names, 0, mkChar("total_seconds"));
     SET_STRING_ELT(names, 1, mkChar("reductions_seconds"));
@@ -954,6 +958,32 @@ SEXP C_getScpProfile(void) {
     SET_VECTOR_ELT(out, 38, ScalarLogical(hybrid_profile.early_limited));
     SET_VECTOR_ELT(out, 39, ScalarReal((double)hybrid_profile.early_nodes));
     SET_VECTOR_ELT(out, 40, ScalarReal(hybrid_profile.early_seconds));
+    SET_STRING_ELT(names, 41, mkChar("incumbent_search_seconds"));
+    SET_STRING_ELT(names, 42, mkChar("incumbent_search_steps"));
+    SET_STRING_ELT(names, 43, mkChar("incumbent_search_work"));
+    SET_STRING_ELT(names, 44, mkChar("incumbent_search_improvements"));
+    SET_VECTOR_ELT(out, 41, ScalarReal(profile.incumbent_search_seconds));
+    SET_VECTOR_ELT(out, 42, ScalarReal((double)profile.incumbent_search_steps));
+    SET_VECTOR_ELT(out, 43, ScalarReal((double)profile.incumbent_search_work));
+    SET_VECTOR_ELT(out, 44, ScalarReal((double)profile.incumbent_search_improvements));
+    SET_STRING_ELT(names, 45, mkChar("warm_seconds"));
+    SET_STRING_ELT(names, 46, mkChar("warm_attempted"));
+    SET_STRING_ELT(names, 47, mkChar("warm_proved"));
+    SET_STRING_ELT(names, 48, mkChar("warm_nodes"));
+    SET_STRING_ELT(names, 49, mkChar("warm_repriced"));
+    SET_STRING_ELT(names, 50, mkChar("warm_work"));
+    SET_VECTOR_ELT(out, 45, ScalarReal(profile.warm_seconds));
+    SET_VECTOR_ELT(out, 46, ScalarReal((double)profile.warm_attempted));
+    SET_VECTOR_ELT(out, 47, ScalarReal((double)profile.warm_proved));
+    SET_VECTOR_ELT(out, 48, ScalarReal((double)profile.warm_nodes));
+    SET_VECTOR_ELT(out, 49, ScalarReal((double)profile.warm_repriced));
+    SET_VECTOR_ELT(out, 50, ScalarReal((double)profile.warm_work));
+    SET_STRING_ELT(names, 51, mkChar("warm_extensions"));
+    SET_VECTOR_ELT(out, 51, ScalarReal((double)profile.warm_extensions));
+    SET_STRING_ELT(names, 52, mkChar("warm_threads"));
+    SET_VECTOR_ELT(out, 52, ScalarInteger((int)profile.warm_threads));
+    SET_STRING_ELT(names, 53, mkChar("warm_tasks"));
+    SET_VECTOR_ELT(out, 53, ScalarReal((double)profile.warm_tasks));
     setAttrib(out, R_NamesSymbol, names);
 
     UNPROTECT(2);

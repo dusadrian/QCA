@@ -4,14 +4,24 @@
 #include "native_sat_support.h"
 
 #include <math.h>
+#include "qca_threads.h"
+#if defined(HAVE_PTHREAD)
+#include <stdatomic.h>
+#include <time.h>
+#endif
+
+typedef struct ChartWorker ChartWorker;
 
 typedef struct {
     NsatBudget budget;
+    ChartWorker *worker;
     IpcWeightedCoverResult result;
     const NsatCoverInput *input;
     uint64_t *diff, *columns;
     size_t capacity, input_words, row_words, mask_words;
     uint64_t (*weight_bytes)[256];
+    NsatLimits caller_limits;
+    uint64_t probe_work, next_probe, progress, checkpoint_progress, extensions;
 } WeightedCover;
 
 static uint64_t row_bit(unsigned row)
@@ -381,11 +391,13 @@ static bool order_columns(WeightedCover *w, size_t *order)
         if (!nsat_work(&w->budget, w->mask_words)) goto done;
         ++offsets[coverage_size(w, c)];
     }
-    for (size_t r = rows, next = 0; r; --r) {
+    size_t next = 0;
+    for (size_t r = rows;; --r) {
         if (!nsat_work(&w->budget, 1)) goto done;
         size_t count = offsets[r];
         offsets[r] = next;
         next += count;
+        if (!r) break;
     }
     for (size_t c = 0; c < cols; ++c) {
         if (!nsat_work(&w->budget, w->mask_words)) goto done;
@@ -688,6 +700,9 @@ static bool dominated(WeightedCover *w, const uint64_t *remaining, const size_t 
     return false;
 }
 
+static bool chart_claim(ChartWorker *worker, size_t depth);
+static void chart_closed(ChartWorker *worker, size_t depth);
+
 /* Heap-backed frames let resource budgets govern depth. Each child sees
  * only candidates that could appear in a solution of its parent's target. */
 static NsatStatus search(WeightedCover *w, int slots, const size_t *order,
@@ -704,8 +719,10 @@ static NsatStatus search(WeightedCover *w, int slots, const size_t *order,
         if (entering) {
             const size_t *parent = depth ? choices - cols : order;
             size_t count = depth ? frames[depth - 1].count : cols;
-            NsatStatus status = prepare_search(w, rows, slots - (int)depth, parent, count,
-                choices, frame, frequency, chosen, pricing, depth);
+            NsatStatus status = chart_claim(w->worker, depth)
+                ? prepare_search(w, rows, slots - (int)depth, parent, count,
+                    choices, frame, frequency, chosen, pricing, depth)
+                : NSAT_UNSAT;
             if (status == NSAT_SAT) {
                 *terms = (int)depth + 1;
                 return status;
@@ -724,15 +741,339 @@ static NsatStatus search(WeightedCover *w, int slots, const size_t *order,
             uint64_t *next = rows + w->mask_words;
             for (size_t word = 0; word < w->mask_words; ++word) next[word] = rows[word] & ~mask[word];
             chosen[depth++] = choices[c];
+            /* This branch selects the column. Later siblings exclude it,
+             * so a cover containing several alternatives for the anchor
+             * row is not explored again in different selection orders.
+             * It covers no remaining row in its own child either. */
+            size_t following = frame->count - c - 1;
+            if (!nsat_work(&w->budget, following)) return w->budget.status;
+            memmove(choices + c, choices + c + 1, following * sizeof(*choices));
+            --frame->count;
+            --frame->cursor;
             entering = true;
             break;
         }
         if (entering) continue;
         if (w->budget.status != NSAT_OK) return w->budget.status;
+        chart_closed(w->worker, depth);
         if (!depth) return NSAT_UNSAT;
         --depth;
+        if (!depth) ++w->progress;
     }
 }
+
+#if defined(HAVE_PTHREAD)
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t changed;
+    atomic_bool stop;
+    atomic_size_t next_task;
+    atomic_uint_fast64_t completed;
+    uint64_t available, future, probe, checkpoint, extensions;
+    unsigned waiting, finished, count;
+    NsatStopReason reason;
+} ChartPool;
+
+struct ChartWorker {
+    WeightedCover cover;
+    Repricing pricing;
+    ChartPool *pool;
+    const size_t *order;
+    size_t *scratch, *frequency, *chosen;
+    uint64_t *remaining;
+    SearchFrame *frames;
+    size_t task, split;
+    uint64_t margin;
+    bool owns_task;
+    int slots, terms;
+    NsatStatus status;
+};
+
+/* Each worker walks the same small, deterministic prefix. A task number is
+ * claimed once, immediately before searching its subtree. Sibling exclusions
+ * make these subtrees disjoint. Walking the prefix again needs no task snapshots
+ * and lets an idle worker take the next branch, regardless of its depth-first
+ * predecessor's cost. No bound or incumbent depends on another worker. */
+static bool chart_claim(ChartWorker *worker, size_t depth)
+{
+    if (!worker || depth != worker->split) return true;
+    size_t task = worker->task++;
+    worker->owns_task = atomic_compare_exchange_strong(&worker->pool->next_task,
+        &task, worker->task);
+    return worker->owns_task;
+}
+
+static void chart_closed(ChartWorker *worker, size_t depth)
+{
+    if (worker && depth == worker->split && worker->owns_task) {
+        atomic_fetch_add(&worker->pool->completed, 1);
+        worker->owns_task = false;
+    }
+}
+
+/* Reserve work in chunks rather than locking every scan. The sum of grants
+ * never exceeds the one caller allowance. Unused work is returned on exit.
+ * Workers wait at a probe with their search state intact; only the coordinator
+ * may extend it. A small unspent tail can cause an early UNKNOWN, never a proof. */
+static bool chart_worker_poll(void *context)
+{
+    ChartWorker *worker = context;
+    ChartPool *pool = worker->pool;
+    NsatBudget *budget = &worker->cover.budget;
+    if (atomic_load(&pool->stop)) return true;
+    if (budget->limits.work - budget->stats.work > worker->margin) return false;
+    pthread_mutex_lock(&pool->mutex);
+    while (!pool->available && !atomic_load(&pool->stop)) {
+        ++pool->waiting;
+        pthread_cond_broadcast(&pool->changed);
+        pthread_cond_wait(&pool->changed, &pool->mutex);
+        --pool->waiting;
+    }
+    if (!atomic_load(&pool->stop)) {
+        uint64_t grant = UINT64_C(1048576);
+        if (grant < worker->margin * 2) grant = worker->margin * 2;
+        if (grant > pool->available) grant = pool->available;
+        pool->available -= grant;
+        budget->limits.work += grant;
+    }
+    bool stopped = atomic_load(&pool->stop);
+    pthread_mutex_unlock(&pool->mutex);
+    return stopped;
+}
+
+static void *chart_worker_run(void *context)
+{
+    ChartWorker *worker = context;
+    ChartPool *pool = worker->pool;
+    /* The coordinator holds the mutex until every successfully started worker
+     * is counted. A failed pthread_create simply reduces the worker count. */
+    pthread_mutex_lock(&pool->mutex);
+    pthread_mutex_unlock(&pool->mutex);
+    if (nsat_poll(&worker->cover.budget)) {
+        worker->status = search(&worker->cover, worker->slots, worker->order,
+            worker->scratch, worker->remaining, worker->frames, worker->frequency,
+            worker->chosen, &worker->terms, &worker->pricing);
+    } else {
+        worker->status = worker->cover.budget.status;
+    }
+    pthread_mutex_lock(&pool->mutex);
+    pool->available += worker->cover.budget.limits.work - worker->cover.budget.stats.work;
+    ++pool->finished;
+    if (worker->status == NSAT_SAT) atomic_store(&pool->stop, true);
+    else if (worker->status != NSAT_UNSAT && !atomic_load(&pool->stop)) {
+        pool->reason = worker->cover.budget.stats.stop;
+        atomic_store(&pool->stop, true);
+    }
+    pthread_cond_broadcast(&pool->changed);
+    pthread_mutex_unlock(&pool->mutex);
+    return NULL;
+}
+
+static void free_chart_worker(WeightedCover *owner, ChartWorker *worker, size_t levels)
+{
+    size_t rows = owner->input->positives, cols = owner->result.maximal;
+    free_repricing(owner, worker->pricing);
+    nsat_free(&owner->budget, worker->frames, levels * sizeof(SearchFrame));
+    nsat_free(&owner->budget, worker->chosen, levels * sizeof(size_t));
+    nsat_free(&owner->budget, worker->frequency, rows * sizeof(size_t));
+    nsat_free(&owner->budget, worker->scratch, levels * cols * sizeof(size_t));
+    nsat_free(&owner->budget, worker->remaining, levels * owner->mask_words * sizeof(uint64_t));
+}
+
+static bool prepare_chart_worker(WeightedCover *owner, ChartWorker *worker,
+    const Repricing *pricing, size_t levels)
+{
+    size_t rows = owner->input->positives, cols = owner->result.maximal;
+    worker->cover = *owner;
+    worker->cover.worker = worker;
+    worker->cover.result.nodes = worker->cover.result.repriced = 0;
+    worker->cover.budget = (NsatBudget){.limits = {
+        .poll = chart_worker_poll, .context = worker}};
+    worker->pricing.min_branches = pricing->min_branches;
+    worker->pricing.pivots = pricing->pivots;
+    worker->frames = nsat_alloc(&owner->budget, levels, sizeof(SearchFrame));
+    worker->chosen = nsat_alloc(&owner->budget, levels, sizeof(size_t));
+    worker->frequency = nsat_alloc(&owner->budget, rows, sizeof(size_t));
+    worker->scratch = allocate_matrix(&owner->budget, levels, cols, sizeof(size_t));
+    worker->remaining = allocate_matrix(&owner->budget, levels, owner->mask_words, sizeof(uint64_t));
+    if (!worker->frames || !worker->chosen || !worker->frequency ||
+        !worker->scratch || !worker->remaining) return false;
+    if (pricing->pivots) {
+        PricingBasis *root = &worker->pricing.root;
+        root->rows = root->stride = rows;
+        root->inverse = allocate_matrix(&owner->budget, rows, rows, sizeof(double));
+        root->rhs = nsat_alloc(&owner->budget, rows, 3 * sizeof(double));
+        root->surplus = nsat_alloc(&owner->budget, rows, sizeof(bool));
+        if (!root->inverse || !root->rhs || !root->surplus ||
+            !nsat_copy(&owner->budget, root->inverse, pricing->root.inverse, rows * rows * sizeof(double)) ||
+            !nsat_copy(&owner->budget, root->rhs, pricing->root.rhs, rows * sizeof(double)) ||
+            !nsat_copy(&owner->budget, root->surplus, pricing->root.surplus, rows * sizeof(bool))) return false;
+        if (levels > 2 && !allocate_repricing(owner, &worker->pricing, levels - 2)) return false;
+    }
+    /* Largest indivisible search charge, plus the polling interval. */
+    worker->margin = rows * rows + cols + 8192;
+    return true;
+}
+
+static NsatStatus parallel_chart_search(WeightedCover *w, int slots, const size_t *order,
+    size_t *scratch, uint64_t *remaining, SearchFrame *frames, size_t *frequency,
+    size_t *chosen, int *terms, Repricing *pricing, unsigned requested,
+    unsigned *used, uint64_t *tasks)
+{
+    const size_t levels = (size_t)slots + 1, rows = w->input->positives;
+    const size_t cols = w->result.maximal;
+    /* The production adapter restricts charts to 128 x 1024. Keep arithmetic
+     * and optional workspace sizing bounded for other callers too. */
+    if (requested < 2 || rows > 128 || cols > 1024 || levels > 1024)
+        return search(w, slots, order, scratch, remaining, frames, frequency, chosen, terms, pricing);
+    if (requested > 8) requested = 8;
+    size_t bytes = sizeof(ChartWorker) + levels * (sizeof(SearchFrame) +
+        sizeof(size_t) + cols * sizeof(size_t) + w->mask_words * sizeof(uint64_t)) + rows * sizeof(size_t);
+    if (pricing->pivots) {
+        bytes += rows * rows * sizeof(double) + rows * (3 * sizeof(double) + sizeof(bool));
+        if (levels > 2) bytes += (levels - 2) * (rows * rows * sizeof(double) +
+            rows * (sizeof(double) + sizeof(bool) + sizeof(size_t) + sizeof(uint64_t))) + rows * sizeof(size_t);
+    }
+    size_t available = nsat_memory_available(&w->budget);
+    while (requested > 1 && bytes > available / requested) --requested;
+    if (requested < 2)
+        return search(w, slots, order, scratch, remaining, frames, frequency, chosen, terms, pricing);
+
+    ChartWorker *workers = nsat_alloc(&w->budget, requested, sizeof(*workers));
+    if (!workers) return w->budget.status;
+    memset(workers, 0, requested * sizeof(*workers));
+    ChartPool pool = {0};
+    atomic_init(&pool.stop, false);
+    atomic_init(&pool.next_task, 0);
+    atomic_init(&pool.completed, 0);
+    NsatStatus status = NSAT_UNKNOWN;
+    unsigned prepared = 0;
+    for (; prepared < requested; ++prepared) {
+        ChartWorker *worker = workers + prepared;
+        worker->pool = &pool;
+        worker->slots = slots;
+        worker->split = slots > 2 ? 2 : 1;
+        worker->order = order;
+        if (!prepare_chart_worker(w, worker, pricing, levels)) {
+            ++prepared;
+            goto cleanup;
+        }
+    }
+    if (pthread_mutex_init(&pool.mutex, NULL) != 0) goto serial;
+    if (pthread_cond_init(&pool.changed, NULL) != 0) {
+        pthread_mutex_destroy(&pool.mutex);
+        goto serial;
+    }
+    uint64_t hard = w->budget.limits.work ? w->budget.limits.work : UINT64_MAX;
+    if (w->budget.limits.shared && w->budget.limits.shared->work_limit) {
+        uint64_t left = w->budget.limits.shared->work_limit - w->budget.limits.shared->work;
+        if (left < hard - w->budget.stats.work) hard = w->budget.stats.work + left;
+    }
+    pool.available = hard - w->budget.stats.work;
+    pool.probe = w->probe_work;
+    if (pool.probe && w->next_probe < hard) {
+        pool.available = w->next_probe > w->budget.stats.work
+            ? w->next_probe - w->budget.stats.work : 0;
+        pool.future = hard - w->budget.stats.work - pool.available;
+    }
+    pthread_t threads[8];
+    pthread_mutex_lock(&pool.mutex);
+    for (unsigned i = 0; i < requested; ++i) {
+        if (pthread_create(threads + pool.count, NULL, chart_worker_run, workers + pool.count) != 0) break;
+        ++pool.count;
+    }
+    if (pool.count > *used) *used = pool.count;
+    while (pool.finished < pool.count) {
+        if (!atomic_load(&pool.stop) && pool.waiting + pool.finished == pool.count && !pool.available) {
+            uint64_t completed = atomic_load(&pool.completed);
+            if (pool.future && completed > pool.checkpoint) {
+                uint64_t grant = pool.future < pool.probe ? pool.future : pool.probe;
+                pool.available += grant;
+                pool.future -= grant;
+                pool.checkpoint = completed;
+                ++pool.extensions;
+            } else {
+                pool.reason = NSAT_STOP_WORK;
+                atomic_store(&pool.stop, true);
+            }
+            pthread_cond_broadcast(&pool.changed);
+        }
+        pthread_mutex_unlock(&pool.mutex);
+        /* Caller callbacks (including R interruption checks) run only here. */
+        bool cancelled = w->caller_limits.poll && w->caller_limits.poll(w->caller_limits.context);
+        pthread_mutex_lock(&pool.mutex);
+        if (cancelled) {
+            pool.reason = NSAT_STOP_CANCELLED;
+            atomic_store(&pool.stop, true);
+            pthread_cond_broadcast(&pool.changed);
+        }
+        struct timespec deadline;
+        timespec_get(&deadline, TIME_UTC);
+        deadline.tv_nsec += 10000000;
+        if (deadline.tv_nsec >= 1000000000) {
+            ++deadline.tv_sec;
+            deadline.tv_nsec -= 1000000000;
+        }
+        if (pool.finished < pool.count) pthread_cond_timedwait(&pool.changed, &pool.mutex, &deadline);
+    }
+    pthread_mutex_unlock(&pool.mutex);
+    for (unsigned i = 0; i < pool.count; ++i) pthread_join(threads[i], NULL);
+    pthread_cond_destroy(&pool.changed);
+    pthread_mutex_destroy(&pool.mutex);
+    if (!pool.count) goto serial;
+    status = NSAT_UNSAT;
+    int witness = -1;
+    uint64_t work = 0;
+    for (unsigned i = 0; i < pool.count; ++i) {
+        ChartWorker *worker = workers + i;
+        work += worker->cover.budget.stats.work;
+        w->result.nodes += worker->cover.result.nodes;
+        w->result.repriced += worker->cover.result.repriced;
+        if (worker->status == NSAT_SAT && witness < 0) witness = (int)i;
+        else if (worker->status != NSAT_UNSAT) status = NSAT_UNKNOWN;
+    }
+    /* Reservations already checked both limits; account actual work once. */
+    w->budget.stats.work += work;
+    if (w->budget.limits.shared) w->budget.limits.shared->work += work;
+    w->extensions += pool.extensions;
+    uint64_t completed = atomic_load(&pool.completed);
+    w->progress += completed;
+    w->checkpoint_progress = w->progress;
+    *tasks += completed;
+    w->next_probe = hard - pool.future;
+    if (witness >= 0) {
+        *terms = workers[witness].terms;
+        memcpy(chosen, workers[witness].chosen, (size_t)*terms * sizeof(*chosen));
+        status = NSAT_SAT;
+    } else if (status != NSAT_UNSAT) {
+        nsat_stop(&w->budget, NSAT_UNKNOWN, pool.reason ? pool.reason : NSAT_STOP_CANCELLED);
+    }
+    goto cleanup;
+serial:
+    /* Thread creation/support failure leaves the exact serial path available. */
+    status = NSAT_OK;
+cleanup:
+    for (unsigned i = 0; i < prepared; ++i) free_chart_worker(w, workers + i, levels);
+    nsat_free(&w->budget, workers, requested * sizeof(*workers));
+    if (w->budget.status != NSAT_OK) return w->budget.status;
+    if (status == NSAT_OK)
+        return search(w, slots, order, scratch, remaining, frames, frequency, chosen, terms, pricing);
+    return status;
+}
+#else
+static bool chart_claim(ChartWorker *worker, size_t depth)
+{
+    (void)worker;
+    (void)depth;
+    return true;
+}
+
+static void chart_closed(ChartWorker *worker, size_t depth)
+{
+    (void)worker;
+    (void)depth;
+}
+#endif
 
 static int *materialize(WeightedCover *w, const size_t *chosen, int terms)
 {
@@ -929,4 +1270,190 @@ IpcWeightedCoverResult ipc_weighted_cover_seed_then_reprice(const NsatCoverInput
                                                             size_t min_branches, unsigned pivots)
 {
     return weighted_cover(q, lower, limits, min_branches, pivots, true);
+}
+
+static bool chart_progress_poll(void *context)
+{
+    WeightedCover *w = context;
+    if (w->caller_limits.poll && w->caller_limits.poll(w->caller_limits.context))
+        return true;
+    if (w->budget.stats.work < w->next_probe ||
+        w->next_probe >= w->budget.limits.work) return false;
+    if (w->progress == w->checkpoint_progress) {
+        nsat_stop(&w->budget, NSAT_UNKNOWN, NSAT_STOP_WORK);
+        return true;
+    }
+    w->checkpoint_progress = w->progress;
+    ++w->extensions;
+    uint64_t left = w->budget.limits.work - w->next_probe;
+    w->next_probe += left < w->probe_work ? left : w->probe_work;
+    return false;
+}
+
+static IpcChartCoverResult chart_cover(int rows, int columns,
+    const unsigned long long *masks, int *solution, NsatLimits limits,
+    size_t min_branches, unsigned pivots, uint64_t probe_work, unsigned threads)
+{
+    IpcChartCoverResult result = {.status = NSAT_ERROR};
+    if (rows <= 0 || columns <= 0 || !masks || !solution) return result;
+    if (probe_work && (!limits.work || probe_work > limits.work)) return result;
+    int incumbent = 0;
+    for (int c = 0; c < columns; ++c) {
+        if (solution[c] != 0 && solution[c] != 1) return result;
+        incumbent += solution[c];
+    }
+    if (!incumbent) return result;
+    result.terms = incumbent;
+    NsatCoverInput input = {.positives = (size_t)rows};
+    WeightedCover w = {.budget = {.limits = limits}, .input = &input,
+        .mask_words = ((size_t)rows - 1) / 64 + 1,
+        .result = {.maximal = (size_t)columns}, .caller_limits = limits,
+        .probe_work = probe_work, .next_probe = probe_work};
+    if (probe_work && probe_work < limits.work) {
+        w.budget.limits.poll = chart_progress_poll;
+        w.budget.limits.context = &w;
+    }
+    Repricing pricing = {.min_branches = min_branches, .pivots = pivots};
+    size_t levels = (size_t)incumbent;
+    size_t *order = NULL, *scratch = NULL, *frequency = NULL, *chosen = NULL;
+    uint64_t *remaining = NULL, *weights = NULL;
+    SearchFrame *frames = NULL;
+    result.status = NSAT_UNKNOWN;
+    w.columns = allocate_matrix(&w.budget, columns, w.mask_words, sizeof(*w.columns));
+    remaining = allocate_matrix(&w.budget, levels, w.mask_words, sizeof(*remaining));
+    if (!w.columns || !remaining) goto done;
+    for (size_t c = 0; c < (size_t)columns; ++c) {
+        if (!nsat_work(&w.budget, w.mask_words)) goto done;
+        for (size_t word = 0; word < w.mask_words; ++word)
+            w.columns[c * w.mask_words + word] = masks[c * w.mask_words + word];
+        if (rows % 64)
+            w.columns[(c + 1) * w.mask_words - 1] &= (UINT64_C(1) << (rows % 64)) - 1;
+    }
+    all_rows(&w, remaining);
+    for (size_t c = 0; c < (size_t)columns; ++c) {
+        if (!nsat_work(&w.budget, w.mask_words)) goto done;
+        if (!solution[c]) continue;
+        for (size_t word = 0; word < w.mask_words; ++word)
+            remaining[word] &= ~column(&w, c)[word];
+    }
+    for (size_t word = 0; word < w.mask_words; ++word) {
+        if (remaining[word]) {
+            nsat_stop(&w.budget, NSAT_ERROR, NSAT_STOP_INPUT);
+            goto done;
+        }
+    }
+    if (incumbent == 1) {
+        result.status = NSAT_UNSAT;
+        goto done;
+    }
+
+    weights = nsat_alloc(&w.budget, w.mask_words * 64, sizeof(*weights));
+    w.weight_bytes = nsat_alloc(&w.budget, w.mask_words * 8, sizeof(*w.weight_bytes));
+    if (!weights || !w.weight_bytes ||
+        !nsat_copy(&w.budget, weights, NULL, w.mask_words * 64 * sizeof(*weights)) ||
+        !price_weights(&w, weights, pivots ? &pricing.root : NULL)) goto done;
+    for (size_t byte = 0; byte < w.mask_words * 8; ++byte) {
+        if (!nsat_work(&w.budget, 256)) goto done;
+        w.weight_bytes[byte][0] = 0;
+        for (unsigned bits = 1; bits < 256; ++bits)
+            w.weight_bytes[byte][bits] = w.weight_bytes[byte][bits & (bits - 1)] +
+                weights[byte * 8 + (unsigned)__builtin_ctz(bits)];
+    }
+    order = nsat_alloc(&w.budget, columns, sizeof(*order));
+    scratch = allocate_matrix(&w.budget, levels, columns, sizeof(*scratch));
+    frequency = nsat_alloc(&w.budget, rows, sizeof(*frequency));
+    chosen = nsat_alloc(&w.budget, levels, sizeof(*chosen));
+    frames = nsat_alloc(&w.budget, levels, sizeof(*frames));
+    if (!order || !scratch || !frequency || !chosen || !frames ||
+        !order_columns(&w, order)) goto done;
+    if (pivots && incumbent > 2 && !allocate_repricing(&w, &pricing, levels - 2)) goto done;
+
+    while (incumbent > 1) {
+        int terms = 0;
+        NsatStatus status;
+#if defined(HAVE_PTHREAD)
+        status = parallel_chart_search(&w, incumbent - 1, order, scratch, remaining,
+            frames, frequency, chosen, &terms, &pricing, threads,
+            &result.threads, &result.tasks);
+#else
+        (void)threads;
+        status = search(&w, incumbent - 1, order, scratch, remaining,
+            frames, frequency, chosen, &terms, &pricing);
+#endif
+        if (status == NSAT_UNSAT) {
+            result.status = status;
+            break;
+        }
+        if (status != NSAT_SAT) goto done;
+        if (terms < 1 || terms >= incumbent) {
+            nsat_stop(&w.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+            goto done;
+        }
+        /* Check the witness against every original row before publishing it. */
+        all_rows(&w, remaining);
+        for (int i = 0; i < terms; ++i) {
+            if (!nsat_work(&w.budget, w.mask_words)) goto done;
+            if (chosen[i] >= (size_t)columns) {
+                nsat_stop(&w.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+                goto done;
+            }
+            for (size_t word = 0; word < w.mask_words; ++word)
+                remaining[word] &= ~column(&w, chosen[i])[word];
+        }
+        for (size_t word = 0; word < w.mask_words; ++word) {
+            if (remaining[word]) {
+                nsat_stop(&w.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+                goto done;
+            }
+        }
+        memset(solution, 0, (size_t)columns * sizeof(*solution));
+        incumbent = 0;
+        for (int i = 0; i < terms; ++i) {
+            if (!solution[chosen[i]]) ++incumbent;
+            solution[chosen[i]] = 1;
+        }
+        result.terms = incumbent;
+        ++w.progress;
+    }
+    if (incumbent == 1) result.status = NSAT_UNSAT;
+done:
+    if (w.budget.status != NSAT_OK) result.status = w.budget.status;
+    result.nodes = w.result.nodes;
+    result.repriced = w.result.repriced;
+    result.extensions = w.extensions;
+    nsat_free(&w.budget, frames, levels * sizeof(*frames));
+    nsat_free(&w.budget, chosen, levels * sizeof(*chosen));
+    nsat_free(&w.budget, frequency, (size_t)rows * sizeof(*frequency));
+    nsat_free(&w.budget, scratch, levels * (size_t)columns * sizeof(*scratch));
+    nsat_free(&w.budget, order, (size_t)columns * sizeof(*order));
+    free_repricing(&w, pricing);
+    nsat_free(&w.budget, w.weight_bytes, w.mask_words * 8 * sizeof(*w.weight_bytes));
+    nsat_free(&w.budget, weights, w.mask_words * 64 * sizeof(*weights));
+    nsat_free(&w.budget, remaining, levels * w.mask_words * sizeof(*remaining));
+    nsat_free(&w.budget, w.columns, (size_t)columns * w.mask_words * sizeof(*w.columns));
+    result.stats = w.budget.stats;
+    nsat_release_budget(&w.budget);
+    return result;
+}
+
+IpcChartCoverResult ipc_chart_cover(int rows, int columns,
+    const unsigned long long *masks, int *solution, NsatLimits limits,
+    size_t min_branches, unsigned pivots)
+{
+    return chart_cover(rows, columns, masks, solution, limits, min_branches, pivots, 0, 1);
+}
+
+IpcChartCoverResult ipc_chart_cover_adaptive(int rows, int columns,
+    const unsigned long long *masks, int *solution, NsatLimits limits,
+    size_t min_branches, unsigned pivots, uint64_t probe_work)
+{
+    return chart_cover(rows, columns, masks, solution, limits, min_branches, pivots, probe_work, 1);
+}
+
+IpcChartCoverResult ipc_chart_cover_parallel(int rows, int columns,
+    const unsigned long long *masks, int *solution, NsatLimits limits,
+    size_t min_branches, unsigned pivots, uint64_t probe_work, unsigned threads)
+{
+    return chart_cover(rows, columns, masks, solution, limits,
+        min_branches, pivots, probe_work, threads);
 }
