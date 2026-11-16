@@ -1,135 +1,17 @@
 Version 3.26
-    o Deprecated type = "native" in findmin(). Existing calls warn and
-      still use the native solver, which remains available for testing and
-      benchmarking. Use the default type = "hybrid" for routine minimization.
-    o Consistency-based CCubes searches now independently verify the eligible
-      PI domain and minimum model size, including fuzzy and multivalue cases.
-      Results report certification status and whether PI depth restricts its
-      scope. Bounded proof checks never truncate the existing search on an
-      inconclusive result; the PI-chart backends and lp_solve remain available.
-    o Fixed first.min with sol.cons returning already one-based model indices
-      as though they were zero-based.
-    o Ordinary multivalue minimization can now certify the global minimum
-      number of terms with categorical SAT queries. The independent verifier
-      reconstructs the constraints, checks UNSAT proofs and validates SAT
-      covers against its own care-table copy. Inconclusive checks retain
-      systematic generation and the existing PI-chart fallbacks, including
-      lp_solve. All-minimum enumeration retains its completeness checks.
-    o The SAT verifier retains checked root units between proof steps during
-      smaller-cover and minimum-model certification, reducing repeated work.
-    o Smaller-cover SAT certification now branches on the uncovered truth-table
-      row with the fewest remaining cube slots, updating this choice during
-      search. The policy is automatic and retains independently checked results.
-    o SAT certification now automatically combines anchor exclusions,
-      active-slot pair pruning, constrained-row ordering and positive
-      assignment phases. Minimum-model completeness checks also use checked
-      distance-one shortcuts alongside slot symmetry. No tuning options
-      are required; proof verification and shared resource limits remain.
-    o Parallel warm-pricing proofs for fixed PI charts use up to eight workers,
-      private pricing bases and shared total work/memory allowances. Set
-      QCA_WARM_THREADS to control proof workers independently of other package
-      threads. Exactness and the hybrid lp_solve fallback are preserved.
-    o Fixed PI bit-buffer sizing across word boundaries for binary and
-      multivalue conditions, preventing out-of-bounds writes and missing PIs.
-      Empty negative-row buffers also avoid zero-length variable arrays.
-    o Consistency-based model enumeration now stops when all remaining
-      branches are redundant or cannot satisfy the fit thresholds, replacing
-      the implicit seven-term sol.depth limit. Model sizes are searched in
-      increasing order, retaining larger irredundant models with all.sol = TRUE.
-      Fuzzy model size is no longer capped by positive truth-table row count.
-      Enumeration storage grows with results rather than all combinations.
-    o CCubes now respects a positive pi.depth as a hard conjunction-depth
-      limit regardless of pi.cons. The default pi.depth = 0 retains automatic
-      stopping without a user-imposed depth limit.
-    o assess() now obtains the observed expression fits from the native scorer,
-      reusing parent memberships and the observed refinement calculations.
-      Expression labels are constructed in batches in R. Returned results and
-      the assessment procedure are unchanged.
-    o Faster assess() native calculations using exact dominance by broader
-      expressions, separately for each candidate polarity and shuffled
-      assignment. Scores, expression fits and the permutation reference are
-      unchanged.
-    o assess() no longer computes the Hamacher comparison: removed the
-      hamacher and statistic components, the local.p fit column, the p column
-      of polarity, the Hamacher reference and draws, print(hamacher = TRUE)
-      and plot(type = "hamacher").
-    o assess() reports Coincidence: the baseline condition, or its absence,
-      with the highest set coincidence with the candidate (stored for every
-      baseline literal in coincidence).
-    o Simplified assess() to one procedure, removing the experimental method
-      and shuffle arguments and fixing the numerical tolerance internally.
-    o assess() now reports the direct Hamacher comparison p_H in hamacher,
-      rather than its complement; smaller Random and Hamacher values both
-      indicate stronger separation from shuffled candidates.
-    o assess() now uses positive PRI gains weighted by retained raw coverage.
-      Its default output and components are Gain (gain) and the permutation
-      p-value Random (random), replacing Fit gain and Departure. Full shuffled
-      calculations are kept in draws only with keep.permutations = TRUE.
-    o assess() exposes Departure in departure and the supplementary Hamacher
-      score in hamacher; removed the duplicate score alias and top-level
-      fit.p and p from the default result. Profile and separation components
-      remain unchanged.
-    o assess() now prints Fit gain and Departure (1 - fit.p) by default;
-      print(result, hamacher = TRUE) adds the supplementary Hamacher diagnostic.
-    o assess() prints the Fit gain permutation p-value as p_fit alongside
-      Fit gain and Hamacher.
-    o Renamed the experimental departure() function to assess(), including
-      its result class, print and plot methods, and help page.
-    o assess() exposes Fit gain as fit.gain in its results and plot type,
-      with its permutation probability stored as fit.p
-    o assess() now defaults to separate outcome-fit and Hamacher scores,
-      using native calculations across all expressions and shared candidate
-      permutations; printing distinguishes the two scores, with the earlier profile and
-      crisp separation methods still available explicitly
-    o assess() adds native crisp outcome separation, global or
-      within-configuration shuffling, contextual support diagnostics,
-      candidate-specific permutation replay and separation plots
-    o Added experimental assess() for fixed consistency-coverage profiles
-      compared with global candidate permutations, including native batching,
-      reference variability, multiple candidates and diagnostic plots
-    o contribution() accepts multiple candidates, testing each against the
-      remaining conditions, and defaults to testing every supplied condition
-    o contribution() returns observed fits and permutation fits separately,
-      exposes a score component, and prints a compact fit summary
-    o Added contribution() to compare the Jaccard gain from an added condition
-      with within-baseline permutations, using a compiled minimization batch
-    o Added fissChart() and grid plotting for intermediate solutions, with
-      explicit core-term matching and model-specific fit statistics
-    o Fiss charts inherit condition and outcome category labels when their
-      source truth table uses use.labels = TRUE
-    o Added analyticInduction() for Ragin's generalized analytic induction
+    o Faster minimization and prime implicant chart solving. QCA can now
+      verify the smallest solution size earlier in more analyses, including
+      multi-value QCA, using a novel certification system
+    o A positive pi.depth limits the number of conditions in each prime
+      implicant, even when a PI consistency threshold (pi.cons) is set.
+    o findmin() now defaults to type = "hybrid". Use type = "ilp" to send
+      the chart directly to an integer linear programming solver (Gurobi
+      if available, or the embedded lp_solve), while "exact" is deprecated
     o Fixed: bug excluding existing positive observed configurations
       (thanks to Philipp Sekol for the report)
-    o Experimental: browser-worker parallelism for C computations with a
-      compatible pthread-enabled WebR runtime; not yet enabled in DialogQCA
-    o Improved: the calling thread now shares parallel work, with serial
-      completion when helper threads cannot be started
-    o CCubes can certify stopping after one stalled complexity layer.
-      With first.min = TRUE, weighted integer search and native SAT
-      check whether a smaller model can exist.
-      The default checks whether the PI chart is complete before
-      enumerating minimum models. Unresolved searches continue
-      through the applicable systematic depth.
-    o The pi.depth limit applies when filtering prime implicants by
-      consistency (pi.cons > 0).
-    o The former Lagrangian relaxation heuristic is now an exact method:
-      dominance presolve, reduced-cost fixing at the best dual multipliers
-      and a bounded branch-and-bound finish certify optimality in most
-      cases, and any uncertified run is completed by the internal exact
-      set covering solver
-    o Renamed: findmin() argument type = "lagrangian" is now type = "hybrid",
-      reflecting its exact hybrid architecture; same for the minimize()
-      option hybrid = TRUE (formerly lagrangian = TRUE)
-    o The exact hybrid method is now the default in findmin() and CCubes;
-      use type = "conservative" or hybrid = FALSE to select the integer
-      programming backend explicitly
-    o Renamed: findmin() argument type = "exact" is now
-      type = "conservative", since all available methods are exact
-    o New: type "internal" to solve the set covering problem using
-      exclusively internal code, independent of both Gurobi and lp_solve
-    o Bug fix in R_Realloc() on Windows, crashing findmin()
-      (thanks to Yuki Toyoda for the report)
-    o Improved: faster enumeration of all equal cardinality mmodels
+    o Fixed missing prime implicants in some analyses with many conditions
+      and a crash in findmin() on Windows (thanks to Yuki Toyoda for the
+      Windows report)
     o Fixed: identical models in the intermediate solution are collapsed to
       only one model (thanks to Ingo Rohlfing for the report)
 
