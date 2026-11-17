@@ -139,10 +139,19 @@ done:
     return status;
 }
 
-static bool add_clause(NsatVerifier *checker, NsatSolver *solver, const int *lits, size_t count)
-{
-    return nsat_verify_add_original(checker, lits, count) == NSAT_OK &&
-        nsat_add_original(solver, lits, count) == NSAT_OK;
+/* These encoders already supply the same originals to both consumers. Seal
+ * the index first so its growth never overlaps preallocated solver arrays. */
+static bool load_originals(NsatVerifier *checker, NsatSolver *solver) {
+    if (nsat_verify_seal_originals(checker) != NSAT_OK ||
+        nsat_reserve_originals(solver, checker) != NSAT_OK) return false;
+    const NsatClauseId clauses = nsat_verify_original_count(checker);
+    for (NsatClauseId i = 0; i < clauses; ++i) {
+        const int *lits;
+        size_t count;
+        if (!nsat_verify_clause(checker, i + 1, &lits, &count) ||
+            nsat_add_original(solver, lits, count) != NSAT_OK) return false;
+    }
+    return true;
 }
 
 /*
@@ -170,7 +179,7 @@ static bool anchor_complete(const QcaCertification *table, int row, const int *c
         size_t count = 0;
         for (int c = 0; c < width; ++c)
             if (table->off[(size_t)c * table->negatives + r] != anchor[c]) lits[count++] = c + 1;
-        if (!add_clause(checker, solver, lits, count)) goto done;
+        if (nsat_verify_add_original(checker, lits, count) != NSAT_OK) goto done;
     }
     for (int pi = 0; pi < columns; ++pi) {
         if (!nsat_work(&budget, 1)) goto done;
@@ -184,9 +193,9 @@ static bool anchor_complete(const QcaCertification *table, int row, const int *c
             if (literal - 1 != anchor[c]) break;
             lits[count++] = -(c + 1);
         }
-        if (c == width && !add_clause(checker, solver, lits, count)) goto done;
+        if (c == width && nsat_verify_add_original(checker, lits, count) != NSAT_OK) goto done;
     }
-    complete = nsat_verify_seal_originals(checker) == NSAT_OK &&
+    complete = load_originals(checker, solver) &&
         nsat_solve(solver, checker, (NsatSearchOptions){0}) == NSAT_UNSAT;
 done:
     nsat_destroy(solver);
@@ -218,14 +227,12 @@ bool qca_check_complete_chart(QcaCertification *table, const int *chart,
  * is covered and slot zero covers an ON row. The remaining slots are free
  * to use any legal terms, including terms already present in the chart. */
 static bool add_minimum_cover(const QcaCertification *table, int minimum, int literal_vars,
-                              NsatVerifier *checker, NsatSolver *solver, int *lits,
-                              NsatBudget *budget)
-{
+                              NsatVerifier *checker, int *lits, NsatBudget *budget) {
     int width = table->conditions, positives = table->positives;
     for (int t = 0; t < minimum; ++t) {
         for (int c = 0; c < width; ++c) {
             int zero = nsat_cover_selector(width, t, c, 1);
-            if (!add_clause(checker, solver, (int[]){-zero, -(zero + 1)}, 2))
+            if (nsat_verify_add_original(checker, (int[]){-zero, -(zero + 1)}, 2) != NSAT_OK)
                 return false;
         }
         for (int r = 0; r < table->negatives; ++r) {
@@ -235,7 +242,7 @@ static bool add_minimum_cover(const QcaCertification *table, int minimum, int li
                 if (value != 0 && value != 1) return false;
                 lits[c] = nsat_cover_selector(width, t, c, 2 - value);
             }
-            if (!add_clause(checker, solver, lits, width)) return false;
+            if (nsat_verify_add_original(checker, lits, width) != NSAT_OK) return false;
         }
     }
     for (int r = 0; r < positives; ++r) {
@@ -245,16 +252,16 @@ static bool add_minimum_cover(const QcaCertification *table, int minimum, int li
                 int value = table->on[(size_t)c * positives + r];
                 if (value != 0 && value != 1) return false;
                 int opposite = nsat_cover_selector(width, t, c, 2 - value);
-                if (!add_clause(checker, solver, (int[]){-(first + t), -opposite}, 2))
+                if (nsat_verify_add_original(checker, (int[]){-(first + t), -opposite}, 2) != NSAT_OK)
                     return false;
             }
             lits[t] = first + t;
         }
-        if (!add_clause(checker, solver, lits, minimum)) return false;
+        if (nsat_verify_add_original(checker, lits, minimum) != NSAT_OK) return false;
     }
     if (!nsat_work(budget, (uint64_t)positives)) return false;
     for (int r = 0; r < positives; ++r) lits[r] = literal_vars + r * minimum + 1;
-    return add_clause(checker, solver, lits, positives);
+    return nsat_verify_add_original(checker, lits, positives) == NSAT_OK;
 }
 
 /* Order first assigned ON rows among slots 1..minimum-1. Slot zero keeps
@@ -264,9 +271,7 @@ static bool add_minimum_cover(const QcaCertification *table, int minimum, int li
  * Unused slots follow them. Thus these original encoding constraints
  * preserve satisfiability; they are not RUP consequences of the old CNF. */
 static bool order_minimum_slots(const QcaCertification *table, int minimum,
-                                int literal_vars, NsatVerifier *checker,
-                                NsatSolver *solver)
-{
+                                int literal_vars, NsatVerifier *checker) {
     if (minimum < 3) return true;
     const int prefixes = minimum - 2;
     const int first_prefix = literal_vars + table->positives * minimum + 1;
@@ -275,24 +280,24 @@ static bool order_minimum_slots(const QcaCertification *table, int minimum,
             int assigned = literal_vars + r * minimum + t + 1;
             if (t < minimum - 1) {
                 int used = first_prefix + r * prefixes + t - 1;
-                if (!add_clause(checker, solver, (int[]){-assigned, used}, 2))
+                if (nsat_verify_add_original(checker, (int[]){-assigned, used}, 2) != NSAT_OK)
                     return false;
                 if (!r) {
-                    if (!add_clause(checker, solver, (int[]){-used, assigned}, 2))
+                    if (nsat_verify_add_original(checker, (int[]){-used, assigned}, 2) != NSAT_OK)
                         return false;
                 } else {
                     int previous = used - prefixes;
-                    if (!add_clause(checker, solver, (int[]){-previous, used}, 2) ||
-                        !add_clause(checker, solver, (int[]){-used, previous, assigned}, 3))
+                    if (nsat_verify_add_original(checker, (int[]){-previous, used}, 2) != NSAT_OK ||
+                        nsat_verify_add_original(checker, (int[]){-used, previous, assigned}, 3) != NSAT_OK)
                         return false;
                 }
             }
             if (t > 1) {
                 if (!r) {
-                    if (!add_clause(checker, solver, (int[]){-assigned}, 1)) return false;
+                    if (nsat_verify_add_original(checker, (int[]){-assigned}, 1) != NSAT_OK) return false;
                 } else {
                     int earlier = first_prefix + (r - 1) * prefixes + t - 2;
-                    if (!add_clause(checker, solver, (int[]){-assigned, earlier}, 2))
+                    if (nsat_verify_add_original(checker, (int[]){-assigned, earlier}, 2) != NSAT_OK)
                         return false;
                 }
             }
@@ -337,8 +342,29 @@ done:
     return status;
 }
 
+static const uint64_t slot_zero_work_limit = UINT64_C(4000000);
+
+static bool minimum_slot_zero_complete(QcaCertification *table, const int *chart,
+                                       const int *implicants, int columns)
+{
+    if (table->slot_zero_work >= slot_zero_work_limit) return false;
+
+    /* Share the memory ceiling, but keep optional work and stops out of
+     * the main certification allowance. All probe allocations are freed
+     * before the fallback can run. */
+    QcaCertification probe = *table;
+    probe.resources.work = table->slot_zero_work;
+    probe.resources.work_limit = slot_zero_work_limit;
+    probe.resources.stop = NSAT_STOP_NONE;
+    bool complete = qca_check_complete_chart(&probe, chart, implicants, columns);
+    table->slot_zero_work = probe.resources.work;
+    table->resources.peak_memory = probe.resources.peak_memory;
+    return complete;
+}
+
 static bool check_minimum_models(QcaCertification *table, const int *implicants,
-                                 int columns, int minimum, bool ordering, bool distance)
+                                 int columns, int minimum, bool ordering, bool distance,
+                                 const int *chart)
 {
     if (!available(table) || columns <= 0 || minimum < 1 || minimum > table->positives)
         return false;
@@ -354,6 +380,9 @@ static bool check_minimum_models(QcaCertification *table, const int *implicants,
         if (extra > (size_t)(INT_MAX - variables)) return false;
         variables += (int)extra;
     }
+    if (chart && minimum > 1 && minimum_slot_zero_complete(table, chart, implicants, columns))
+        return true;
+
     const size_t capacity = width > positives ? (size_t)width : (size_t)positives;
     NsatLimits limits = {.shared = &table->resources};
     NsatBudget budget = {.limits = limits};
@@ -362,8 +391,9 @@ static bool check_minimum_models(QcaCertification *table, const int *implicants,
     NsatSolver *solver = NULL;
     bool complete = false;
     if (!lits || nsat_verify_init_cnf(&checker, variables, limits) != NSAT_OK ||
-        nsat_init(&solver, variables, limits) != NSAT_OK ||
-        !add_minimum_cover(table, minimum, literal_vars, checker, solver, lits, &budget))
+        nsat_init(&solver, variables, limits) != NSAT_OK)
+        goto done;
+    if (!add_minimum_cover(table, minimum, literal_vars, checker, lits, &budget))
         goto done;
 
     /* A missing PI contains no known PI as a subterm. Conversely, a legal
@@ -378,11 +408,11 @@ static bool check_minimum_models(QcaCertification *table, const int *implicants,
             if (value != 1 && value != 2) goto done;
             lits[count++] = -nsat_cover_selector(width, 0, c, value);
         }
-        if (!add_clause(checker, solver, lits, count)) goto done;
+        if (nsat_verify_add_original(checker, lits, count) != NSAT_OK) goto done;
     }
-    if (ordering && !order_minimum_slots(table, minimum, literal_vars, checker, solver))
+    if (ordering && !order_minimum_slots(table, minimum, literal_vars, checker))
         goto done;
-    complete = nsat_verify_seal_originals(checker) == NSAT_OK &&
+    complete = load_originals(checker, solver) &&
         (!distance || minimum_distance_one(table, minimum, solver, checker, limits) == NSAT_OK) &&
         nsat_solve(solver, checker, (NsatSearchOptions){.cache_root_units = true}) == NSAT_UNSAT;
 done:
@@ -392,8 +422,8 @@ done:
     return complete;
 }
 
-bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
-                              int columns, int minimum)
+bool qca_check_minimum_models(QcaCertification *table, const int *chart,
+                              const int *implicants, int columns, int minimum)
 {
-    return check_minimum_models(table, implicants, columns, minimum, true, true);
+    return check_minimum_models(table, implicants, columns, minimum, true, true, chart);
 }

@@ -1025,7 +1025,8 @@ void CCubes(const int p_tt[],          // the truth table
                         checked_columns = foundPI;
                         Rboolean minimum_proved =
                             solmin == 1 || certificate.verified_minimum == solmin;
-                        if (!minimum_models || !minimum_proved)
+                        const Rboolean check_chart = !minimum_models || !minimum_proved;
+                        if (check_chart)
                             stop_searching = qca_check_complete_chart(
                                 &certificate, p_pichart, p_implicants, foundPI
                             );
@@ -1039,7 +1040,8 @@ void CCubes(const int p_tt[],          // the truth table
                             }
                             if (minimum_proved)
                                 stop_searching = qca_check_minimum_models(
-                                    &certificate, p_implicants, foundPI, solmin
+                                    &certificate, check_chart ? NULL : p_pichart,
+                                    p_implicants, foundPI, solmin
                                 );
                         }
                     }

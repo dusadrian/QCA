@@ -85,17 +85,13 @@ static void set_value(NsatSolver *s, int lit, int value)
 }
 
 static void *reserve(NsatBudget *b, void *old, size_t *capacity, size_t used,
-                     size_t additional, size_t width)
-{
+                     size_t additional, size_t width) {
     if (additional <= *capacity - used) return old;
     if (additional > SIZE_MAX - used) {
         nsat_stop(b, NSAT_ERROR, NSAT_STOP_INPUT);
         return NULL;
     }
-    size_t required = used + additional;
-    size_t next = *capacity > SIZE_MAX / 2 ? required : *capacity * 2;
-    if (next < 16) next = 16;
-    if (next < required) next = required;
+    size_t next = nsat_clause_storage_capacity(*capacity, used + additional);
     void *buffer = nsat_alloc(b, next, width);
     if (!buffer) return NULL;
     if (!nsat_copy(b, buffer, old, used * width)) {
@@ -146,6 +142,36 @@ static NsatStatus store_clause(NsatSolver *s, NsatClauseId id,
     s->word_count += count;
     if (count > s->max_width) s->max_width = count;
     return b->status;
+}
+
+NsatStatus nsat_reserve_originals(NsatSolver *s, const NsatVerifier *v) {
+    if (!s) return NSAT_ERROR;
+    NsatBudget *b = &s->budget;
+    if (b->status != NSAT_OK) return b->status;
+    size_t clauses, words;
+    if (s->clauses || s->words || s->started || s->checker ||
+        !nsat_verify_original_storage(v, &clauses, &words) ||
+        s->variables != nsat_verify_variables(v)) {
+        nsat_stop(b, NSAT_ERROR, NSAT_STOP_STATE);
+        return b->status;
+    }
+
+    /* Clause counts grow one at a time. Literal storage may jump straight
+     * to a larger clause's required size, which the checker has recorded. */
+    if (clauses) {
+        size_t capacity = nsat_clause_storage_capacity(0, 1);
+        while (capacity < clauses)
+            capacity = nsat_clause_storage_capacity(capacity, capacity + 1);
+        s->clauses = nsat_alloc(b, capacity, sizeof(*s->clauses));
+        if (!s->clauses) return b->status;
+        s->clause_capacity = capacity;
+    }
+    if (words) {
+        s->words = nsat_alloc(b, words, sizeof(*s->words));
+        if (!s->words) return b->status;
+        s->word_capacity = words;
+    }
+    return NSAT_OK;
 }
 
 NsatStatus nsat_add_original(NsatSolver *s, const int *lits, size_t count)

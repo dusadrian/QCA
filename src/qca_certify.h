@@ -8,6 +8,7 @@ typedef struct {
     int conditions, positives, negatives;
     NsatResources resources;
     int verified_minimum; /* Checked bound with a witness for this table. */
+    uint64_t slot_zero_work; /* Separate allowance for minimum-model probes. */
 } QcaCertification;
 
 /* For binary or categorical equality terms, NSAT_UNSAT rules out every
@@ -20,8 +21,9 @@ bool qca_check_complete_chart(QcaCertification *table, const int *chart,
                               const int *implicants, int columns);
 
 /* Prove that every binary minimum model uses only chart PIs.
- * minimum must already be a global minimum for this table. */
-bool qca_check_minimum_models(QcaCertification *table, const int *implicants,
-                              int columns, int minimum);
+ * minimum must already be a global minimum for this table. If chart is
+ * supplied, first try the cheaper proof that slot zero is impossible. */
+bool qca_check_minimum_models(QcaCertification *table, const int *chart,
+                              const int *implicants, int columns, int minimum);
 
 #endif

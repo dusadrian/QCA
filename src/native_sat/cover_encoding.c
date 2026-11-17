@@ -117,9 +117,13 @@ NsatStatus nsat_cover_load_solver(NsatSolver **out, const NsatCoverInput *q,
     Encoder e = {.solver = *out, .checker = checker, .budget = {.limits = limits}};
     size_t width = q->inputs > q->target ? q->inputs : q->target;
     int *scratch = nsat_alloc(&e.budget, width, sizeof(*scratch));
-    if (scratch && write_target(&e, q, scratch) &&
-        e.emitted != nsat_verify_original_count(checker))
-        nsat_stop(&e.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+    if (scratch) {
+        status = nsat_reserve_originals(e.solver, checker);
+        if (status != NSAT_OK)
+            nsat_stop(&e.budget, status, nsat_stats(e.solver).stop);
+        else if (write_target(&e, q, scratch) && e.emitted != nsat_verify_original_count(checker))
+            nsat_stop(&e.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+    }
     nsat_free(&e.budget, scratch, width * sizeof(*scratch));
     *stop = e.budget.stats.stop;
     return e.budget.status;
@@ -236,9 +240,14 @@ NsatStatus nsat_multivalue_load_solver(NsatSolver **out, const NsatMultivalueInp
     e.solver = *out;
     width = values > q->target ? values : q->target;
     scratch = nsat_alloc(&e.budget, width, sizeof(*scratch));
-    if (scratch && write_multivalue(&e, q, (int)values, scratch) &&
-        e.emitted != nsat_verify_original_count(checker))
-        nsat_stop(&e.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+    if (scratch) {
+        status = nsat_reserve_originals(e.solver, checker);
+        if (status != NSAT_OK)
+            nsat_stop(&e.budget, status, nsat_stats(e.solver).stop);
+        else if (write_multivalue(&e, q, (int)values, scratch) &&
+                 e.emitted != nsat_verify_original_count(checker))
+            nsat_stop(&e.budget, NSAT_ERROR, NSAT_STOP_PROOF);
+    }
     goto done;
 invalid:
     nsat_stop(&e.budget, NSAT_ERROR, NSAT_STOP_INPUT);

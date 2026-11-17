@@ -55,6 +55,13 @@ static inline bool nsat_mul(size_t a, size_t b, size_t *out)
     return true;
 }
 
+static inline size_t nsat_clause_storage_capacity(size_t capacity, size_t required) {
+    if (required <= capacity) return capacity;
+    size_t next = capacity > SIZE_MAX / 2 ? required : 2 * capacity;
+    if (next < 16) next = 16;
+    return next < required ? required : next;
+}
+
 /* Optional scratch space must leave the mandatory allocation path usable. */
 static inline size_t nsat_memory_available(const NsatBudget *b)
 {
