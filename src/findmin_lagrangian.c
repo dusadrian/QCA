@@ -9,6 +9,7 @@
 #include "findmin_lagrangian.h"
 #include "qca_threads.h"
 #include "scp_solver.h"
+#include "scp_solver/scp_root_bound.h"
 
 #include <R_ext/RS.h>
 #include <R_ext/Utils.h>
@@ -1712,7 +1713,7 @@ static int polish_choose_row(
     int slots_left
 ) {
     /* bound: every column adds at most max_cover_static newly covered rows */
-    if (uncovered > slots_left * search->max_cover_static) return -1;
+    if (uncovered > (int64_t)slots_left * search->max_cover_static) return -1;
 
     int best_row = -1;
     int best_count = INT_MAX;
@@ -1881,7 +1882,7 @@ static bool polish_search_rec_bits(
     int uncovered = lagr_popcount64(uncovered_mask);
     int slots_left = search->target - depth;
 
-    if (uncovered > slots_left * search->max_cover_static) return false;
+    if (uncovered > (int64_t)slots_left * search->max_cover_static) return false;
 
     /* MRV row choice: fewest unselected candidates */
     int best_row = -1;
@@ -2007,6 +2008,7 @@ static int lagr_exact_cover_search(
         free(scratch);
         free(cand_buf);
         free(col_mask);
+        if (aborted_out) *aborted_out = 1;
         return 0;
     }
 
@@ -2093,7 +2095,7 @@ static int lagr_exact_cover_search(
 
 /*
 Lagrangian exact finish:
-1. Recompute reduced costs at the best multipliers found (caller passes ls_best/zlb_best).
+1. Verify the root bound and conditional reduced costs at integer scale.
 2. Reduced-cost variable fixing for a target size T:
    - exclude column c when zlb + max(0, rc_c) > T (cannot be in any cover of cost <= T)
    - force column c when rc_c < 0 and zlb - rc_c > T (must be in every such cover)
@@ -2115,8 +2117,7 @@ static int lagr_build_core(
     const int *rowsCoveredCount,
     int **colsCovering,
     int *colsCoveringCount,
-    const double *ls_best,
-    double zlb_best,
+    const QcaRootBound *proof,
     int target,
     unsigned char *allowed,      /* cols scratch, filled */
     int *forced,                 /* cols scratch, filled */
@@ -2124,18 +2125,15 @@ static int lagr_build_core(
     int ***core_covering_out,
     int **core_counts_out
 ) {
-    const double FIXTOL = 1e-7;
-
     int forced_len = 0;
     int core_count = 0;
     for (int c = 0; c < cols; ++c) {
-        double rc_c = ls_best[c];
-        if (rowsCoveredCount[c] <= 0 || zlb_best + (rc_c > 0.0 ? rc_c : 0.0) > (double)target + FIXTOL) {
+        if (rowsCoveredCount[c] <= 0 || qca_root_excludes(proof, c, target)) {
             allowed[c] = 0;
         } else {
             allowed[c] = 1;
             ++core_count;
-            if (rc_c < 0.0 && zlb_best - rc_c > (double)target + FIXTOL) {
+            if (qca_root_requires(proof, c, target)) {
                 forced[forced_len++] = c;
             }
         }
@@ -2257,12 +2255,12 @@ static void lagr_exact_finish(
     int *colsCoveringCount,
     const double *weights,
     const double *ls_best,
-    double zlb_best,
+    const QcaRootBound *proof,
     long node_limit,
     int core_cap,
     int *solution,
     int *solmin,
-    double *bestLB_io,
+    int *bestLB_io,
     int *proved_optimal_io,
     int max_pool,
     int **pool_solutions,
@@ -2299,7 +2297,7 @@ static void lagr_exact_finish(
         int target = UB - 1;
         int improved = 0;
 
-        while (target >= 1 && (!bestLB_io || (double)target >= *bestLB_io - EPS)) {
+        while (target >= 1 && (!bestLB_io || target >= *bestLB_io)) {
             int forced_len = 0;
             int **core_covering = NULL;
             int *core_counts = NULL;
@@ -2308,7 +2306,7 @@ static void lagr_exact_finish(
                 rows, cols,
                 rowsCoveredCount,
                 colsCovering, colsCoveringCount,
-                ls_best, zlb_best,
+                proof,
                 target,
                 allowed, forced, &forced_len,
                 NULL, NULL
@@ -2316,7 +2314,7 @@ static void lagr_exact_finish(
 
             if (forced_len > target) {
                 /* more must-have columns than slots: size <= target impossible */
-                if (bestLB_io && (double)(target + 1) > *bestLB_io) *bestLB_io = (double)(target + 1);
+                if (bestLB_io && (target + 1) > *bestLB_io) *bestLB_io = target + 1;
                 if (target == UB - 1) proved = 1;
                 break;
             }
@@ -2330,7 +2328,7 @@ static void lagr_exact_finish(
                 rows, cols,
                 rowsCoveredCount,
                 colsCovering, colsCoveringCount,
-                ls_best, zlb_best,
+                proof,
                 target,
                 allowed, forced, &forced_len,
                 &core_covering, &core_counts
@@ -2355,8 +2353,8 @@ static void lagr_exact_finish(
 
                 if (cut_lb > target) {
                     lagr_free_core(core_covering, core_counts, rows);
-                    if (bestLB_io && (double)(target + 1) > *bestLB_io) {
-                        *bestLB_io = (double)(target + 1);
+                    if (bestLB_io && (target + 1) > *bestLB_io) {
+                        *bestLB_io = target + 1;
                     }
                     if (target == UB - 1) proved = 1;
                     break;
@@ -2392,7 +2390,7 @@ static void lagr_exact_finish(
             if (aborted) break; /* inconclusive: give up on this and lower targets */
 
             /* exhaustive failure: no cover of size <= target exists */
-            if (bestLB_io && (double)(target + 1) > *bestLB_io) *bestLB_io = (double)(target + 1);
+            if (bestLB_io && (target + 1) > *bestLB_io) *bestLB_io = target + 1;
             if (target == UB - 1) proved = 1;
             break;
         }
@@ -2401,7 +2399,7 @@ static void lagr_exact_finish(
     }
 
     if (proved) {
-        if (bestLB_io && (double)UB > *bestLB_io) *bestLB_io = (double)UB;
+        if (bestLB_io && UB > *bestLB_io) *bestLB_io = UB;
         if (proved_optimal_io) *proved_optimal_io = 1;
     }
 
@@ -2432,7 +2430,7 @@ static void lagr_exact_finish(
                 rows, cols,
                 rowsCoveredCount,
                 colsCovering, colsCoveringCount,
-                ls_best, zlb_best,
+                proof,
                 target,
                 allowed, forced, &forced_len,
                 NULL, NULL
@@ -2444,7 +2442,7 @@ static void lagr_exact_finish(
                 rows, cols,
                 rowsCoveredCount,
                 colsCovering, colsCoveringCount,
-                ls_best, zlb_best,
+                proof,
                 target,
                 allowed, forced, &forced_len,
                 &core_covering, &core_counts
@@ -2610,13 +2608,11 @@ static int lagr_exact_complete(
     int cols,
     const int *rowsCoveredCount,
     const double *ls_best,
-    double zlb_best,
+    const QcaRootBound *proof,
     int *solution,
     int *solmin,
-    double *bestLB_io
+    int *bestLB_io
 ) {
-    const double FIXTOL = 1e-7;
-
     if (!pichart || !solution || !solmin || *solmin <= 0 || rows <= 0 || cols <= 0) {
         return 0;
     }
@@ -2633,7 +2629,7 @@ static int lagr_exact_complete(
     while (UB > 1) {
         int target = UB - 1;
 
-        if (bestLB_io && (double)target < *bestLB_io - EPS) {
+        if (bestLB_io && target < *bestLB_io) {
             proved = 1; /* below the proven lower bound: nothing can exist */
             break;
         }
@@ -2641,9 +2637,8 @@ static int lagr_exact_complete(
         /* core columns for this target */
         int ncore = 0;
         for (int c = 0; c < cols; ++c) {
-            double rc_c = ls_best ? ls_best[c] : 0.0;
             if (rowsCoveredCount && rowsCoveredCount[c] <= 0) continue;
-            if (ls_best && zlb_best + (rc_c > 0.0 ? rc_c : 0.0) > (double)target + FIXTOL) continue;
+            if (qca_root_excludes(proof, c, target)) continue;
             col_map[ncore++] = c;
         }
 
@@ -2772,8 +2767,8 @@ static int lagr_exact_complete(
 
     if (UB <= 1) proved = 1; /* a single-column cover is trivially optimal */
 
-    if (proved && bestLB_io && (double)UB > *bestLB_io) {
-        *bestLB_io = (double)UB;
+    if (proved && bestLB_io && UB > *bestLB_io) {
+        *bestLB_io = UB;
     }
 
     free(col_map);
@@ -2932,7 +2927,8 @@ static void solve_scp_lagrangian_config(
     int *solution,
     int *solmin,
     double *ls_out, /* optional: reduced costs at the best multipliers */
-    double *row_dual_out
+    double *row_dual_out,
+    QcaRootBound *proof
 ) {
     if (solmin) *solmin = -1;
     lagr_stats_begin(rows, cols, 0);
@@ -3226,7 +3222,7 @@ static void solve_scp_lagrangian_config(
         }
     }
 
-    double bestLB = -DBL_MAX;
+    double best_estimate = -DBL_MAX;
     for (int it = 0; it < max_iter; ++it) {
         iterations = it + 1;
         double ZLB = compute_reduced_and_lb(
@@ -3247,8 +3243,8 @@ static void solve_scp_lagrangian_config(
 
         double LBint = ceil(ZLB - 1e-12);
 
-        if (LBint > bestLB + EPS) {
-            bestLB = LBint;
+        if (LBint > best_estimate + EPS) {
+            best_estimate = LBint;
             stuck_iter = 0; /* reset halving on improvement */
         } /* else no improvement */
 
@@ -3373,8 +3369,7 @@ static void solve_scp_lagrangian_config(
         }
 
         if (bestUB <= LBint + EPS) {
-            stop_reason = LAGR_STOP_OPTIMAL;
-            break; /* proved optimal (within epsilon) */
+            break; /* verify the proposed bound before accepting optimality */
         }
 
         int used_subgradient_update = 0;
@@ -3540,13 +3535,16 @@ static void solve_scp_lagrangian_config(
         }
     }
 
+    int bestLB = qca_verify_root_bound(proof, rows, cols, colsCovering, colsCoveringCount, t_best);
+    if (bestLB >= best_sol_size) stop_reason = LAGR_STOP_OPTIMAL;
+
     if (
         cfg->polish_enabled &&
         best_sol_size > 1 &&
         stop_reason != LAGR_STOP_OPTIMAL
     ) {
         /* reduced costs at the best multipliers found */
-        double zlb_best = compute_reduced_and_lb(
+        compute_reduced_and_lb(
             rows,
             cols,
             rowsCovered,
@@ -3567,7 +3565,7 @@ static void solve_scp_lagrangian_config(
             colsCoveringCount,
             weights,
             ls,
-            zlb_best,
+            proof,
             cfg->polish_node_limit,
             cfg->polish_core_cap,
             solution,
@@ -3710,6 +3708,8 @@ static void solvePIchart_lagrangian_level(
     double *candidate_scores = NULL;
     double *candidate_dual = NULL;
     double scores_zlb = -DBL_MAX;
+    QcaRootBound proof = {.cost = calloc((size_t)foundPI, sizeof(int64_t))};
+    QcaRootBound candidate_proof = {0};
     int *candidate = NULL;
 
     if (need_scores && !scores) {
@@ -3731,7 +3731,8 @@ static void solvePIchart_lagrangian_level(
         solution,
         solmin,
         scores,
-        row_dual_out
+        row_dual_out,
+        &proof
     );
 
     LagrangianStats merged_stats = *lagrangian_last_stats();
@@ -3760,6 +3761,7 @@ static void solvePIchart_lagrangian_level(
             goto completion;
         }
 
+        candidate_proof.cost = calloc((size_t)foundPI, sizeof(int64_t));
         candidate = (int*)malloc((size_t)foundPI * sizeof(int));
         if (need_scores) {
             candidate_scores = (double*)malloc((size_t)foundPI * sizeof(double));
@@ -3788,12 +3790,14 @@ static void solvePIchart_lagrangian_level(
                 candidate,
                 &candidate_solmin,
                 candidate_scores,
-                candidate_dual
+                candidate_dual,
+                &candidate_proof
             );
 
             const LagrangianStats *candidate_stats = lagrangian_last_stats();
             total_iterations += candidate_stats->iterations;
 
+            if (candidate_solmin <= 0) continue;
             if (candidate_stats->best_lb > merged_stats.best_lb) {
                 merged_stats.best_lb = candidate_stats->best_lb;
                 merged_stats.last_zlb = candidate_stats->last_zlb;
@@ -3806,10 +3810,12 @@ static void solvePIchart_lagrangian_level(
                 merged_stats.step_coef = candidate_stats->step_coef;
             }
             if (candidate_scores && candidate_stats->best_zlb > scores_zlb + EPS) {
-                /* keep (zlb, reduced costs) from the same run: the pair
-                   drives the reduced-cost fixing of the completion */
+                /* Keep the integer certificate and branching scores from the same profile. */
                 memcpy(scores, candidate_scores, (size_t)foundPI * sizeof(double));
                 scores_zlb = candidate_stats->best_zlb;
+                QcaRootBound previous = proof;
+                proof = candidate_proof;
+                candidate_proof = previous;
                 if (row_dual_out) memcpy(row_dual_out, candidate_dual, (size_t)ON_minterms * sizeof(double));
             }
 
@@ -3852,7 +3858,7 @@ completion:
             );
 
         if (!certified && scores_zlb > -DBL_MAX) {
-            double bestLB_dbl = (st->best_lb == INT_MIN) ? -DBL_MAX : (double)st->best_lb;
+            int bestLB = st->best_lb;
 
             int proved = lagr_exact_complete(
                 pichart,
@@ -3860,10 +3866,10 @@ completion:
                 foundPI,
                 rowsCoveredCount,
                 scores,
-                scores_zlb,
+                &proof,
                 solution,
                 solmin,
-                &bestLB_dbl
+                &bestLB
             );
 
             if (proved) {
@@ -3895,14 +3901,7 @@ completion:
 
             for (int c = 0; c < foundPI; ++c) {
                 int allowed = rowsCoveredCount[c] > 0;
-                if (
-                    allowed &&
-                    scores &&
-                    scores_zlb > -DBL_MAX &&
-                    target >= 0 &&
-                    scores_zlb + (scores[c] > 0.0 ? scores[c] : 0.0) >
-                        (double)target + 1e-7
-                ) {
+                if (allowed && target >= 0 && qca_root_excludes(&proof, c, target)) {
                     allowed = 0;
                 }
                 improving_core_out[c] = (unsigned char)allowed;
@@ -3916,6 +3915,8 @@ completion:
 
     free(candidate);
     free(candidate_scores);
+    free(proof.cost);
+    free(candidate_proof.cost);
     free(candidate_dual);
     free(scores);
     free_adjacency(

@@ -85,7 +85,7 @@ void get_noflevels(
     int ttrows
 );
 
-void get_decimals(
+void get_row_codes(
     const int posrows,
     const int negrows,
     const int k,
@@ -94,7 +94,7 @@ void get_decimals(
     const int posmat[],
     const int negmat[],
     const int tempk[],
-    const int mbase[]
+    const int noflevels[]
 );
 
 void get_uniques(

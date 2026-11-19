@@ -188,6 +188,7 @@ typedef struct {
     QCAConsistentBounds bounds;
     unsigned int foundPI;
     int maxk;
+    Rboolean allsol;
     double maxcomb;
     int **solutions;
     int *nr, *nc;
@@ -369,9 +370,9 @@ static SEXP search_consistent_models(void *data)
             R_Free(tempk);
         }
 
-        // Every larger model has a prefix at this size. Stop only when all
-        // such branches are redundant or cannot meet the fit thresholds.
-        if (!larger_possible) break;
+        // This size is complete. Larger irredundant models are requested
+        // only by all.sol and need at least one viable prefix at this size.
+        if ((!search->allsol && solfound > 0) || !larger_possible) break;
         prevfound = solfound;
         
         k += 1;
@@ -446,7 +447,7 @@ void find_consistent_models(
             .indices = indx, .fuzzy = p_fuzzy, .conditions = nconds, .cases = nrdata,
             .consistency = solcons, .coverage = solcov
         },
-        .foundPI = foundPI, .maxk = maxk, .maxcomb = maxcomb,
+        .foundPI = foundPI, .maxk = maxk, .allsol = allsol, .maxcomb = maxcomb,
         .solutions = solutions, .nr = nr, .nc = nc
     };
     R_ExecWithCleanup(search_consistent_models, &search, free_consistent_search, &search);

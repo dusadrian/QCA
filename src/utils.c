@@ -358,7 +358,21 @@ void get_noflevels(
     return;
 }
 
-void get_decimals(
+static int matching_positive(
+    const int posmat[], int posrows, int count, const int row[], int stride,
+    const int tempk[], int k
+) {
+    for (int r = 0; r < count; r++) {
+        int c = 0;
+        while (c < k && row[(size_t)tempk[c] * stride] == posmat[(size_t)tempk[c] * posrows + r]) {
+            c++;
+        }
+        if (c == k) return r;
+    }
+    return -1;
+}
+
+void get_row_codes(
     const int posrows,
     const int negrows,
     const int k,
@@ -367,8 +381,28 @@ void get_decimals(
     const int posmat[],
     const int negmat[],
     const int tempk[],
-    const int mbase[]
+    const int noflevels[]
 ) {
+    int mbase[k];
+    int product = 1;
+    for (int c = 0; c < k; c++) {
+        int levels = noflevels[tempk[c]];
+        if (product > INT_MAX / levels) {
+            /* Only equality with a positive projection matters. Use its first
+             * positive row as the code when a mixed-radix code would overflow. */
+            for (int r = 0; r < posrows; r++) {
+                int match = matching_positive(posmat, posrows, r, posmat + r, posrows, tempk, k);
+                decpos[r] = match < 0 ? r : match;
+            }
+            for (int r = 0; r < negrows; r++) {
+                decneg[r] = matching_positive(posmat, posrows, posrows, negmat + r, negrows, tempk, k);
+            }
+            return;
+        }
+        mbase[c] = product;
+        product *= levels;
+    }
+
     for (int r = 0; r < posrows; r++) {
         decpos[r] = 0;
         for (int c = 0; c < k; c++) {

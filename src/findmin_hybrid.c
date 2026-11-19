@@ -527,10 +527,7 @@ static int solve_scp_from_int_matrix(
         include_column[col] = 1;
     }
 
-    if (
-        lagr_lb > -1e307 &&
-        (double)incumbent_size <= ceil(lagr_lb - 1e-12) + 1e-12
-    ) {
+    if (lagr_lb >= incumbent_size) {
         for (int i = 0; i < incumbent_size; ++i) {
             solution[incumbent_indices[i]] = 1;
         }
@@ -624,9 +621,7 @@ static int solve_scp_from_int_matrix(
             .warm_pricing = strategy == -1 || strategy >= 3
         };
         int very_wide = nc >= nr * HYBRID_SCP_VERY_WIDE_RATIO;
-        int lower_bound_size = lagr_lb > -1e307
-            ? (int)ceil(lagr_lb - 1e-12)
-            : 0;
+        int lower_bound_size = lagr_lb > 0 ? (int)lagr_lb : 0;
         int optimality_gap = incumbent_size - lower_bound_size;
         unsigned long long hard_node_limit = optimality_gap <= 1
             ? HYBRID_SCP_GAP_ONE_NODE_LIMIT

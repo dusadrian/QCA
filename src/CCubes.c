@@ -231,14 +231,9 @@ static void qca_pi_generation_range(
 
         int decpos[ctx->posrows];
         int decneg[ctx->negrows > 0 ? ctx->negrows : 1];
-        int mbase[k];
-        mbase[0] = 1;
-        for (int c = 1; c < k; ++c) {
-            mbase[c] = mbase[c - 1] * ctx->noflevels[tempk[c - 1]];
-        }
-        get_decimals(
+        get_row_codes(
             ctx->posrows, ctx->negrows, k, decpos, decneg,
-            ctx->posmat, ctx->negmat, tempk, mbase
+            ctx->posmat, ctx->negmat, tempk, ctx->noflevels
         );
 
         int selected_word_index[k];
@@ -547,21 +542,7 @@ void CCubes(const int p_tt[],          // the truth table
             int decpos[posrows];
             int decneg[negrows > 0 ? negrows : 1];
 
-            // create the vector of multiple bases, useful when calculating the decimal representation
-            // of a particular combination of columns, for each row
-            int mbase[k];
-            mbase[0] = 1; // the first number is _always_ equal to 1, irrespective of the number of levels in a certain column
-
-            // tempk now contains the combinations of columns from the initial data, for a given complexity level k
-
-            // calculate the vector of multiple bases, for example if we have k = 3 (three columns) with 2, 3 and 2 levels
-            // then mbase will be [1, 2, 6] 1, 1 * 2 = 2, 2 * 3 = 6
-            for (int c = 1; c < k; c++) {
-                mbase[c] = mbase[c - 1] * noflevels[tempk[c - 1]];
-            }
-
-            // calculate decimal numbers, using mbase
-            get_decimals(posrows, negrows, k, decpos, decneg, posmat, negmat, tempk, mbase);
+            get_row_codes(posrows, negrows, k, decpos, decneg, posmat, negmat, tempk, noflevels);
 
             int selected_word_index[k];
             int selected_bit_index[k];
