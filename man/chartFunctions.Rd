@@ -7,10 +7,9 @@
 \title{Create and solve a prime implicants chart}
 
 \description{
-\code{makeChart()} shows which prime implicants cover each positive truth
-table configuration. \code{findmin()} tells you the fewest prime implicants
-needed to cover them all. \code{solveChart()} shows which combinations of
-prime implicants do that.
+\code{makeChart()} shows which prime implicants cover each positive truth table
+configuration. \code{findmin()} gives the smallest number of prime implicants
+needed to cover them all. \code{solveChart()} shows which combinations do so.
 }
 
 \usage{
@@ -23,108 +22,73 @@ solveChart(chart, row.dom = FALSE, all.sol = FALSE, depth = NULL, max.comb = 0,
 }
 
 \arguments{
-  \item{primes}{The prime implicants, given as expressions or as a matrix with
-        one prime implicant per row.}
-  \item{configs}{The positive truth table configurations to cover, given as
-        expressions or as a matrix with one configuration per row.}
-  \item{snames}{Condition names. Give them as a vector or as a single string
-        with commas between the names.}
-  \item{mv}{Set to \code{TRUE} to show condition values in multi-value QCA
-        notation in the chart labels.}
-  \item{collapse}{The separator between conditions in a chart label. The
-        default is \code{"*"}. Use \code{""} to join them without a separator.}
-  \item{chart}{A PI chart like the one returned by \code{makeChart()}, with
-        \code{TRUE} and \code{FALSE} entries.}
-  \item{type}{How \code{findmin()} finds the minimum number of prime implicants.
-        Use \code{"hybrid"} (the default) or \code{"ilp"}.}
-  \item{row.dom}{Set to \code{TRUE} to drop a prime implicant if another covers
-        all the same configurations and at least one more.}
-  \item{all.sol}{Set to \code{TRUE} to include larger solutions in which every
-        prime implicant is needed for that solution to cover the chart.}
-  \item{depth}{Accepted for compatibility. It currently has no effect in
-        \code{solveChart()}.}
-  \item{max.comb}{The maximum number of combinations to check when searching
-        for smallest solutions, in billions. The default of \code{0} sets
-        no limit.}
-  \item{first.min}{Set to \code{TRUE} to stop at the first smallest solution
-        when \code{all.sol = FALSE}.}
-  \item{...}{Additional options. For example, \code{solveChart()} passes
-        \code{type} along to \code{findmin()}.}
+  \item{primes}{A string containing prime implicants, separated by commas, or a
+        matrix of implicants.}
+  \item{configs}{A string containing  causal configurations, separated by commas,
+        or a matrix of causal configurations in the implicants space.}
+  \item{snames}{A string containing the sets' names, separated by commas.}
+  \item{mv}{Logical, row and column names in multi-value notation.}
+  \item{collapse}{Scalar character, how to collapse different parts of the row or
+        column names.}
+  \item{chart}{An object of class \code{"QCA_pic"} or a logical matrix.}
+  \item{type}{How \code{findmin()} finds the minimum. The default,
+        \code{"hybrid"}, lets QCA choose how to solve the chart. Use \code{"ilp"}
+        to send it directly to an integer programming solver. Both give the
+        same minimum number of prime implicants.}
+  \item{row.dom}{Set to \code{TRUE} to drop a prime implicant if another
+        covers all the same configurations and at least one more. This can
+        leave out some equally small solutions.}
+  \item{all.sol}{Set to \code{TRUE} to include larger solutions in which
+        every prime implicant is needed to cover the chart.}
+  \item{depth}{Accepted for compatibility with older calls.
+        Changing it has no effect in \code{solveChart()}.}
+  \item{max.comb}{Numeric, to stop searching for solutions (see Details).}
+  \item{first.min}{Logical, to return only the very first minimal solution (see
+        Details).}
+  \item{...}{Other arguments (mainly for backwards compatibility).}
 }
 
 \details{
-\subsection{Reading and building the chart}{
-Each row is a prime implicant and each column is a positive truth table
-configuration. A \code{TRUE} entry, printed as \code{x}, means the prime
-implicant covers that configuration. If a column has just one \code{x},
-its prime implicant is essential and must appear in every solution.
+Each row of a PI chart is a prime implicant and each column is a positive
+truth table configuration. An \code{x} means that the prime implicant covers
+that configuration. If a column contains just one \code{x}, the corresponding
+prime implicant is essential.
 
-When writing conditions together, as in \code{A~BC}, supply \code{snames}
-if the condition names cannot be inferred from the expressions.
-Using \code{*} between conditions, as in \code{A*~B*C}, makes the
-condition names explicit.
+When entering configurations as expressions, use \code{snames} if the set
+names are unclear, or separate the names with \code{*}, as in \code{EF*~GH}.
+When entering matrices, use the same condition order in both. In a prime
+implicant, \code{0} means that the condition has been eliminated.
 
-If you supply matrices, use one column per condition in the same order in
-both matrices. In a prime implicant, \code{0} means the condition has been
-eliminated. For a binary condition, use \code{1} for absence and \code{2}
-for presence.
-}
+For example, in the first chart below, \code{a} is the only prime implicant
+that covers \code{a~bc}, so every solution must include \code{a}. Either
+\code{b} or \code{~c} covers the remaining configuration. Thus
+\code{findmin(chart)} returns \code{2}, and \code{solveChart(chart)} returns
+both solutions, \code{a + b} and \code{a + ~c}.
 
-\subsection{Finding the fewest prime implicants}{
-Both methods in \code{findmin()} aim to give the same minimum number of
-prime implicants needed to cover every configuration in the chart. Both
-can simplify the chart by setting aside prime implicants whose coverage
-can be replaced by another row without changing that number.
+The default search returns all the smallest solutions. Use
+\code{first.min = TRUE} when one is enough. Use \code{all.sol = TRUE} to
+also find larger solutions that would leave a configuration uncovered if
+any of their terms were removed. This uses the whole chart, even when
+\code{row.dom = TRUE}, and can take longer on large charts.
 
-With \code{"hybrid"}, QCA searches the chart itself first. If it reaches
-its search limit before proving the minimum, the bundled
-\code{lp_solve} solver finishes the search on the reduced chart. This can
-save time on large charts or charts in which most rows cover only a few
-configurations.
+When searching for the smallest solutions, \code{max.comb} limits how many
+combinations to check, in billions. For example, \code{max.comb = 0.001}
+sets a limit of one million combinations. If the limit is reached, some
+solutions may be missing. The default of \code{0} sets no limit.
 
-With \code{"ilp"} (integer linear programming), QCA sends the simplified
-chart directly to a solver. It uses Gurobi if available and the bundled
-\code{lp_solve} otherwise. Set \code{gurobi = FALSE} to use
-\code{lp_solve} from the start.
-}
-
-\subsection{Finding the solutions}{
-By default, \code{solveChart()} uses \code{findmin()} to learn how many
-prime implicants it needs. It then looks for every combination of that
-size that covers all the columns. It rules out groups of rows as soon as
-it can tell they cannot cover the remaining configurations.
-
-Different prime implicants can appear in different solutions even when
-they cover the same configurations. Setting \code{row.dom = TRUE} can
-speed up the search by dropping rows whose coverage is contained in a
-row that covers more. The minimum number of prime implicants stays the
-same, but some alternative solutions may disappear.
-
-Use \code{all.sol = TRUE} to look for larger solutions too. A larger
-solution qualifies if dropping any of its prime implicants would leave
-a configuration uncovered. This search uses the whole chart even if
-\code{row.dom = TRUE} and can take much longer.
-
-When looking for smallest solutions, use \code{first.min = TRUE} if one
-solution is enough. A positive \code{max.comb} limits how many combinations
-of rows QCA checks. For example, \code{max.comb = 0.001} limits the search
-to one million combinations. If the limit is reached, the result can
-contain only the solutions found so far.
-}
+With \code{type = "ilp"}, QCA uses Gurobi when available or the
+\code{lp_solve} solver included with the package.
 }
 
 \value{
-\code{makeChart()} returns a matrix showing whether each prime implicant
-covers each configuration.
+For \bold{\code{makeChart}}: a logical matrix of class \code{"QCA_pic"}.
 
-\code{findmin()} returns the minimum number of prime implicants, or
-\code{0} if a configuration has no covering prime implicant. With
-\code{solind = TRUE}, it marks the rows in one smallest solution with
-\code{1} and the other rows with \code{0}.
+For \bold{\code{findmin}}: the minimum number of prime implicants needed
+to cover the chart. With \code{solind = TRUE}, a value of \code{1} marks
+each row used in one smallest solution and \code{0} marks the other rows.
 
-\code{solveChart()} returns a matrix with one solution per column. The
-numbers in each column refer to rows of the original PI chart. If
-solutions have different sizes, shorter columns are padded with \code{0}.
+For \bold{\code{solveChart}}: a matrix with one solution per column.
+The numbers identify the rows of the PI chart used in that solution.
 }
 
 \author{
@@ -140,10 +104,10 @@ quantitative strategies}, Berkeley: University of California Press
 }
 
 \examples{
-# Write conditions together when the names are clear from the configurations
+# non-standard products, it needs the set names
 chart <- makeChart("a, b, ~c", "abc, a~b~c, a~bc, ~ab~c")
 
-# The same chart using unquoted expressions
+# same with unquoted expressions
 chart <- makeChart(c(a, b, ~c), c(abc, a~b~c, a~bc, ~ab~c))
 
 chart
@@ -164,7 +128,7 @@ solveChart(chart)
 # [1,]    1      1
 # [2,]    2      3
 
-# Use * to separate conditions with longer names
+# using SOP standard product sign
 rows <- "EF, ~GH, IJ"
 cols <- "~EF*~GH*IJ, EF*GH*~IJ, ~EF*GH*IJ, EF*~GH*~IJ"
 chart <- makeChart(rows, cols)
@@ -182,18 +146,18 @@ solveChart(chart)
 # [2,]    3
 
 
-# Enter prime implicants and configurations as matrices
+# using implicant matrices
 primes <- matrix(c(2,2,1,0,2,2,0,2,2,2), nrow = 2)
 configs <- matrix(c(2,2,2,1,1,2,2,2,2,1,2,2,2,2,2), nrow = 3)
 colnames(primes) <- colnames(configs) <- letters[1:5]
 
-# The prime implicants are a~bce and acde
+# the prime implicants: a~bce and acde
 primes
 #      a b c d e
 # [1,] 2 1 2 0 2
 # [2,] 2 0 2 2 2
 
-# The configurations to cover are a~bc~de, a~bcde and abcde
+# the initial causal combinations: a~bc~de, a~bcde and abcde
 configs
 #      a b c d e
 # [1,] 2 1 2 1 2

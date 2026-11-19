@@ -37,7 +37,12 @@
         chart <- t(chart)
     }
 
-    if (all(colSums(chart) > 0)) {
+    # Keep the existing solver path when every PI covers a configuration.
+    # An empty PI can also be passed through if every configuration is covered.
+    if (
+        all(colSums(chart) > 0) ||
+        (nrow(chart) > 0L && isTRUE(all(rowSums(chart) > 0)))
+    ) {
 
         just_minima <- !isTRUE(attr(chart, "solind")) && !isTRUE(dots$solind)
         gurobi <- !isFALSE(attr(chart, "gurobi")) && !isFALSE(dots$gurobi)
