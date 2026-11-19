@@ -13,6 +13,7 @@ void find_models(
     const unsigned int picols,
     const Rboolean allsol,
     const int k,
+    const int depth,
     const double maxcomb,
     const Rboolean firstmin,
     int **solutions,
@@ -64,6 +65,7 @@ void find_models(
     if (allsol) {
 
         // implements Petrick's method to derive all possible solutions
+        const int max_terms = depth > 0 && depth < k ? k : depth;
 
         int indmat[picols * pirows];
         int *mintpis = (int *) R_Calloc(pirows, int);
@@ -118,7 +120,7 @@ void find_models(
             }
 
             unsigned int survcols = temp2cols;
-            super_rows(p_temp1, picols, &survcols, p_cols);
+            super_rows(p_temp1, picols, &survcols, p_cols, max_terms);
 
 
             R_Free(p_temp2);

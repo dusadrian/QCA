@@ -1119,6 +1119,7 @@ void CCubes(const int p_tt[],          // the truth table
                     foundPI,
                     false, // allsol
                     k + 1,
+                    0, // no depth limit
                     maxcomb,
                     true, // firstmin
                     &p_solutions,
@@ -1204,6 +1205,7 @@ void CCubes(const int p_tt[],          // the truth table
                 foundPI,
                 allsol,
                 solmin,
+                0, // no depth limit
                 maxcomb,
                 false, // firstmin
                 &p_solutions,

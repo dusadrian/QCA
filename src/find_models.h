@@ -8,6 +8,7 @@ void find_models(
     const unsigned int picols,   // number of PIs
     const Rboolean allsol,           // all solutions
     const int k,                 // level of complexity to search solutions at, equal to the solution minimum, from findmin()
+    const int depth,               // maximum PIs for allsol; zero means unlimited
     const double maxcomb,
     const Rboolean firstmin,
     int **solutions,             // return pointer to the vector containing the solutions

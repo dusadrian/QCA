@@ -5,13 +5,15 @@ void super_rows(
     int *p_matrix,
     int rows,
     unsigned int *survcols,
-    int *p_cols
+    int *p_cols,
+    int depth
 ) {
     
     unsigned int cols = *survcols;
     int colsums[cols];
     int sortcol[cols];
     int temp;
+    unsigned int eligible = 0;
     
     for (unsigned int c = 0; c < cols; c++) {
         colsums[c] = 0;
@@ -20,12 +22,18 @@ void super_rows(
             colsums[c] += p_matrix[c * rows + r];
         }
         
-        sortcol[c] = c;
+        // Adding PIs for later configurations can only increase this size.
+        if (depth > 0 && colsums[c] > depth) {
+            p_cols[c] = false;
+            --(*survcols);
+        } else {
+            sortcol[eligible++] = c;
+        }
     }
     
     
-    for (unsigned int c1 = 0; c1 < cols; c1++) {
-        for (unsigned int c2 = c1 + 1; c2 < cols; c2++) {
+    for (unsigned int c1 = 0; c1 + 1 < eligible; c1++) {
+        for (unsigned int c2 = c1 + 1; c2 < eligible; c2++) {
             if (colsums[sortcol[c1]] > colsums[sortcol[c2]]) {
                 temp = sortcol[c1];
                 sortcol[c1] = sortcol[c2];
@@ -34,9 +42,9 @@ void super_rows(
         }
     }
     
-    for (unsigned int c1 = 0; c1 < cols - 1; c1++) {
+    for (unsigned int c1 = 0; c1 + 1 < eligible; c1++) {
         if (p_cols[sortcol[c1]]) {
-            for (unsigned int c2 = c1 + 1; c2 < cols; c2++) {
+            for (unsigned int c2 = c1 + 1; c2 < eligible; c2++) {
                 if (p_cols[sortcol[c2]]) {
                     if (colsums[sortcol[c1]] <= colsums[sortcol[c2]]) {
                         
