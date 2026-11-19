@@ -37,6 +37,10 @@ NsatStatus nsat_init(NsatSolver **out, int variables, NsatLimits limits);
 /* Reserve the final ordinary-growth capacities before loading the sealed
  * checker's originals in ID order. Call after allocating encoder scratch. */
 NsatStatus nsat_reserve_originals(NsatSolver *s, const NsatVerifier *v);
+/* Copy originals from a freshly sealed checker into an empty solver. */
+NsatStatus nsat_load_originals(NsatSolver *s, const NsatVerifier *v);
+NsatStatus nsat_init_from_checker(NsatSolver **out, const NsatVerifier *v,
+                                  NsatLimits limits, NsatStopReason *stop);
 NsatStatus nsat_add_original(NsatSolver *s, const int *lits, size_t count);
 /* Submit a checked root-level strengthening before propagation or search. */
 NsatStatus nsat_add_root_rup(NsatSolver *s, NsatVerifier *v,

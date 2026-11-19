@@ -399,7 +399,10 @@ void CCubes(const int p_tt[],          // the truth table
     QcaCertification certificate = {
         .on = posmat, .off = negmat, .conditions = nconds,
         .positives = posrows, .negatives = negrows,
-        .resources = {.work_limit = 16000000, .memory_limit = 32u * 1024u * 1024u}
+        .resources = {
+            .work_limit = minimum_models ? 64000000 : 16000000,
+            .memory_limit = 32u * 1024u * 1024u
+        }
     };
     int checked_incumbent = 0, checked_columns = 0;
     QcaConsistencyQuery consistency_query = {

@@ -48,8 +48,8 @@ NsatStatus nsat_cover_load_solver(NsatSolver **out, const NsatCoverInput *input,
 int nsat_cover_selector(int inputs, int term, int input, int value);
 
 /* Equality literals for categorical conditions. Points are row-major, with
- * values 1..levels[c]; no selected value means a wildcard. This separate
- * layout does not use the binary pricing or pair-discovery policies. */
+ * values 1..levels[c]; no selected value means a wildcard. Categorical clauses
+ * have their own selector and original-clause numbering. */
 typedef struct {
     const int *on, *off, *levels;
     size_t inputs, positives, negatives, target;
@@ -61,5 +61,10 @@ NsatStatus nsat_multivalue_load_solver(NsatSolver **out, const NsatMultivalueInp
 NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *input, NsatLimits limits,
                                 NsatSolver **solver, NsatVerifier **checker,
                                 NsatStopReason *stop);
+
+/* Status-only QCA entry point. pair_work holds the cumulative optional probe
+ * work for this table. A bounded probe leaves the fallback its full balance. */
+NsatStatus nsat_multivalue_certify(const NsatMultivalueInput *input, NsatLimits limits,
+                                   uint64_t *pair_work, NsatStopReason *stop);
 
 #endif

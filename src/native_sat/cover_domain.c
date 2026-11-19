@@ -447,7 +447,7 @@ NsatStatus nsat_cover_solve_default(const NsatCoverInput *input, NsatLimits limi
     NsatStatus status = d.budget.status;
     if (status == NSAT_OK) status = nsat_verify_init_cover(v, q.on, q.off, q.inputs,
         q.positives, q.negatives, q.target, q.row_order, q.order_count, limits);
-    if (status == NSAT_OK) status = nsat_cover_load_solver(s, &q, *v, limits, stop);
+    if (status == NSAT_OK) status = nsat_init_from_checker(s, *v, limits, stop);
     if (status == NSAT_OK && eligible) status = add_staircase(&q, &d, *s, *v);
     if (status == NSAT_OK && eligible) status = add_incompatible_pairs(&q, &d, *s, *v);
     nsat_free(&d.budget, d.pairs, d.capacity * sizeof(*d.pairs));

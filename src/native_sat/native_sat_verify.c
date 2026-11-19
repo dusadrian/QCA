@@ -198,6 +198,12 @@ static bool require_phase(NsatVerifier *v, int phase)
     return nsat_poll(&v->budget);
 }
 
+NsatStatus nsat_verify_reserve_originals(NsatVerifier *v, size_t count) {
+    if (!v) return NSAT_ERROR;
+    if (require_phase(v, LOADING)) reserve_originals(v, count);
+    return v->budget.status;
+}
+
 static void assign(NsatVerifier *v, signed char *values, int var, int value)
 {
     values[var] = (signed char)value;

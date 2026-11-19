@@ -103,20 +103,23 @@ static void *reserve(NsatBudget *b, void *old, size_t *capacity, size_t used,
     return buffer;
 }
 
-NsatStatus nsat_init(NsatSolver **out, int variables, NsatLimits limits)
-{
+static NsatStatus init_solver(NsatSolver **out, int variables, NsatBudget *budget) {
     if (!out) return NSAT_ERROR;
     *out = NULL;
     size_t count;
     if (variables < 0 || !nsat_mul((size_t)variables + 1, 2, &count)) return NSAT_ERROR;
-    NsatBudget b = {.limits = limits};
-    NsatSolver *s = nsat_alloc(&b, 1, sizeof(*s));
-    if (!s) return b.status;
-    *s = (NsatSolver){.budget = b, .variables = variables};
+    NsatSolver *s = nsat_alloc(budget, 1, sizeof(*s));
+    if (!s) return budget->status;
+    *s = (NsatSolver){.budget = *budget, .variables = variables};
     *out = s;
     s->values = nsat_alloc(&s->budget, count, sizeof(*s->values));
     if (s->values) nsat_copy(&s->budget, s->values, NULL, count);
     return s->budget.status;
+}
+
+NsatStatus nsat_init(NsatSolver **out, int variables, NsatLimits limits) {
+    NsatBudget budget = {.limits = limits};
+    return init_solver(out, variables, &budget);
 }
 
 static NsatStatus store_clause(NsatSolver *s, NsatClauseId id,
@@ -197,6 +200,36 @@ NsatStatus nsat_add_original(NsatSolver *s, const int *lits, size_t count)
         set_value(s, variable(lits[i]), 0);
     }
     return store_clause(s, (NsatClauseId)s->count + 1, lits, count);
+}
+
+NsatStatus nsat_load_originals(NsatSolver *s, const NsatVerifier *v) {
+    NsatStatus status = nsat_reserve_originals(s, v);
+    if (status != NSAT_OK) return status;
+    const NsatClauseId clauses = nsat_verify_original_count(v);
+    for (NsatClauseId i = 0; i < clauses; ++i) {
+        const int *lits;
+        size_t count;
+        if (!nsat_verify_clause(v, i + 1, &lits, &count)) {
+            nsat_stop(&s->budget, NSAT_ERROR, NSAT_STOP_PROOF);
+            return s->budget.status;
+        }
+        status = nsat_add_original(s, lits, count);
+        if (status != NSAT_OK) return status;
+    }
+    return NSAT_OK;
+}
+
+NsatStatus nsat_init_from_checker(NsatSolver **out, const NsatVerifier *v,
+                                  NsatLimits limits, NsatStopReason *stop) {
+    if (!out || !stop) return NSAT_ERROR;
+    *out = NULL;
+    *stop = NSAT_STOP_INPUT;
+    if (!v) return NSAT_ERROR;
+    NsatBudget budget = {.limits = limits};
+    NsatStatus status = init_solver(out, nsat_verify_variables(v), &budget);
+    if (status == NSAT_OK) status = nsat_load_originals(*out, v);
+    *stop = *out ? nsat_stats(*out).stop : budget.stats.stop;
+    return status;
 }
 
 static NsatStatus checker_status(NsatSolver *s, NsatVerifier *v, NsatStatus status)

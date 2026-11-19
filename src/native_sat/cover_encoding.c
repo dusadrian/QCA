@@ -257,10 +257,92 @@ done:
     return e.budget.status;
 }
 
-NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *q, NsatLimits limits,
-                                NsatSolver **solver, NsatVerifier **checker,
-                                NsatStopReason *stop)
-{
+/* Original ID of the first selector implication for this ON row and slot.
+ * First-use ordering emits one fewer clause for the first row and slot. */
+static NsatClauseId multivalue_row_hints(size_t row, size_t slot, size_t k, size_t differing) {
+    NsatClauseId preceding = row ? k * (differing + 3 + (row - 1) * (differing + 4)) : 0;
+    return preceding + 2 + slot * (differing + 3 + (row != 0)) - (slot != 0);
+}
+
+static NsatStatus add_multivalue_pairs(const NsatMultivalueInput *q, NsatSolver *s,
+                                       NsatVerifier *v, NsatLimits limits, NsatStopReason *stop) {
+    if (q->positives < 2) return NSAT_OK;
+    NsatBudget budget = {.limits = limits};
+    size_t differing = 0, scans = 0, clauses = 0;
+    NsatClauseId slot_clauses = q->negatives;
+    NsatClauseId *hints = NULL;
+    NsatStatus status = NSAT_OK;
+    for (size_t c = 0; c < q->inputs; ++c) {
+        if (!nsat_work(&budget, 1)) goto done;
+        NsatClauseId levels = (size_t)q->levels[c];
+        slot_clauses += levels * (levels - 1) / 2;
+        differing += levels - 1;
+    }
+    size_t k = q->target;
+    size_t selectors = k * (differing + q->inputs);
+    for (size_t a = 0; a < q->positives; ++a) {
+        const int *left = q->on + a * q->inputs;
+        for (size_t b = a + 1; b < q->positives; ++b) {
+            const int *right = q->on + b * q->inputs;
+            for (size_t z = 0; z < q->negatives; ++z) {
+                const int *off = q->off + z * q->inputs;
+                size_t c = 0;
+                for (; c < q->inputs; ++c) {
+                    if (scans++ == 100000) goto done;
+                    if (!nsat_work(&budget, 1)) goto done;
+                    if (left[c] == right[c] && left[c] != off[c]) break;
+                }
+                if (c != q->inputs) continue;
+                if (!hints) {
+                    hints = nsat_alloc(&budget, differing + 1, sizeof(*hints));
+                    if (!hints) goto done;
+                }
+                /* First use prevents row a from occupying a slot above a. */
+                for (size_t t = 0; t < k && t <= a; ++t) {
+                    size_t count = 0, offset = 0;
+                    NsatClauseId left_id = multivalue_row_hints(a, t, k, differing);
+                    NsatClauseId right_id = multivalue_row_hints(b, t, k, differing);
+                    for (c = 0; c < q->inputs; ++c) {
+                        if (!nsat_work(&budget, (size_t)q->levels[c])) goto done;
+                        for (int val = 1; val <= q->levels[c]; ++val) {
+                            if (val == off[c]) continue;
+                            /* For each literal of the OFF clause, select an ON
+                             * implication excluding exactly that category. */
+                            if (val != left[c])
+                                hints[count++] = left_id + offset + val - 1 - (val > left[c]);
+                            else
+                                hints[count++] = right_id + offset + val - 1 - (val > right[c]);
+                        }
+                        offset += (size_t)q->levels[c] - 1;
+                    }
+                    hints[count++] = nsat_verify_original_count(v) -
+                        (k - t - 1) * slot_clauses - q->negatives + z + 1;
+                    int pair[] = {-(int)(selectors + a * k + t + 1),
+                                  -(int)(selectors + b * k + t + 1)};
+                    status = nsat_add_root_rup(s, v, pair, 2, hints, count, NULL);
+                    if (status != NSAT_OK) {
+                        *stop = nsat_stats(s).stop;
+                        if (!*stop) *stop = nsat_verify_stats(v).stop;
+                        goto done;
+                    }
+                    if (++clauses == 4096) goto done;
+                }
+                break;
+            }
+        }
+    }
+done:
+    nsat_free(&budget, hints, (differing + 1) * sizeof(*hints));
+    if (budget.status != NSAT_OK) {
+        *stop = budget.stats.stop;
+        return budget.status;
+    }
+    return status;
+}
+
+static NsatStatus solve_multivalue(const NsatMultivalueInput *q, NsatLimits limits,
+                                   NsatSolver **solver, NsatVerifier **checker,
+                                   NsatStopReason *stop, bool pairs) {
     if (!solver || !checker || !stop) return NSAT_ERROR;
     *solver = NULL;
     *checker = NULL;
@@ -273,7 +355,9 @@ NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *q, NsatLimits limits
         else if (limits.shared && limits.shared->stop) *stop = limits.shared->stop;
         return status;
     }
-    status = nsat_multivalue_load_solver(solver, q, *checker, limits, stop);
+    status = nsat_init_from_checker(solver, *checker, limits, stop);
+    if (status == NSAT_OK && pairs)
+        status = add_multivalue_pairs(q, *solver, *checker, limits, stop);
     if (status == NSAT_OK) {
         /* The final 2*p*k variables are assignment and prefix blocks. */
         int assignments = (int)(q->positives * q->target);
@@ -287,4 +371,53 @@ NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *q, NsatLimits limits
         if (!*stop) *stop = nsat_verify_stats(*checker).stop;
     }
     return status;
+}
+
+NsatStatus nsat_multivalue_solve(const NsatMultivalueInput *q, NsatLimits limits,
+                                 NsatSolver **solver, NsatVerifier **checker,
+                                 NsatStopReason *stop) {
+    return solve_multivalue(q, limits, solver, checker, stop, false);
+}
+
+/* The two attempts own their solver and checker until their checked conclusion
+ * or interruption. Release both before the fallback reuses the heap. */
+static NsatStatus check_multivalue(const NsatMultivalueInput *q, NsatLimits limits,
+                                   NsatStopReason *stop, bool pairs) {
+    NsatSolver *solver = NULL;
+    NsatVerifier *checker = NULL;
+    NsatStatus status = solve_multivalue(q, limits, &solver, &checker, stop, pairs);
+    nsat_destroy(solver);
+    nsat_verify_destroy(checker);
+    return status;
+}
+
+NsatStatus nsat_multivalue_certify(const NsatMultivalueInput *q, NsatLimits limits,
+                                   uint64_t *pair_work, NsatStopReason *stop) {
+    const uint64_t pair_limit = UINT64_C(16000000);
+    NsatResources *shared = limits.shared;
+    if (!stop) return NSAT_ERROR;
+    *stop = NSAT_STOP_INPUT;
+    if (!q) return NSAT_ERROR;
+    if (shared && pair_work && *pair_work < pair_limit && q->positives >= 24 &&
+        (!shared->work_limit || (shared->work < shared->work_limit &&
+         shared->work_limit - shared->work >= UINT64_C(8000000)))) {
+        /* Keep the caller's live allocations and heap ceiling. Only the work
+         * allowance is separate and cumulative across calls on this table. */
+        NsatResources probe = *shared;
+        probe.work = *pair_work;
+        probe.work_limit = pair_limit;
+        probe.stop = NSAT_STOP_NONE;
+        NsatLimits trial = limits;
+        trial.shared = &probe;
+        NsatStatus status = check_multivalue(q, trial, stop, true);
+        *pair_work = probe.stop == NSAT_STOP_WORK ? pair_limit : probe.work;
+        shared->peak_memory = probe.peak_memory;
+        if (status == NSAT_SAT || status == NSAT_UNSAT) return status;
+        if (*stop == NSAT_STOP_CANCELLED ||
+            (status != NSAT_UNKNOWN && *stop != NSAT_STOP_ALLOCATION)) {
+            if (!shared->stop) shared->stop = *stop;
+            return status;
+        }
+    }
+    return check_multivalue(q, limits, stop, false);
 }

@@ -41,7 +41,18 @@
         )
     }
     
-    if (is.null(depth)) depth <- 0L
+    if (!all.sol || is.null(depth)) {
+        depth <- 0L
+    } else {
+        if (
+            !is.numeric(depth) || length(depth) != 1L ||
+            !is.finite(depth) || depth != floor(depth)
+        ) {
+            admisc::stopError("Argument <depth> must be a single whole number.")
+        }
+        # Zero is reserved for an unlimited search in the native call.
+        depth <- min(nrow(chart), max(1L, depth))
+    }
 
     # return(list(matrix(as.logical(chart), nrow = nrow(chart)), all.sol, as.integer(depth), as.integer(foundm), as.integer(max.comb)))
     output <- .Call(

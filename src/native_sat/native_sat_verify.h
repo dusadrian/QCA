@@ -55,6 +55,7 @@ typedef struct NsatVerifier NsatVerifier;
  * original receives the next ID starting at 1. After either constructor's
  * failure, or any UNKNOWN or ERROR, destroy the instance. */
 NsatStatus nsat_verify_init_cnf(NsatVerifier **out, int variables, NsatLimits limits);
+NsatStatus nsat_verify_reserve_originals(NsatVerifier *v, size_t count);
 NsatStatus nsat_verify_init_cover(NsatVerifier **out, const int *on, const int *off,
                                   size_t n, size_t on_count, size_t off_count,
                                   size_t target, const size_t *row_order,

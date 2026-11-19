@@ -12,7 +12,7 @@ typedef struct {
     NsatBudget budget;
     int *levels, *term, *coordinates, *primes;
     double *memberships;
-    size_t count, capacity, cached_primes;
+    size_t count, capacity, cached_primes, largest_singleton_group;
 } ConsistencyCheck;
 
 typedef struct {
@@ -78,22 +78,40 @@ static bool validate(ConsistencyCheck *v)
     return positive || invalid(v);
 }
 
-static bool matches(ConsistencyCheck *v, const int *term, int row)
-{
-    for (int c = 0; c < v->q->conditions; ++c) {
-        if (!nsat_work(&v->budget, 1)) return false;
-        if (term[c] && term[c] - 1 != v->q->tt[(size_t)c * v->q->rows + row])
-            return false;
+/* Cache the end of a wildcard run in the verifier's private PI copy. */
+static int next_fixed(ConsistencyCheck *v, int *term, int start) {
+    if (term[start] < 0) return -term[start];
+    int c = start + 1;
+    while (c < v->q->conditions && term[c] == 0) {
+        if (!nsat_work(&v->budget, 1)) return v->q->conditions;
+        ++c;
     }
-    return true;
+    if (c < v->q->conditions && term[c] < 0) c = -term[c];
+    term[start] = -c;
+    return c;
 }
 
-static double membership(ConsistencyCheck *v, const int *term, int row)
-{
+static bool matches(ConsistencyCheck *v, int *term, int row) {
+    for (int c = 0; c < v->q->conditions; ) {
+        if (!nsat_work(&v->budget, 1)) return false;
+        if (term[c] <= 0) {
+            c = next_fixed(v, term, c);
+        } else {
+            if (term[c] - 1 != v->q->tt[(size_t)c * v->q->rows + row]) return false;
+            ++c;
+        }
+    }
+    return v->budget.status == NSAT_OK;
+}
+
+static double membership(ConsistencyCheck *v, int *term, int row) {
     double result = 1.0;
-    for (int c = 0; c < v->q->conditions; ++c) {
+    for (int c = 0; c < v->q->conditions; ) {
         if (!nsat_work(&v->budget, 1)) return 0;
-        if (!term[c]) continue;
+        if (term[c] <= 0) {
+            c = next_fixed(v, term, c);
+            continue;
+        }
         double value = v->q->data[(size_t)c * v->q->cases + row];
         if (v->q->fuzzy[c]) {
             if (term[c] == 1) value = 1.0 - value;
@@ -101,6 +119,7 @@ static double membership(ConsistencyCheck *v, const int *term, int row)
             value = value == term[c] - 1 ? 1.0 : 0.0;
         }
         if (value < result) result = value;
+        ++c;
     }
     return result;
 }
@@ -162,19 +181,26 @@ static bool eligible(ConsistencyCheck *v, int depth) {
     return !(q->pi_cons - score > scale * DBL_EPSILON);
 }
 
-static bool add_prime(ConsistencyCheck *v)
-{
+static bool add_prime(ConsistencyCheck *v) {
     size_t width = (size_t)v->q->conditions;
     /* Checking every retained subterm matters: PI consistency is not
      * monotone, so testing just the immediate parents would be unsound. */
     for (size_t p = 0; p < v->count; ++p) {
-        bool subterm = true;
-        for (size_t c = 0; c < width; ++c) {
+        int *prime = v->primes + p * width;
+        /* Keep the first coordinate available for duplicate marking in find_prime(). */
+        if (!nsat_work(&v->budget, 1)) return false;
+        if (prime[0] && prime[0] != v->term[0]) continue;
+        int c = 1;
+        while (c < v->q->conditions) {
             if (!nsat_work(&v->budget, 1)) return false;
-            int value = v->primes[p * width + c];
-            if (value && value != v->term[c]) { subterm = false; break; }
+            if (prime[c] <= 0) {
+                c = next_fixed(v, prime, c);
+            } else {
+                if (prime[c] != v->term[c]) break;
+                ++c;
+            }
         }
-        if (subterm) return true;
+        if (c == v->q->conditions) return v->budget.status == NSAT_OK;
     }
     if (v->count == v->capacity) {
         size_t capacity = v->capacity ? v->capacity * 2 : 16, cells;
@@ -196,9 +222,9 @@ static bool add_prime(ConsistencyCheck *v)
     return true;
 }
 
-static bool rebuild_primes(ConsistencyCheck *v)
-{
+static bool rebuild_primes(ConsistencyCheck *v, bool index_singletons) {
     if (!validate(v)) return false;
+    index_singletons = index_singletons && v->q->depth == 1;
     const int n = v->q->conditions;
     for (int depth = 1; depth <= v->q->depth; ++depth) {
         if (!nsat_work(&v->budget, (uint64_t)depth)) return false;
@@ -225,6 +251,14 @@ static bool rebuild_primes(ConsistencyCheck *v)
                 if (!nsat_work(&v->budget, 1)) return false;
                 v->term[v->coordinates[c]] = 0;
             }
+            if (index_singletons) {
+                int c = v->coordinates[0];
+                size_t start = c ? (size_t)v->levels[c - 1] : 0;
+                size_t size = v->count - start;
+                if (size > v->largest_singleton_group) v->largest_singleton_group = size;
+                /* At depth one this condition's level count has had its last use. */
+                v->levels[c] = (int)v->count;
+            }
             int i = depth - 1;
             while (i >= 0 && v->coordinates[i] == n - depth + i) --i;
             more = i >= 0;
@@ -237,16 +271,91 @@ static bool rebuild_primes(ConsistencyCheck *v)
     return true;
 }
 
-static int find_prime(ConsistencyCheck *v, const int *term)
-{
+/* Reconstructed PIs are ordered by depth, then by the positions of their
+ * fixed conditions, then by their values. Dropping subsumed PIs preserves
+ * that order. Search it directly, using only the private PI array. */
+static int find_chart_prime(ConsistencyCheck *v, const int *term) {
+    int width = v->q->conditions;
+    size_t lo = 0, hi = v->count;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        int *prime = v->primes + mid * (size_t)width;
+        int depth = 0, positions = 0, values = 0;
+        for (int c = 0; c < width; ++c) {
+            if (!nsat_work(&v->budget, 1)) return -1;
+            int a = term[c], b = prime[c];
+            if (a < 0) return -1;
+            if (b < 0) b = c == 0 ? -1 - b : 0;
+            depth += (a != 0) - (b != 0);
+            if (!positions && (a == 0) != (b == 0)) positions = a ? -1 : 1;
+            if (!values && a != b) values = a < b ? -1 : 1;
+        }
+        int order = depth ? depth : (positions ? positions : values);
+        if (order < 0) hi = mid;
+        else if (order > 0) lo = mid + 1;
+        else {
+            if (prime[0] < 0) return -1;
+            prime[0] = -1 - prime[0];
+            return (int)mid;
+        }
+    }
+    return -1;
+}
+
+static int find_prime(ConsistencyCheck *v, const int *term, bool mark) {
     size_t width = (size_t)v->q->conditions;
     for (size_t p = 0; p < v->count; ++p) {
+        int *prime = v->primes + p * width;
         size_t c = 0;
+        /* During the chart check the rebuilt PIs are private and used only
+         * for lookup. Mark a match in its first coordinate, including zero. */
+        if (mark) {
+            if (!nsat_work(&v->budget, 1)) return -1;
+            int first = prime[0] < 0 ? -1 - prime[0] : prime[0];
+            if (term[0] != first) continue;
+            c = 1;
+        }
         for (; c < width; ++c) {
             if (!nsat_work(&v->budget, 1)) return -1;
-            if (term[c] != v->primes[p * width + c]) break;
+            int value = prime[c] < 0 ? 0 : prime[c];
+            if (term[c] != value) break;
         }
-        if (c == width) return (int)p;
+        if (c == width) {
+            if (mark) {
+                if (prime[0] < 0) return -1;
+                prime[0] = -1 - prime[0];
+            }
+            return (int)p;
+        }
+    }
+    return -1;
+}
+
+/* The initial scan pairs each witness coordinate with at most one PI
+ * coordinate. Every hit costs the ordinary scan at least width plus its
+ * rank; every miss costs at least count. The caller bounds width plus
+ * the largest group's remaining comparisons by count. */
+static int find_singleton_prime(ConsistencyCheck *v, const int *term) {
+    size_t width = (size_t)v->q->conditions;
+    size_t first = 0, end = 0, coordinate = width;
+    bool first_matches = false;
+    for (size_t c = 0; c < width; ++c) {
+        if (!nsat_work(&v->budget, 1)) return -1;
+        if (!term[c]) continue;
+        if (term[c] < 0 || coordinate != width) return -1;
+        coordinate = c;
+        first = c ? (size_t)v->levels[c - 1] : 0;
+        end = (size_t)v->levels[c];
+        first_matches = first < end && v->primes[first * width + c] == term[c];
+    }
+    if (first == end) return -1;
+    if (first_matches) return (int)first;
+    int value = term[coordinate];
+    for (size_t p = first + 1; p < end; ++p) {
+        if (!nsat_work(&v->budget, 1)) return -1;
+        int found = v->primes[p * width + coordinate];
+        if (found == value) return (int)p;
+        if (found > value) break;
     }
     return -1;
 }
@@ -448,22 +557,37 @@ static NsatStatus finish(ConsistencyCheck *v, NsatStatus result)
     return result;
 }
 
+/* A chart lookup is the verifier's last operation. Use the index only
+ * when even its worst-case work for all submitted columns fits. This
+ * preserves early duplicate and invalid-column results at tight limits. */
+static bool index_fits_chart(const ConsistencyCheck *v, size_t columns) {
+    if (v->count < 16 || columns < 2) return false;
+    const NsatBudget *b = &v->budget;
+    uint64_t remaining = (b->limits.work ? b->limits.work : UINT64_MAX) - b->stats.work;
+    const NsatResources *shared = b->limits.shared;
+    if (shared) {
+        uint64_t available = (shared->work_limit ? shared->work_limit : UINT64_MAX) - shared->work;
+        if (available < remaining) remaining = available;
+    }
+    unsigned comparisons = 0;
+    for (size_t n = v->count; n; n /= 2) ++comparisons;
+    return columns <= remaining / comparisons / (unsigned)v->q->conditions;
+}
+
 NsatStatus qca_verify_consistency_chart(const QcaConsistencyQuery *q,
     const int *chart, size_t columns, NsatLimits limits)
 {
     ConsistencyCheck v = {.q = q, .budget = {.limits = limits}};
-    if (!rebuild_primes(&v)) return finish(&v, NSAT_UNKNOWN);
+    if (!rebuild_primes(&v, false)) return finish(&v, NSAT_UNKNOWN);
     if ((columns && !chart) || columns > SIZE_MAX / sizeof(int) / (size_t)q->conditions)
         return finish(&v, NSAT_ERROR);
     /* Count equality plus membership excludes both omissions and duplicates. */
+    bool indexed = index_fits_chart(&v, columns);
     for (size_t p = 0; p < columns; ++p) {
-        int found = find_prime(&v, chart + p * q->conditions);
-        if (found < 0) return finish(&v, NSAT_ERROR);
-        for (size_t previous = 0; previous < p; ++previous) {
-            if (!nsat_work(&v.budget, (uint64_t)q->conditions)) return finish(&v, NSAT_UNKNOWN);
-            if (!memcmp(chart + previous * q->conditions, chart + p * q->conditions,
-                        (size_t)q->conditions * sizeof(int))) return finish(&v, NSAT_ERROR);
-        }
+        const int *term = chart + p * q->conditions;
+        int found = indexed ? find_chart_prime(&v, term) : find_prime(&v, term, true);
+        if (found < 0)
+            return finish(&v, NSAT_ERROR);
     }
     return finish(&v, columns == v.count ? NSAT_UNSAT : NSAT_SAT);
 }
@@ -472,7 +596,7 @@ NsatStatus qca_verify_consistency_minimum(const QcaConsistencyQuery *q,
     const int *chart, size_t columns, const int *selected, int terms, NsatLimits limits)
 {
     ConsistencyCheck v = {.q = q, .budget = {.limits = limits}};
-    if (!rebuild_primes(&v)) return finish(&v, NSAT_UNKNOWN);
+    if (!rebuild_primes(&v, true)) return finish(&v, NSAT_UNKNOWN);
     if (!chart || !selected || terms < 1 || (size_t)terms > v.count ||
         columns > SIZE_MAX / sizeof(int) / (size_t)q->conditions)
         return finish(&v, NSAT_ERROR);
@@ -482,9 +606,13 @@ NsatStatus qca_verify_consistency_minimum(const QcaConsistencyQuery *q,
     size_t maxima_bytes = 0;
     CoverageCache coverage = {0};
     if (!model) goto done;
+    size_t width = (size_t)q->conditions;
+    bool indexed = v.largest_singleton_group && v.count >= 16 && v.count >= width &&
+        v.largest_singleton_group - 1 <= v.count - width;
     for (int t = 0; t < terms; ++t) {
         if (selected[t] < 0 || (size_t)selected[t] >= columns) goto done;
-        model[t] = find_prime(&v, chart + (size_t)selected[t] * q->conditions);
+        const int *term = chart + (size_t)selected[t] * width;
+        model[t] = indexed ? find_singleton_prime(&v, term) : find_prime(&v, term, false);
         if (model[t] < 0) goto done;
         for (int i = 0; i < t; ++i) {
             if (!nsat_work(&v.budget, 1)) goto done;
