@@ -12,8 +12,8 @@ extern SEXP C_gurobiRuntimeAvailable(void);
 extern SEXP C_findminExact(SEXP chart);
 extern SEXP C_getScpProfile(void);
 extern SEXP C_resetScpProfile(void);
-extern SEXP C_getSA(SEXP solution_list, SEXP expressions, SEXP noflevels, SEXP mbaseexpr,
-                    SEXP inputt, SEXP mbaseplus, SEXP mbase);
+extern SEXP C_getSA(SEXP solution_list, SEXP expressions, SEXP noflevels, SEXP inputt,
+                    SEXP expr_columns);
 extern SEXP C_solveChart(SEXP pichart, SEXP allsol, SEXP vdepth, SEXP k, SEXP maxcomb, SEXP firstmin);
 extern SEXP C_getRow(SEXP input);
 extern SEXP C_createMatrix(SEXP input);
@@ -41,7 +41,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"C_findminExact", (DL_FUNC) &C_findminExact, 1},
   {"C_getScpProfile", (DL_FUNC) &C_getScpProfile, 0},
   {"C_resetScpProfile", (DL_FUNC) &C_resetScpProfile, 0},
-  {"C_getSA", (DL_FUNC) &C_getSA, 7},
+  {"C_getSA", (DL_FUNC) &C_getSA, 5},
   {"C_solveChart", (DL_FUNC) &C_solveChart, 6},
   {"C_getRow", (DL_FUNC) &C_getRow, 1},
   {"C_createMatrix", (DL_FUNC) &C_createMatrix, 1},

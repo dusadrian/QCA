@@ -1,6 +1,7 @@
 #include <R_ext/RS.h>
 #include "qca_rinternals.h"
 #include <float.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -146,14 +147,14 @@ static R_INLINE SEXP Rresize(SEXP obj, int len) {
     return(obj);
 }
 
-static int qca_compare_int(const void *a, const void *b) {
-    int ia = *(const int *) a;
-    int ib = *(const int *) b;
+static int qca_compare_row_keys(const void *a, const void *b) {
+    uint64_t ia = *(const uint64_t *) a;
+    uint64_t ib = *(const uint64_t *) b;
 
     return (ia > ib) - (ia < ib);
 }
 
-static Rboolean qca_int_in_sorted(const int value, const int values[], const int n) {
+static Rboolean qca_row_key_in_sorted(uint64_t value, const uint64_t values[], int n) {
     int lo = 0;
     int hi = n - 1;
 
@@ -326,20 +327,16 @@ SEXP C_getSA(
     SEXP solution_list,
     SEXP expressions,
     SEXP noflevels,
-    SEXP mbaseexpr,
     SEXP inputt,
-    SEXP mbaseplus,
-    SEXP mbase
+    SEXP expr_columns
 ) {
 
-    SEXP usage = PROTECT(allocVector(VECSXP, 7));
+    SEXP usage = PROTECT(allocVector(VECSXP, 5));
 
     SET_VECTOR_ELT(usage, 0, expressions = coerceVector(expressions, INTSXP));
     SET_VECTOR_ELT(usage, 1, noflevels = coerceVector(noflevels, INTSXP));
-    SET_VECTOR_ELT(usage, 2, mbaseexpr = coerceVector(mbaseexpr, INTSXP));
-    SET_VECTOR_ELT(usage, 3, inputt = coerceVector(inputt, INTSXP));
-    SET_VECTOR_ELT(usage, 4, mbaseplus = coerceVector(mbaseplus, INTSXP));
-    SET_VECTOR_ELT(usage, 5, mbase = coerceVector(mbase, INTSXP));
+    SET_VECTOR_ELT(usage, 2, inputt = coerceVector(inputt, INTSXP));
+    SET_VECTOR_ELT(usage, 3, expr_columns = coerceVector(expr_columns, INTSXP));
 
     if (!isNewList(solution_list)) {
         error("C_getSA expects a list of solutions.");
@@ -347,10 +344,8 @@ SEXP C_getSA(
 
     int *p_expr = INTEGER(expressions);
     int *p_noflevels = INTEGER(noflevels);
-    int *p_mbaseexpr = INTEGER(mbaseexpr);
     int *p_inputt = INTEGER(inputt);
-    int *p_mbaseplus = INTEGER(mbaseplus);
-    int *p_mbase = INTEGER(mbase);
+    int *p_expr_columns = INTEGER(expr_columns);
 
     int nsol = length(solution_list);
     int expr_rows = nrows(expressions);
@@ -358,22 +353,51 @@ SEXP C_getSA(
     int input_rows = nrows(inputt);
     int input_cols = ncols(inputt);
 
+    if (XLENGTH(noflevels) != input_cols || XLENGTH(expr_columns) != input_cols) {
+        error("Condition columns do not match in C_getSA().");
+    }
+
+    /* Only complete configurations become keys. Use their zero-based row
+     * numbers directly, with no extra digit for an unspecified condition. */
+    uint64_t *strides = (uint64_t *) R_alloc((size_t) input_cols, sizeof(*strides));
+    uint64_t configurations = 1;
+    for (int c = input_cols - 1; c >= 0; c--) {
+        int levels = p_noflevels[c];
+        if (levels <= 0 || p_expr_columns[c] < 0 || p_expr_columns[c] > expr_cols) {
+            error("Invalid condition columns in C_getSA().");
+        }
+        if (configurations > UINT64_MAX / (uint64_t) levels) {
+            error("Too many possible configurations to number the simplifying assumptions.");
+        }
+        strides[c] = configurations;
+        configurations *= (uint64_t) levels;
+    }
+
     SEXP out = PROTECT(allocVector(VECSXP, nsol));
 
-    int *observed = (int *) R_Calloc((size_t) input_rows, int);
+    uint64_t *observed = (uint64_t *) R_Calloc((size_t) input_rows, uint64_t);
     if (observed == NULL) {
         error("Memory allocation failed in C_getSA().");
     }
 
+    int observed_count = 0;
     for (int r = 0; r < input_rows; r++) {
-        int key = 0;
-        for (int c = 0; c < input_cols; c++) {
-            key += p_inputt[c * input_rows + r] * p_mbaseplus[c];
+        uint64_t key = 0;
+        int c = 0;
+        for (; c < input_cols; c++) {
+            int value = p_inputt[(size_t) c * input_rows + r];
+            /* A temporal don't-care row cannot equal a complete configuration. */
+            if (value == 0) break;
+            if (value < 0 || value > p_noflevels[c]) {
+                R_Free(observed);
+                error("Observed condition value outside its levels in C_getSA().");
+            }
+            key += (uint64_t) (value - 1) * strides[c];
         }
-        observed[r] = key;
+        if (c == input_cols) observed[observed_count++] = key;
     }
 
-    qsort(observed, (size_t) input_rows, sizeof(int), qca_compare_int);
+    qsort(observed, (size_t) observed_count, sizeof(*observed), qca_compare_row_keys);
 
     SEXP input_dimnames = getAttrib(inputt, R_DimNamesSymbol);
     SEXP input_colnames = R_NilValue;
@@ -393,8 +417,8 @@ SEXP C_getSA(
 
         size_t keys_capacity = 1024;
         size_t keys_count = 0;
-        int *keys = (int *) R_Calloc(keys_capacity, int);
-        int *zero_pos = (int *) R_Calloc((size_t) expr_cols, int);
+        uint64_t *keys = (uint64_t *) R_Calloc(keys_capacity, uint64_t);
+        int *zero_pos = (int *) R_Calloc((size_t) input_cols, int);
 
         if (keys == NULL || zero_pos == NULL) {
             if (keys != NULL) R_Free(keys);
@@ -407,10 +431,12 @@ SEXP C_getSA(
             int expr_row = -1;
 
             if (TYPEOF(sol) == INTSXP) {
-                expr_row = INTEGER(sol)[i] - 1;
+                int index = INTEGER(sol)[i];
+                if (index > 0) expr_row = index - 1;
             }
             else if (TYPEOF(sol) == REALSXP) {
-                expr_row = (int) REAL(sol)[i] - 1;
+                double index = REAL(sol)[i];
+                if (index >= 1 && index <= expr_rows) expr_row = (int) index - 1;
             }
             else if (TYPEOF(sol) == STRSXP && !Rf_isNull(expr_rownames)) {
                 const char *target = CHAR(STRING_ELT(sol, i));
@@ -435,17 +461,24 @@ SEXP C_getSA(
                 error("Solution index outside the expression matrix.");
             }
 
-            int base = 0;
+            uint64_t base = 0;
             int zero_count = 0;
 
-            for (int c = 0; c < expr_cols; c++) {
-                int value = p_expr[c * expr_rows + expr_row];
-                base += p_mbaseexpr[c] * value;
-
+            for (int c = 0; c < input_cols; c++) {
+                int column = p_expr_columns[c];
+                int value = column ? p_expr[(size_t) (column - 1) * expr_rows + expr_row] : 0;
+                if (value < 0 || value > p_noflevels[c]) {
+                    R_Free(keys);
+                    R_Free(zero_pos);
+                    R_Free(observed);
+                    error("Expression condition value outside its levels in C_getSA().");
+                }
                 if (value == 0) {
-                    base += p_mbaseexpr[c];
                     zero_pos[zero_count] = c;
                     zero_count++;
+                }
+                else {
+                    base += (uint64_t) (value - 1) * strides[c];
                 }
             }
 
@@ -475,7 +508,7 @@ SEXP C_getSA(
             if (keys_count + combinations > keys_capacity) {
                 size_t new_capacity = keys_capacity;
                 while (keys_count + combinations > new_capacity) {
-                    if (new_capacity > SIZE_MAX / 2) {
+                    if (new_capacity > SIZE_MAX / sizeof(*keys) / 2) {
                         R_Free(keys);
                         R_Free(zero_pos);
                         R_Free(observed);
@@ -484,19 +517,19 @@ SEXP C_getSA(
                     new_capacity *= 2;
                 }
 
-                keys = (int *) R_Realloc(keys, new_capacity, int);
+                keys = (uint64_t *) R_Realloc(keys, new_capacity, uint64_t);
                 keys_capacity = new_capacity;
             }
 
             for (size_t comb = 0; comb < combinations; comb++) {
                 size_t rest = comb;
-                int key = base;
+                uint64_t key = base;
 
                 for (int z = 0; z < zero_count; z++) {
                     int c = zero_pos[z];
                     int level = (int) (rest % (size_t) p_noflevels[c]);
                     rest /= (size_t) p_noflevels[c];
-                    key += p_mbaseexpr[c] * level;
+                    key += (uint64_t) level * strides[c];
                 }
 
                 keys[keys_count] = key;
@@ -504,14 +537,14 @@ SEXP C_getSA(
             }
         }
 
-        qsort(keys, keys_count, sizeof(int), qca_compare_int);
+        qsort(keys, keys_count, sizeof(*keys), qca_compare_row_keys);
 
         size_t kept_count = 0;
-        int previous = 0;
+        uint64_t previous = 0;
         Rboolean have_previous = FALSE;
 
         for (size_t i = 0; i < keys_count; i++) {
-            int key = keys[i];
+            uint64_t key = keys[i];
 
             if (have_previous && key == previous) {
                 continue;
@@ -519,7 +552,7 @@ SEXP C_getSA(
             have_previous = TRUE;
             previous = key;
 
-            if (!qca_int_in_sorted(key, observed, input_rows)) {
+            if (!qca_row_key_in_sorted(key, observed, observed_count)) {
                 keys[kept_count] = key;
                 kept_count++;
             }
@@ -534,19 +567,14 @@ SEXP C_getSA(
 
         int kept_rows = (int) kept_count;
         SEXP matrix;
-        SET_VECTOR_ELT(usage, 6, matrix = allocMatrix(INTSXP, kept_rows, input_cols));
+        SET_VECTOR_ELT(usage, 4, matrix = allocMatrix(INTSXP, kept_rows, input_cols));
         int *p_matrix = INTEGER(matrix);
 
         for (int r = 0; r < kept_rows; r++) {
-            int row_name = 0;
-
             for (int c = 0; c < input_cols; c++) {
-                int value = ((keys[r] / p_mbaseplus[c]) % (p_noflevels[c] + 1)) - 1;
-                p_matrix[c * kept_rows + r] = value;
-                row_name += value * p_mbase[c];
+                int value = (int) ((keys[r] / strides[c]) % (uint64_t) p_noflevels[c]);
+                p_matrix[(size_t) c * kept_rows + r] = value;
             }
-
-            keys[r] = row_name + 1;
         }
 
         SEXP dimnames = PROTECT(allocVector(VECSXP, 2));
@@ -554,7 +582,7 @@ SEXP C_getSA(
             SEXP rownames = PROTECT(allocVector(STRSXP, kept_rows));
             for (int r = 0; r < kept_rows; r++) {
                 char buffer[32];
-                snprintf(buffer, sizeof(buffer), "%d", keys[r]);
+                snprintf(buffer, sizeof(buffer), "%" PRIu64, keys[r] + 1);
                 SET_STRING_ELT(rownames, r, mkChar(buffer));
             }
             SET_VECTOR_ELT(dimnames, 0, rownames);
