@@ -334,7 +334,7 @@
     # return(list(data=recdata, outcome=outcome, conditions=conditions, dir.exp=dir.exp))
 
     noflevels <- tt$noflevels
-    mbase <- as.integer(rev(c(1, cumprod(rev(noflevels))))[-1])
+    mbase <- rev(c(1, cumprod(rev(noflevels))))[-1]
     mbaseplus <- rev(c(1, cumprod(rev(noflevels + 1))))[-1]
 
     # check if the column names are not already letters
@@ -800,17 +800,25 @@
         ### the temporal column(s) get removed and that influences mbaseplus, now mbaseexpr
         mbaseexpr <- rev(c(1, cumprod(rev(noflevels[is.element(conds, colnames(p.sol$reduced$expressions))] + 1))))[-1]
 
-        output$SA <- .Call(
-            "C_getSA",
-            p.sol$solution.list[[1]],
-            p.sol$reduced$expressions,
-            as.integer(noflevels),
-            as.integer(mbaseexpr),
-            inputt,
-            as.integer(mbaseplus),
-            as.integer(mbase),
-            PACKAGE = "QCA"
-        )
+        if (prod(noflevels + 1) > .Machine$integer.max) {
+            output$SA <- wideSimplifyingAssumptions(
+                p.sol$solution.list[[1]], p.sol$reduced$expressions,
+                inputt, conds, noflevels, mbase
+            )
+        }
+        else {
+            output$SA <- .Call(
+                "C_getSA",
+                p.sol$solution.list[[1]],
+                p.sol$reduced$expressions,
+                as.integer(noflevels),
+                as.integer(mbaseexpr),
+                inputt,
+                as.integer(mbaseplus),
+                as.integer(mbase),
+                PACKAGE = "QCA"
+            )
+        }
 
 
         prettyNums <- formatC(
@@ -1039,6 +1047,44 @@ function(...) {
 }
 
 
+
+
+# The native simplifying-assumption keys include a don't-care digit. When
+# those keys exceed integer range, compare the actual configurations.
+# Ex. 14 binary conditions and four five-valued conditions with just 30 observed rows.
+# The simplifying-assumption keys span about 6.2 billion possible values, above the
+# signed integer limit of 2.1 billion
+wideSimplifyingAssumptions <- function(models, expressions, inputt, conds, noflevels, mbase) {
+    observed <- unname(inputt - 1L)
+    columns <- match(colnames(expressions), conds)
+
+    lapply(models, function(model) {
+        expansions <- lapply(model, function(term) {
+            values <- integer(length(conds))
+            values[columns] <- expressions[term, ]
+            if (all(values > 0L)) {
+                return(NULL)
+            }
+            levels <- lapply(seq_along(values), function(i) {
+                if (values[i] > 0L) {
+                    return(values[i] - 1L)
+                }
+                seq_len(noflevels[i]) - 1L
+            })
+            as.matrix(expand.grid(levels, KEEP.OUT.ATTRS = FALSE))
+        })
+
+        rows <- rbind(observed, do.call(rbind, expansions))
+        rows <- rows[seq_len(nrow(rows)) > nrow(observed) & !duplicated(rows), , drop = FALSE]
+        storage.mode(rows) <- "integer"
+        colnames(rows) <- colnames(inputt)
+        if (nrow(rows) > 0L) {
+            rows <- rows[do.call(order, unname(as.list(as.data.frame(rows)))), , drop = FALSE]
+            rownames(rows) <- as.character(drop(rows %*% mbase) + 1)
+        }
+        rows
+    })
+}
 
 
 `eqmcc` <- function(...) {

@@ -95,7 +95,7 @@ configurations (minterms), then exhaustively search through all possible disjunc
 The minimal number \bold{\code{k}} is determined by solving the set covering problem on
 the PI chart. During prime implicant generation, duplicate and dominated coverage
 columns are marked and omitted from the chart passed to every solver backend; the
-complete PI chart remains available for output and solution enumeration. Every
+full set of generated PIs remains available for output and solution enumeration. Every
 available backend returns a proven minimum. By default, the internal hybrid solver combines
 a level-2 Lagrangian relaxation bound with
 reduced-cost fixing and a progress-adaptive branch-and-bound search. When that search is
@@ -139,11 +139,15 @@ cover can exist. A one-term cover is already minimal for a nonempty outcome.
 When the check finds a smaller cover is possible, generation continues so that the
 systematic chart contains the terms needed for a minimum model.
 
-With the default \bold{\code{first.min = FALSE}}, the check instead asks whether
-a legal term exists that contains none of the chart's prime implicants as a
-subterm. CCubes uses the complete chart to enumerate models. The native checks
-are bounded and apply to ordinary point tables with up to 15 conditions.
-Inconclusive checks continue through the applicable systematic depth.
+With the default \bold{\code{all.sol = FALSE}} and \bold{\code{first.min = FALSE}},
+CCubes returns the models tied for the smallest number of terms. On a binary
+point table, it may stop generating PIs once it proves both the minimum size
+and that every model of that size can be built from the PIs already found.
+The returned PI chart can then omit terms used only in larger models.
+With \bold{\code{all.sol = TRUE}}, the search also includes larger irredundant
+models. A proof of the minimum alone cannot stop PI generation in this mode.
+If a completeness check is inconclusive, generation continues within the
+applicable search limits.
 For searches using \bold{\code{pi.cons}} or \bold{\code{sol.cons}}, an
 independent finite-domain verifier reconstructs eligible prime implicants from
 the truth table and calibrated cases. A complete-family proof may end PI
@@ -177,8 +181,10 @@ the search.
 
 With \bold{\code{sol.cons > 0}}, model sizes are searched in increasing order,
 so the first successful size establishes the minimum for the generated prime
-implicants. The default \bold{\code{sol.depth = 0}} no longer imposes a seven-term
-cap. With \bold{\code{max.comb = 0}}, consistency-based enumeration stops once
+implicants. With \code{all.sol = FALSE}, the search finishes that size to
+collect its ties and stops before searching larger sizes. The default
+\bold{\code{sol.depth = 0}} leaves model size unrestricted by the user.
+With \bold{\code{max.comb = 0}}, consistency-based enumeration stops once
 all branches are redundant with accepted models or provably unable to meet the
 fit thresholds at any larger size. A size with no new models is not sufficient
 to stop. Larger irredundant models remain available with \bold{\code{all.sol = TRUE}}.
