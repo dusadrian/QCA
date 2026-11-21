@@ -261,7 +261,7 @@
         }
 
         testrout <- apply(trout, 2, function(x) {
-            all(x != "-1")
+            any(x != "-1")
         })
 
         if (sum(testrout) == 1) {
@@ -270,7 +270,7 @@
 
 
         if (identical(conditions, "")) {
-            conditions <- names(input)[-which(names(input) == outcome.name)]
+            conditions <- setdiff(names(input), names(testrout)[testrout])
         }
         else {
             conditions <- admisc::splitstr(conditions)
@@ -281,7 +281,7 @@
         if (length(conditions) == 1) {
             if (grepl(":", conditions)) {
                 # they are already verified as existing columns
-                nms <- colnames(data)
+                nms <- colnames(input)
                 cs <- unlist(strsplit(conditions, split = ":"))
                 conditions <- nms[seq(which(nms == cs[1]), which(nms == cs[2]))]
             }
@@ -312,7 +312,11 @@
     outcome <- colnames(recdata)[ncol(recdata)]
 
     ### bug fix 2016.08.05 reported by Carsten Schneider and Nena Oana
-    indata <- tt$initial.data[, match(colnames(recdata), colnames(tt$initial.data)), drop = FALSE]
+    indata <- tt$initial.data
+    if (grepl("\\+|\\*", outcome) && !is.element(outcome, names(indata))) {
+        indata[[outcome]] <- admisc::compute(outcome, indata)
+    }
+    indata <- indata[, colnames(recdata), drop = FALSE]
     ###
 
     use.letters <- tt$options$use.letters
@@ -329,12 +333,11 @@
         tt$tt <- tt$tt[-missings, , drop = FALSE]
     }
 
-    ttrownms <- admisc::asNumeric(rownames(tt$tt))
+    ttrownms <- rownames(tt$tt)
 
     # return(list(data=recdata, outcome=outcome, conditions=conditions, dir.exp=dir.exp))
 
     noflevels <- tt$noflevels
-    mbase <- rev(c(1, cumprod(rev(noflevels))))[-1]
     mbaseplus <- rev(c(1, cumprod(rev(noflevels + 1))))[-1]
 
     # check if the column names are not already letters
@@ -361,13 +364,14 @@
 
     pos.matrix <- as.matrix(tt$tt[subset.pos, seq(length(noflevels))])
     # fixes bug reported by Ben Gibson, 17.05.2016
-    rownames(pos.matrix) <- drop(pos.matrix %*% mbase) + 1
+    rownames(pos.matrix) <- configurationRows(pos.matrix, noflevels)
     # was rownames(pos.matrix) <- tt$indexes[subset.tt]
     pos.matrix <- pos.matrix + 1
 
     neg.matrix <- as.matrix(tt$tt[!is.element(tt$tt[, "OUT"], pos.incl), seq(length(noflevels))])
     neg.matrix <- matrix(as.numeric(neg.matrix), ncol = length(noflevels)) + 1
-    rownames(neg.matrix) <- drop((neg.matrix - 1) %*% mbase) + 1
+    negative.rows <- configurationRows(neg.matrix - 1, noflevels)
+    rownames(neg.matrix) <- negative.rows
 
     if (sum(subset.pos) == 0) {
         admisc::stopError(
@@ -377,7 +381,7 @@
     }
 
     inputt <- as.matrix(tt$tt[is.element(ttrownms, subset.tt), seq(length(noflevels)), drop = FALSE])
-    rownames(inputt) <- drop(inputt %*% mbase) + 1
+    rownames(inputt) <- configurationRows(inputt, noflevels)
     inputt <- inputt + 1
 
     # when excluding remainders and number of conditions > 7, the "cases" component
@@ -391,7 +395,13 @@
     excl.matrix <- matrix(nrow = 0, ncol = length(conditions))
 
 
-    output$negatives <- sort(drop((neg.matrix - 1) %*% mbase) + 1)
+    if (is.character(negative.rows)) {
+        row.order <- order(nchar(negative.rows), negative.rows, method = "radix")
+        output$negatives <- negative.rows[row.order]
+    }
+    else {
+        output$negatives <- sort(negative.rows)
+    }
     rownms <- rownames(inputt)
 
     if (nrow(pos.matrix) == 0) {
@@ -449,10 +459,6 @@
     admisc::setColnames(inputt, colnms)
     admisc::setColnames(pos.matrix, colnms)
     admisc::setColnames(neg.matrix, colnms)
-
-
-    rownames(neg.matrix) <- (neg.matrix - 1) %*% mbase + 1
-
 
     output$initials <- admisc::writePIs(
         impmat = inputt,

@@ -127,6 +127,15 @@
                 thIN <- thresholds[3]
 
                 if (logistic) {
+                    if (
+                        any(!is.finite(thresholds)) ||
+                        !(all(diff(thresholds) > 0) || all(diff(thresholds) < 0))
+                    ) {
+                        admisc::stopError(
+                            "The crossover must lie strictly between the two outer thresholds.",
+                            ... = ...
+                        )
+                    }
                     if (thresholds[1] > thresholds[3]) {
                         thEX <- thresholds[3]
                         thIN <- thresholds[1]

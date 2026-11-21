@@ -1,37 +1,28 @@
-`getRow` <-  function(
+`getRow` <- function(
     row.no = NULL, noflevels = NULL, zerobased = FALSE, ...
 ) {
-    
-    dots <- list(...)
-    enter <- ifelse (is.element("enter", names(dots)), dots$enter, TRUE)
-    
-    max.combs <- prod(noflevels)
-    if (any(row.no > (max.combs - zerobased))) {
+    if (
+        anyNA(noflevels) || any(noflevels < 1 | noflevels > .Machine$integer.max) ||
+        any(noflevels != floor(noflevels))
+    ) {
+        admisc::stopError("Condition levels must be positive whole numbers.", ... = ...)
+    }
+
+    if (is.numeric(row.no) && any(row.no > prod(noflevels) - zerobased, na.rm = TRUE)) {
         admisc::stopError(
-            paste0(
-                "There cannot be more than ",
-                max.combs,
-                " rows."
-            ),
-            ... = ...
+            paste0("There cannot be more than ", prod(noflevels), " rows."), ... = ...
         )
     }
-    
-    if (!zerobased) {row.no <- row.no - 1}
-    
+
+    return(.Call("C_getRow", list(row.no, noflevels, as.logical(zerobased)), PACKAGE = "QCA"))
+}
+
+configurationRows <- function(data, noflevels) {
+    # R's ordinary numeric row labels retain up to 15 significant digits.
+    if (prod(noflevels) >= 1e15) {
+        return(.Call("C_configurationRows", as.matrix(data), noflevels, PACKAGE = "QCA"))
+    }
+
     mbase <- c(rev(cumprod(rev(noflevels))), 1)[-1]
-    
-    return(
-        .Call(
-            "C_getRow",
-            list(
-                row.no,
-                noflevels,
-                mbase
-            ),
-            PACKAGE = "QCA"
-        )
-    )
-    
-    # t(sapply(row.no, function(x) x %/% mbase) %% noflevels)
+    return(as.vector(as.matrix(data) %*% mbase) + 1)
 }

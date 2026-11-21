@@ -31,7 +31,8 @@ getRow(row.no = NULL, noflevels = NULL, zerobased = FALSE, ...)
   \item{depth}{Integer, an upper number of causal conditions to form expressions with.}
   \item{raw}{Logical, if \code{TRUE} it returns the matrix indicating which conditions have
              been minimized, using \bold{\code{-1}}.}
-  \item{row.no}{A vector, the desired row numbers.}
+  \item{row.no}{A vector of row numbers. For numbers above \eqn{2^{53}},
+  supply exact decimal strings. The largest supported row number is \eqn{2^{64}-1}.}
   \item{zerobased}{Logical, if \bold{\code{TRUE}} the first row number is zero.}
   \item{...}{Other arguments.}
 }

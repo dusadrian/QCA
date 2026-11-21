@@ -65,9 +65,16 @@
     multivalue <- grepl(mvregexp, outcome)
 
 
+    compound <- grepl("\\+|\\*", outcome)
+    if (compound && is.element(outcome, names(data))) {
+        # Older truth tables retained the computed expression with their input.
+        data[[outcome]] <- NULL
+        initial.data <- data
+    }
+    outcome.columns <- character()
     if (!identical(outcome, "")) {
         outcometest <- admisc::tryCatchWEM(
-            admisc::translate(admisc::notilde(outcome), data = data)
+            translated <- admisc::translate(admisc::notilde(outcome), data = data)
         )
         if (!is.null(outcometest$error)) {
             if (
@@ -94,10 +101,8 @@
             }
         }
 
-        if (grepl("\\+|\\*", outcome)) {
-            initial.data[, outcome] <- data[, outcome] <- admisc::compute(outcome, data)
-        }
-        else if (multivalue) {
+        outcome.columns <- colnames(translated)[colSums(translated != "-1") > 0]
+        if (!compound && multivalue) {
             if (any(grepl("\\{", outcome))) {
                 outcome.value <- admisc::curlyBrackets(outcome)
                 outcome <- admisc::curlyBrackets(outcome, outside = TRUE)
@@ -118,7 +123,7 @@
                 admisc::splitstr(outcome.value)
             ) * 1
         }
-        else {
+        else if (!compound) {
             outcometest <- data[, admisc::notilde(outcome)]
             declared <- inherits(outcometest, "declared")
             if (declared) {
@@ -133,14 +138,10 @@
     conditions <- admisc::recreate(substitute(conditions), colnames(data))
 
     if (identical(conditions, "")) {
-        conditions <- setdiff(
-            colnames(data),
-            ifelse(
-                grepl("\\+|\\*", outcome),
-                outcome,
-                admisc::notilde(outcome)
-            )
-        )
+        conditions <- setdiff(colnames(data), outcome.columns)
+        if (!length(conditions)) {
+            admisc::stopError("Specify conditions separate from the outcome.")
+        }
     }
     else {
         # if (is.character(conditions) & length(conditions) == 1) {
@@ -219,17 +220,19 @@
     }
 
 
-    if (!grepl("\\+|\\*", outcome)) {
-        data <- data[, c(conditions, admisc::notilde(outcome))]
-
-        if (neg.out | admisc::tilde1st(outcome)) {
-            data[, admisc::notilde(outcome)] <- 1 - data[, admisc::notilde(outcome)]
-        }
-
-        outcome <- admisc::notilde(outcome)
-
+    if (!compound && length(intersect(conditions, outcome.columns))) {
+        admisc::stopError("An outcome column cannot also be a condition.")
     }
 
+    if (compound) {
+        data[[outcome]] <- admisc::compute(outcome, data)
+    }
+    outcome.column <- if (compound) outcome else admisc::notilde(outcome)
+    data <- data[, c(conditions, outcome.column), drop = FALSE]
+    if (neg.out || (!compound && admisc::tilde1st(outcome))) {
+        data[, outcome.column] <- 1 - data[, outcome.column]
+    }
+    outcome <- outcome.column
 
     nofconditions <- length(conditions)
 
@@ -265,14 +268,19 @@
         )
     }
 
-    mbase <- c(rev(cumprod(rev(noflevels))), 1)[-1]
-    line.data <- as.vector(as.matrix(condata) %*% mbase) + 1
-    condata <- condata[order(line.data), , drop = FALSE]
-    uniq <- which(!duplicated(condata))
+    line.data <- configurationRows(condata, noflevels)
+    if (is.character(line.data)) {
+        row.order <- order(nchar(line.data), line.data, method = "radix")
+    }
+    else {
+        row.order <- order(line.data)
+    }
+    uniq <- row.order[!duplicated(line.data[row.order])]
     tt <- condata[uniq, , drop = FALSE]
-
-
-    rownstt <- sort(line.data)[uniq]
+    # Keep the generated OUT and cases fields accessible by their usual names.
+    table.names <- make.unique(c("OUT", "cases", conditions))[-(1:2)]
+    colnames(tt) <- table.names
+    rownstt <- line.data[uniq]
     rownames(tt) <- rownstt
 
     if (
@@ -318,21 +326,14 @@
         admisc::agteb(ipc[3, !obremove], pri.cut)
     )
 
-    tt$OUT[ipc[2, !obremove] < ic1 & admisc::agteb(ipc[2, !obremove], ic0)] <- "C"
+    contradiction <- ipc[2, ] < ic1 & admisc::agteb(ipc[2, ], ic0)
+    tt$OUT[!obremove & contradiction] <- "C"
 
     tt <- cbind(tt, t(ipc))
 
-    # detect cases that have values equal to exactly 0.5
-    zero.five <- apply(
-        data[, conditions, drop = FALSE],
-        1,
-        function(x) any(admisc::aeqb(x, 0.5))
-    )
-
-    cases <- sapply(rownstt, function(x) {
-        # and prevent allocating those cases to truth table rows
-        paste(rownames(data)[line.data == x & !zero.five], collapse = ",")
-    })
+    cases <- vapply(seq_along(rownstt), function(i) {
+        paste(rownames(data)[minmat[, i] > 0.5], collapse = ",")
+    }, character(1))
 
     DCC <- apply(minmat, 2, function(x) {
         paste(rownames(data)[x > 0.5 & data[, outcome] < 0.5], collapse = ",")
@@ -346,19 +347,19 @@
         admisc::agteb(ipc[3, obremove], pri.cut)
     )
 
-    removed$OUT[
-        ipc[2, obremove] < ic1 & admisc::agteb(ipc[2, obremove], ic0)
-    ] <- "C"
+    removed$OUT[contradiction[obremove]] <- "C"
 
     frcallist <- NULL
 
     if (!is.null(exclude)) {
 
-        if (admisc::possibleNumeric(exclude)) {
+        exact.exclude <- is.character(line.data) && is.character(exclude) &&
+            all(grepl("^[0-9]+$", exclude))
+        if (!exact.exclude && admisc::possibleNumeric(exclude)) {
             exclude <- admisc::asNumeric(exclude)
         }
 
-        if (is.character(exclude)) {
+        if (is.character(exclude) && !exact.exclude) {
             frargs <- setdiff(names(formals(findRows)), "...")
             callist <- as.list(metacall)
             frcallist <- list(expression = exclude)
@@ -378,7 +379,25 @@
 
         if (length(exclude) > 0) {
             # exclude <- setdiff(exclude, rownames(tt)[is.element(tt$tt$OUT, 0:1)])
-            exclude <- exclude[exclude <= prod(noflevels)]
+            if (is.character(line.data)) {
+                if (is.numeric(exclude)) {
+                    if (any(exclude > 2^53 | exclude != floor(exclude))) {
+                        admisc::stopError("Supply large row numbers as exact decimal strings.")
+                    }
+                    exclude <- sprintf("%.0f", exclude)
+                }
+                exclude <- sub("^0+(?=[0-9])", "", exclude, perl = TRUE)
+                if (prod(noflevels) < 2^64) {
+                    last <- configurationRows(matrix(noflevels - 1, nrow = 1), noflevels)
+                    exclude <- exclude[
+                        nchar(exclude) < nchar(last) |
+                        (nchar(exclude) == nchar(last) & exclude <= last)
+                    ]
+                }
+            }
+            else {
+                exclude <- exclude[exclude <= prod(noflevels)]
+            }
         }
     }
 
@@ -409,7 +428,7 @@
                     getRow(unobserved.exclude, noflevels)
                 )
                 rownames(excl.matrix) <- unobserved.exclude
-                colnames(excl.matrix) <- conditions
+                colnames(excl.matrix) <- table.names
                 excl.matrix$OUT <- 0
                 excl.matrix$n <- 0
                 excl.matrix$incl <- "-"
@@ -520,7 +539,9 @@
             alpha <- 0.05
         }
 
-        observed <- which(tt$OUT != "?")
+        observed <- which(
+            tt$OUT != "?" & !is.element(rownames(tt), as.character(exclude))
+        )
         success <- round(tt[observed, "n"] * as.numeric(tt[observed, "incl"]))
 
         tt$pval1 <- "-"
@@ -529,7 +550,7 @@
         }
         tt[observed, "OUT"] <- 0
 
-        for (i in seq(length(observed))) {
+        for (i in seq_along(observed)) {
 
             pval1 <- tt[observed[i], "pval1"] <- binom.test(
                 success[i],

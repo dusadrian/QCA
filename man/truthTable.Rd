@@ -75,7 +75,10 @@ and it becomes the new outcome to be explained.
 
 The argument \bold{\code{conditions}} specifies the causal conditions' names among the other
 columns in the data. When this argument is not specified, all other columns except for
-the outcome are taken as causal conditions.
+the outcome are taken as causal conditions. For a compound outcome, its constituent
+columns are excluded from the default conditions. If a condition is named
+\code{OUT} or \code{cases}, its column in the truth table receives a numeric suffix.
+The solution uses the original condition name.
 
 A good practice advice is to specify both \bold{\code{outcome}} and
 \bold{\code{conditions}} as upper case letters. It is possible, in a next version,
@@ -165,6 +168,8 @@ The argument \bold{\code{exclude}} is used to exclude truth table rows from the
 minimization process, from the positive configurations and/or from the remainders. This
 is achieved by coding those configurations with a value of 0 in the OUTput column (thus
 treating them as if they were observed as negative output configurations).
+Explicit exclusions also apply when using a binomial test. For row numbers
+above \eqn{2^{53}}, supply the exact decimal digits as character strings.
 
 The argument \bold{\code{complete}} controls how to print the table on the screen, either
 complete (when set to \bold{\code{TRUE}}), or just the observed combinations (default).

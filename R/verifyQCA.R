@@ -35,7 +35,7 @@ function(data, outcome = "", conditions = "") {
     }
 
     testrout <- apply(trout, 2, function(x) {
-        all(x != "-1")
+        any(x != "-1")
     })
 
 
@@ -52,10 +52,11 @@ function(data, outcome = "", conditions = "") {
                 )
             }
 
-            conditions <- unlist(strsplit(conditions, split = ":"))
-
             nms <- colnames(data)
             cs <- unlist(strsplit(conditions, split = ":"))
+            if (length(cs) != 2L || !all(is.element(cs, nms))) {
+                admisc::stopError("Conditions not found in the data.")
+            }
             conditions <- nms[seq(which(nms == cs[1]), which(nms == cs[2]))]
             
             if (is.element(outcome, conditions)) {
@@ -248,7 +249,9 @@ function(data, ...) {
         admisc::stopError("Incorrect outcome specification.")
     }
 
-    testoutcome <- admisc::tryCatchWEM(admisc::translate(outcome, colnames(data)))
+    testoutcome <- admisc::tryCatchWEM(
+        trout <- admisc::translate(outcome, colnames(data))
+    )
     
     if (is.element("error", names(testoutcome))) {
         admisc::stopError("The outcome is not correct.")
@@ -326,16 +329,8 @@ function(data, ...) {
     #     admisc::stopError("ic0 cannot be greater than ic1.")
     # }
     
-    testoutcome <- admisc::tryCatchWEM(
-        trout <- admisc::translate(outcome, colnames(data))
-    )
-    
-    if (is.element("error", names(testoutcome))) {
-        admisc::stopError("Incorrect outcome specification.")
-    }
-    
     testrout <- apply(trout, 2, function(x) {
-        all(x != "-1")
+        any(x != "-1")
     })
 
     data <- data[, unique(c(conditions, names(testrout)[testrout]))]

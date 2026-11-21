@@ -1781,7 +1781,12 @@
         )
     }
     else {
-        rownames(x$tt) <- paste(format(as.numeric(rownames(x$tt))), "")
+        if (is.character(x$indexes) || any(nchar(rownames(x$tt)) >= 16)) {
+            rownames(x$tt) <- paste(format(rownames(x$tt), justify = "right"), "")
+        }
+        else {
+            rownames(x$tt) <- paste(format(as.numeric(rownames(x$tt))), "")
+        }
         nofconditions <- length(x$noflevels)
         names.mydata <- colnames(x$recoded.data)[seq(nofconditions + 1)]
         if (!is.element("removed", names(x$options))) {

@@ -1,35 +1,35 @@
 complexity <- function(
     n, layers = NULL, noflevels = NULL, ...
 ) {
-    if (!is.numeric(n)) {
-        admisc::stopError("Argument <n> should be numeric.", ... = ...)
-    }
-    
-    if (length(n) != 1L) {
-        admisc::stopError("Argument <n> should be a scalar of length 1.", ... = ...)
-    }
-    
-    if (n < 0) {
-        admisc::stopError("Argument <n> should be positive.", ... = ...)
+    if (
+        !is.numeric(n) || length(n) != 1L || !is.finite(n) ||
+        n < 0 || n > .Machine$integer.max || n != floor(n)
+    ) {
+        admisc::stopError("Argument <n> must be a nonnegative whole number.", ... = ...)
     }
 
-    if (is.null(noflevels)) noflevels <- rep(2, n)
-    if (is.null(layers)) layers <- seq(n)
-    
-    if (any(layers > n)) {
-        admisc::stopError("Argument <layers> cannot be greater than <n>.", ... = ...)
+    if (is.null(noflevels)) {
+        noflevels <- rep(2L, n)
     }
-    
-    sumk <- .Call("C_omplexity", list(as.integer(n), as.integer(layers), as.integer(noflevels)), PACKAGE = "QCA")
-    sumk[sumk < 0] <- Inf
-    
-    return(sumk)
-    
-    # the same code in pure R
-    sumk <- rep(0, length(layers))
-    for (i in seq(length(layers))) {
-        sumk[i] <- sum(apply(admisc::combnk(n, layers[i]), 2, function(x) {
-            prod(noflevels[x])
-        }))
+    if (is.null(layers)) {
+        layers <- seq_len(n)
     }
+    if (
+        !is.numeric(noflevels) || length(noflevels) != n ||
+        any(!is.finite(noflevels)) || any(noflevels != floor(noflevels)) ||
+        any(noflevels < 1 | noflevels > .Machine$integer.max)
+    ) {
+        admisc::stopError("Specify a positive number of levels for each condition.", ... = ...)
+    }
+    if (
+        !is.numeric(layers) || any(!is.finite(layers)) ||
+        any(layers != floor(layers)) || any(layers < 1 | layers > n)
+    ) {
+        admisc::stopError("Specify whole complexity layers between 1 and n.", ... = ...)
+    }
+
+    return(.Call(
+        "C_omplexity", list(as.integer(n), as.integer(layers), as.integer(noflevels)),
+        PACKAGE = "QCA"
+    ))
 }

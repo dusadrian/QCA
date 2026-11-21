@@ -40,7 +40,8 @@ conditions out of \eqn{k}.
 }
 
 \value{
-A numeric vector.
+A numeric vector of layer counts in the requested order. Counts above
+\eqn{2^{53}} are subject to double-precision rounding.
 }
 
 \author{

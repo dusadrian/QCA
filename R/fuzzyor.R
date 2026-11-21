@@ -36,10 +36,10 @@
             sum(badnames) > length(LETTERS) |
             any(is.element(unlist(cols), LETTERS))
         ) {
-            cols[[badnames]] <- paste("X", seq(sum(badnames)), sep = "")
+            cols[badnames] <- paste("X", seq(sum(badnames)), sep = "")
         }
         else {
-            cols[[badnames]] <- LETTERS[seq(sum(badnames))]
+            cols[badnames] <- LETTERS[seq(sum(badnames))]
         }
     }
 
@@ -57,12 +57,17 @@
             )
         }
         else {
-            dots[[i]] <- drop(funi)
+            if (is.matrix(funi) && length(funargs) == 1L) {
+                dots[[i]] <- funi
+            }
+            else {
+                dots[[i]] <- drop(funi)
+            }
         }
     }
 
 
-    if (!is.null(dots[[1]]) && is.atomic(dots[[1]])) {
+    if (!is.null(dots[[1]]) && is.atomic(dots[[1]]) && !is.matrix(dots[[1]])) {
 
         if (
             any(
@@ -98,6 +103,9 @@
             }
         }
 
+        if (!is.null(colnames(dots))) {
+            cols <- list(colnames(dots))
+        }
         dots <- as.data.frame(dots)
         negated <- logical(ncol(dots))
         tildenegated <- logical(ncol(dots))
@@ -145,7 +153,7 @@
         )
     }
 
-    # if (any(unlist(lapply(dots, function(x) any(as.numeric(x) < 0 | as.numeric(x) > 1))))) {
+    # if (any(unlist(lapply(dots, function(x) any(x < 0 | x > 1, na.rm = TRUE))))) {
 
     #     admisc::stopError("Input should be logical or numbers between 0 and 1.", ... = ...)
     # }
@@ -164,7 +172,7 @@
         }
     }
 
-    result <- apply(dots, 1, max, na.rm = na.rm)
+    result <- do.call(pmax, c(unname(lapply(dots, as.vector)), list(na.rm = na.rm)))
     attr(result, "names") <- NULL
     attr(result, "name") <- paste(unlist(cols), collapse = " + ")
     class(result) <- c("numeric", "QCA_fuzzy")

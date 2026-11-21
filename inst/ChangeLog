@@ -1,3 +1,13 @@
+Version 3.27
+    o Faster truth table construction by reusing the translated outcome
+    o Faster retention() calculations by counting cases within each configuration
+    o Fixed truth table contradictions with a frequency cutoff, exclusions with
+      binomial tests, case attribution near 0.5, and large configuration numbers
+    o Fixed pof() for negated outcomes supplied in a variable and very small
+      inclusion scores, and pofind() for multi-value outcomes in square brackets
+    o Corrected case-deletion retention probabilities, row dominance on small
+      charts, and integer overflow in complexity()
+
 Version 3.26
     o Faster minimization and prime implicant chart solving. QCA can now
       verify the smallest solution size earlier in more analyses, including

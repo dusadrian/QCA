@@ -25,7 +25,7 @@
     
     if (row.dom) {
         row.numbers <- rowDominance(chart)
-        chart <- chart[row.numbers, ]
+        chart <- chart[row.numbers, , drop = FALSE]
     }
 
 

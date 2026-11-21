@@ -155,12 +155,11 @@
 
 
         if (methods::is(obj, "QCA_tt")) {
-            mbase <- rev(c(1, cumprod(rev(noflevels))))[-1]
             diffwith <- NULL
             if (!observed) {
                 diffwith <- obj$indexes
             }
-            SBS <- setdiff(drop(result %*% mbase) + 1, diffwith)
+            SBS <- setdiff(configurationRows(result, noflevels), diffwith)
         }
         else {
             SBS <- as.vector(which(apply(obj, 1, function(x) {
@@ -192,23 +191,27 @@
             }
         }
 
-        CSA <- as.numeric(
-            intersect(
-                rownames(unique(SA1)),
-                rownames(unique(SA2))
-            )
+        CSA <- intersect(
+            rownames(unique(SA1)),
+            rownames(unique(SA2))
         )
 
     }
 
     if (any(is.element(type, c(0, 3)))) {
-        SSR <- as.numeric(
-            intersect(
-                rownames(obj$tt)[obj$tt$OUT == 1],
-                rownames(nobj$tt)[nobj$tt$OUT == 1]
-            )
+        SSR <- intersect(
+            rownames(obj$tt)[obj$tt$OUT == 1],
+            rownames(nobj$tt)[nobj$tt$OUT == 1]
         )
     }
 
-    return(sort(unique(c(SBS, CSA, SSR))))
+    rows <- unique(c(SBS, CSA, SSR))
+    if (inherits(obj, "QCA_tt") && is.character(obj$indexes)) {
+        rows <- as.character(rows)
+        return(rows[order(nchar(rows), rows, method = "radix")])
+    }
+    if (is.character(rows) || any(is.element(type, c(0, 2, 3)))) {
+        rows <- as.numeric(rows)
+    }
+    return(sort(rows))
 }

@@ -2,6 +2,7 @@
     mtrx
 ) {
     
+    mtrx <- mtrx != 0
     rownames(mtrx) <- seq(nrow(mtrx))
     mtrx.copy <- mtrx
     sums <- rowSums(mtrx)

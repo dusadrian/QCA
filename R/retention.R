@@ -30,7 +30,7 @@
         
         if (length(conditions) == 1 & any(grepl(":", conditions))) {
             cs <- unlist(strsplit(conditions, split = ":"))
-            if (!all(is.element(conditions, nms))) {
+            if (!all(is.element(cs, nms))) {
                 admisc::stopError(
                     "Conditions from sequence not found in the data.", ... = ...
                 )
@@ -51,31 +51,42 @@
         )
     }
     
-    data <- data[, c(conditions, outcome)]
-    udata <- unique(data[, conditions])
-    rownames(udata) <- seq(nrow(udata))
-    cpos <- cneg <- rep(0, nrow(udata))
-    for (i in seq(nrow(udata))) {
-        for (j in seq(nrow(data))) {
-            if (all(udata[i, ] == data[j, conditions])) {
-                if (data[j, outcome] == 1) {
-                    cpos[i] <- cpos[i] + 1
-                }
-                else if (data[j, outcome] == 0) {
-                    cneg[i] <- cneg[i] + 1
-                }
-            }
+    if (!is.element(type, c("deletion", "corruption"))) {
+        admisc::stopError("Unknown perturbation type.", ... = ...)
+    }
+    if (dependent) {
+        if (
+            !is.numeric(n.pert) || length(n.pert) != 1L || !is.finite(n.pert) ||
+            n.pert != floor(n.pert) || n.pert < 0 || n.pert > nrow(data)
+        ) {
+            admisc::stopError("Invalid number of case perturbations.", ... = ...)
+        }
+        if (n.pert == 0) {
+            return(1)
         }
     }
-    
+
+    data <- data[, c(conditions, outcome)]
+    if (anyNA(data)) {
+        admisc::stopError("Missing values are not allowed in retention analyses.", ... = ...)
+    }
+
+    # Use one integer code per condition value, including for labelled conditions.
+    codes <- lapply(data[, conditions, drop = FALSE], function(x) match(x, unique(x)))
+    keys <- do.call(paste, unname(codes))
+    configurations <- unique(keys)
+    groups <- match(keys, configurations)
+    y <- data[[outcome]]
+    cpos <- as.double(tabulate(groups[y == 1], length(configurations)))
+    cneg <- as.double(tabulate(groups[y == 0], length(configurations)))
+
     total <- cpos + cneg
-    udata <- udata[total >= n.cut, , drop = FALSE]
     cpos  <- cpos[total >= n.cut]
     cneg  <- cneg[total >= n.cut]
     total <- total[total >= n.cut]
     
     calculatePairs <- function(x, n.pert, type = "deletion") {
-        pairsxl <- admisc::combnk(nrow(udata), min(x, nrow(udata)))
+        pairsxl <- admisc::combnk(length(total), min(x, length(total)))
         nofsetsxl <- 0
         for (j in seq(ncol(pairsxl))) {
             cposneg <- NULL
@@ -89,12 +100,12 @@
                 linesubset <- linesubset & rowSums(allpairs[, l*2 - c(1, 0)]) >= 1
             }
             allpairs <- allpairs[linesubset & rowSums(allpairs) <= n.pert, , drop = FALSE]
-            for (i in seq(nrow(allpairs))) {
+            for (i in seq_len(nrow(allpairs))) {
                 lchanges <- rep(FALSE, min(x, nrow(pairsxl)))
                 for (l in seq(min(x, nrow(pairsxl)))) {
                     initially <- cpos[pairsxl[l, j]]/total[pairsxl[l, j]]
                     if (type == "deletion") {
-                        newtotaless <- total[pairsxl[l, j]] - allpairs[i, l*2 - 1]
+                        newtotaless <- total[pairsxl[l, j]] - sum(allpairs[i, l*2 - c(1, 0)])
                         after <- (cpos[pairsxl[l, j]] - allpairs[i, l*2 - 1])/newtotaless
                         lchanges[l] <- ((initially >= incl.cut & after <  incl.cut) | newtotaless <  n.cut) |
                                        ((initially <  incl.cut & after >= incl.cut) & newtotaless >= n.cut)
@@ -122,10 +133,13 @@
     if (dependent) {
         nofsets <- 0
         totalsets <- choose(nrow(data), n.pert)
-        for (i in seq(n.pert)) {
-            if (nofsets != totalsets) {
-                nofsetsxl <- calculatePairs(i, n.pert, type = type)
-                nofsets <- nofsets + ifelse(i %% 2 == 1, nofsetsxl, -1*nofsetsxl)
+        for (i in seq_len(min(n.pert, length(total)))) {
+            nofsetsxl <- calculatePairs(i, n.pert, type = type)
+            if (i %% 2 == 1) {
+                nofsets <- nofsets + nofsetsxl
+            }
+            else {
+                nofsets <- nofsets - nofsetsxl
             }
         }
         
@@ -134,12 +148,12 @@
     else {
         pfinal <- 1
         if (type == "deletion") {
-            for (l in seq(nrow(udata))) {
+            for (l in seq_len(length(total))) {
                 ptmp <- 1
                 allpairs <- createMatrix(c(cpos[l], cneg[l]) + 2) - 1
                 allpairs <- allpairs[apply(allpairs, 1, function(x) all(x >= 0)), , drop = FALSE]
                 allpairs <- allpairs[rowSums(allpairs) >= 1, , drop = FALSE]
-                for (i in seq(nrow(allpairs))) {
+                for (i in seq_len(nrow(allpairs))) {
                     newtotaless <- total[l] - allpairs[i, 1] - allpairs[i, 2]
                     initially <- cpos[l]/total[l]
                     after <- (cpos[l] - allpairs[i, 1])/newtotaless
@@ -152,12 +166,12 @@
             }
         }
         else if (type == "corruption") {
-            for (l in seq(nrow(udata))) {
+            for (l in seq_len(length(total))) {
                 ptmp <- 1
                 allpairs <- createMatrix(c(cpos[l], cneg[l]) + 2) - 1
                 allpairs <- allpairs[apply(allpairs, 1, function(x) all(x >= 0)), , drop = FALSE]
                 allpairs <- allpairs[rowSums(allpairs) >= 1, , drop = FALSE]
-                for (i in seq(nrow(allpairs))) {
+                for (i in seq_len(nrow(allpairs))) {
                     initially <- cpos[l]/total[l]
                     after <- (cpos[l] - allpairs[i, 1] + allpairs[i, 2])/total[l]
                     if ((initially >= incl.cut & after < incl.cut) | (initially < incl.cut & after >= incl.cut)) {

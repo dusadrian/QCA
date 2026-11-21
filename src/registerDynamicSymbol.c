@@ -16,6 +16,7 @@ extern SEXP C_getSA(SEXP solution_list, SEXP expressions, SEXP noflevels, SEXP i
                     SEXP expr_columns);
 extern SEXP C_solveChart(SEXP pichart, SEXP allsol, SEXP vdepth, SEXP k, SEXP maxcomb, SEXP firstmin);
 extern SEXP C_getRow(SEXP input);
+extern SEXP C_configurationRows(SEXP data, SEXP levels);
 extern SEXP C_createMatrix(SEXP input);
 extern SEXP C_superSubset(SEXP x, SEXP noflevels, SEXP fuz, SEXP vo,
                           SEXP nec, SEXP inclcut, SEXP covcut, SEXP depth);
@@ -44,6 +45,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"C_getSA", (DL_FUNC) &C_getSA, 5},
   {"C_solveChart", (DL_FUNC) &C_solveChart, 6},
   {"C_getRow", (DL_FUNC) &C_getRow, 1},
+  {"C_configurationRows", (DL_FUNC) &C_configurationRows, 2},
   {"C_createMatrix", (DL_FUNC) &C_createMatrix, 1},
   {"C_superSubset", (DL_FUNC) &C_superSubset, 8},
   {"C_QMC", (DL_FUNC) &C_QMC, 2},

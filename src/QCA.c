@@ -293,34 +293,95 @@ SEXP C_solveChart(SEXP pichart, SEXP allsol, SEXP vdepth, SEXP k, SEXP maxcomb, 
 //#define SHOW_DEBUG_OUTPUT        // This enable some textual output
 //#define SHOW_DEBUG_PROFILE         // This enable time debugging
 
+/* Row numbers above the consecutive-integer range of a double arrive as
+ * decimal strings, as do the row labels returned by C_getSA(). */
+static uint64_t qca_row_number(SEXP rows, int r) {
+    if (TYPEOF(rows) == STRSXP) {
+        const char *digits = CHAR(STRING_ELT(rows, r));
+        uint64_t value = 0;
+        if (!*digits) {
+            error("Missing configuration row number.");
+        }
+        while (*digits) {
+            int digit = *digits++ - '0';
+            if (digit < 0 || digit > 9 || value > (UINT64_MAX - digit) / 10) {
+                error("Invalid configuration row number.");
+            }
+            value = value * 10 + digit;
+        }
+        return value;
+    }
+
+    double value = REAL(rows)[r];
+    if (!R_FINITE(value) || value < 0 || value != floor(value) || value > 0x1p53) {
+        error("Use a whole row number, or an exact decimal string for large row numbers.");
+    }
+    return (uint64_t) value;
+}
+
 SEXP C_getRow(SEXP input) {
-    PROTECT(input);
-    SEXP rowno, noflevels, mbase, matrix;
-
-    SEXP usage = PROTECT(allocVector(VECSXP, 4));
-    SET_VECTOR_ELT(usage, 0, rowno = coerceVector(VECTOR_ELT(input, 0), INTSXP));
-    SET_VECTOR_ELT(usage, 1, noflevels = coerceVector(VECTOR_ELT(input, 1), INTSXP));
-    SET_VECTOR_ELT(usage, 2, mbase   = coerceVector(VECTOR_ELT(input, 2), INTSXP));
-    int *p_rowno = INTEGER(rowno);
-    int *p_noflevels = INTEGER(noflevels);
-    int *p_mbase = INTEGER(mbase);
-
-    int nrows = length(rowno);
-    int ncols = length(noflevels);
-
-    SET_VECTOR_ELT(usage, 3, matrix = allocMatrix(INTSXP, nrows, ncols));
-    int *p_matrix = INTEGER(matrix);
-
-    // Rf_PrintValue(usage);
-
-    for (int r = 0; r < nrows; r++) {
-        for (int c = 0; c < ncols; c++) {
-            p_matrix[c * nrows + r] = (p_rowno[r] / p_mbase[c]) % p_noflevels[c];
+    SEXP rows = VECTOR_ELT(input, 0);
+    rows = PROTECT(TYPEOF(rows) == STRSXP ? rows : coerceVector(rows, REALSXP));
+    SEXP levels = PROTECT(coerceVector(VECTOR_ELT(input, 1), INTSXP));
+    SEXP base = VECTOR_ELT(input, 2);
+    /* Older callers supply already zero-based numbers and a stride vector. */
+    int one_based = TYPEOF(base) == LGLSXP && !asLogical(base);
+    int nr = length(rows);
+    int nc = length(levels);
+    SEXP result = PROTECT(allocMatrix(INTSXP, nr, nc));
+    for (int c = 0; c < nc; c++) {
+        if (INTEGER(levels)[c] < 1) {
+            error("Condition levels must be positive.");
+        }
+    }
+    for (int r = 0; r < nr; r++) {
+        uint64_t value = qca_row_number(rows, r);
+        if (one_based && !value) {
+            error("Row numbers start at one.");
+        }
+        value -= one_based;
+        for (int c = nc - 1; c >= 0; c--) {
+            uint64_t levels_c = INTEGER(levels)[c];
+            INTEGER(result)[(R_xlen_t) c * nr + r] = value % levels_c;
+            value /= levels_c;
+        }
+        if (value) {
+            error("Row number exceeds the number of configurations.");
         }
     }
 
-    UNPROTECT(2);
-    return(matrix);
+    UNPROTECT(3);
+    return result;
+}
+
+SEXP C_configurationRows(SEXP data, SEXP levels) {
+    int nr = nrows(data);
+    int nc = ncols(data);
+    data = PROTECT(coerceVector(data, INTSXP));
+    levels = PROTECT(coerceVector(levels, INTSXP));
+    if (length(levels) != nc) {
+        error("Condition columns do not match.");
+    }
+    SEXP rows = PROTECT(allocVector(STRSXP, nr));
+    for (int r = 0; r < nr; r++) {
+        uint64_t value = 0;
+        for (int c = 0; c < nc; c++) {
+            int digit = INTEGER(data)[(R_xlen_t) c * nr + r];
+            int radix = INTEGER(levels)[c];
+            if (digit < 0 || digit >= radix) {
+                error("Invalid configuration level.");
+            }
+            if (value > (UINT64_MAX - 1 - digit) / radix) {
+                error("Too many possible configurations for exact row numbers.");
+            }
+            value = value * radix + digit;
+        }
+        char label[32];
+        snprintf(label, sizeof(label), "%" PRIu64, value + 1);
+        SET_STRING_ELT(rows, r, mkChar(label));
+    }
+    UNPROTECT(3);
+    return rows;
 }
 
 SEXP C_getSA(
@@ -1956,115 +2017,43 @@ SEXP C_pof(SEXP x, SEXP y, SEXP nec) {
 
 }
 
-typedef struct {
-    int nconds;
-    int *p_k;
-    int *p_noflevels;
-    int *p_result;
-} QCAComplexityContext;
+SEXP C_omplexity(SEXP input) {
+    int n = asInteger(VECTOR_ELT(input, 0));
+    SEXP layers = VECTOR_ELT(input, 1);
+    SEXP levels = VECTOR_ELT(input, 2);
+    if (length(levels) != n) {
+        error("Missing condition levels.");
+    }
 
-static int qca_complexity_one(
-    int nconds,
-    int k,
-    const int *p_noflevels
-) {
-    int resum = 0;
-    unsigned long long int maxtasks = nchoosek(nconds, k);
-
-    for (unsigned long long int task = 0; task < maxtasks; task++) {
-        int tempk[k];
-        unsigned long long int combination = task;
-        int x = 0;
-
-        for (int i = 0; i < k; i++) {
-            while (1) {
-                unsigned long long int cval = nchoosek(nconds - (x + 1), k - (i + 1));
-                if (cval == 0 || cval > combination) {
-                    break;
-                }
-                combination -= cval;
-                x++;
-            }
-
-            if (x < 0) {
-                x = 0;
-            }
-            if (x >= nconds) {
-                x = nconds - 1;
-            }
-
-            tempk[i] = x;
-            x++;
+    int max_layer = 0;
+    for (int i = 0; i < length(layers); i++) {
+        int layer = INTEGER(layers)[i];
+        if (layer < 1 || layer > n) {
+            error("Invalid complexity layer.");
         }
-
-        int prod = 1;
-        for (int i = 0; i < k; i++) {
-            prod *= p_noflevels[tempk[i]];
+        if (layer > max_layer) {
+            max_layer = layer;
         }
-
-        resum += prod;
     }
 
-    return resum;
-}
-
-static void qca_complexity_range_worker(
-    unsigned long long start,
-    unsigned long long end,
-    int worker_id,
-    void *data
-) {
-    QCAComplexityContext *ctx = (QCAComplexityContext *) data;
-    (void) worker_id;
-
-    for (unsigned long long ck = start; ck < end; ck++) {
-        ctx->p_result[ck] = qca_complexity_one(
-            ctx->nconds,
-            ctx->p_k[ck],
-            ctx->p_noflevels
-        );
-    }
-}
-
-SEXP C_omplexity(SEXP list) {
-    /*
-    nconds is k in the R code and the k is c.
-    I've deliberately opted for this choice because the code below
-    is a modified version of C_combnk which uses choose(n, k).
-    */
-    int nconds = INTEGER(VECTOR_ELT(list, 0))[0];
-    int lk = length(VECTOR_ELT(list, 1));
-    int *p_k = INTEGER(VECTOR_ELT(list, 1));
-    int *p_noflevels = INTEGER(VECTOR_ELT(list, 2));
-
-    int *p_result = (int *) calloc((size_t) lk, sizeof(int));
-
-    if (p_result == NULL) {
-        error("Memory allocation failed during complexity calculation.");
+    double *counts = (double *) R_alloc((size_t) max_layer + 1, sizeof(double));
+    memset(counts, 0, ((size_t) max_layer + 1) * sizeof(double));
+    counts[0] = 1;
+    for (int i = 0; i < n; i++) {
+        R_CheckUserInterrupt();
+        /* Adding a condition extends each combination in the preceding layer. */
+        int top = i < max_layer ? i + 1 : max_layer;
+        for (int layer = top; layer > 0; layer--) {
+            counts[layer] += INTEGER(levels)[i] * counts[layer - 1];
+        }
     }
 
-    QCAComplexityContext ctx = {
-        .nconds = nconds,
-        .p_k = p_k,
-        .p_noflevels = p_noflevels,
-        .p_result = p_result
-    };
-    if (!qca_parallel_for((unsigned long long) lk, 0, qca_complexity_range_worker, &ctx)) {
-        free(p_result);
-        error("Failed to start pthread workers for complexity calculation.");
+    SEXP result = PROTECT(allocVector(REALSXP, length(layers)));
+    for (int i = 0; i < length(layers); i++) {
+        REAL(result)[i] = counts[INTEGER(layers)[i]];
     }
-
-    R_CheckUserInterrupt();
-
-    SEXP result = PROTECT(allocVector(INTSXP, lk));
-    for (int ck = 0; ck < lk; ck++) {
-        INTEGER(result)[ck] = p_result[ck];
-    }
-    free(p_result);
-
     UNPROTECT(1);
-    return(result);
-
+    return result;
 }
 
 SEXP C_expand(SEXP mat, SEXP noflevels, SEXP partial) {

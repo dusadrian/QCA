@@ -301,25 +301,18 @@
 
         if (is.element("character", class(outcome))) {
 
-            # funargs$outcome and outcome are both character and contain the same thing
-            # but funargs$outcome already has the [[:space:]] deleted
-
             if (grepl("\\+|\\*", outcome)) {
                 outcomename <- outcome
             }
             else {
-                if (admisc::tilde1st(gsub("1-", "", funargs$outcome))) {
-                    outnegated <- !outnegated
+                if (grepl("^1[[:space:]]*-", outcome)) {
+                    outnegated <- TRUE
+                    outcome <- sub("^1[[:space:]]*-[[:space:]]*", "", outcome)
                 }
-
-                oneminus <- identical(substr(funargs$outcome, 1, 2), "1-")
-
-                if (oneminus) {
+                if (admisc::tilde1st(outcome)) {
                     outnegated <- !outnegated
-                    outcome <- gsub("1-", "", funargs$outcome)
+                    outcome <- admisc::notilde(outcome)
                 }
-
-                outcome <- admisc::notilde(outcome)
 
                 if (grepl("\\{", outcome)) {
                     outcomename <- admisc::curlyBrackets(outcome, outside = TRUE)
@@ -345,7 +338,12 @@
                 data[, which(colnames(data) == outcomename), drop = FALSE]
             )
 
-            outcome <- admisc::compute(outcome, data = data)
+            if (grepl("\\+|\\*", outcome)) {
+                outcome <- data[[outcomename]]
+            }
+            else {
+                outcome <- admisc::compute(outcome, data = data)
+            }
 
             if (outnegated) {
                 outcome <- 1 - outcome
@@ -488,14 +486,15 @@
         )
     }
 
-    if (any(na.omit(cbind(setms, outcome) > 1))) {
+    memberships <- cbind(setms, outcome)
+    if (any(memberships < 0 | memberships > 1, na.rm = TRUE)) {
         admisc::stopError(
             "Set membership scores should be numbers between 0 and 1.",
             ... = ...
         )
     }
 
-    notmiss <- apply(cbind(setms, outcome), 1, function(x) !any(is.na(x)))
+    notmiss <- stats::complete.cases(memberships)
 
     outcome <- outcome[notmiss]
     setms <- setms[notmiss, , drop = FALSE]
@@ -514,7 +513,7 @@
         PACKAGE = "QCA"
     )
 
-    incl.cov[incl.cov < 0.00001] <- 0 # to take care of double precision numbers
+    incl.cov[incl.cov < 0 & incl.cov > -.Machine$double.eps^0.5] <- 0
     incl.cov <- as.data.frame(incl.cov)
 
 

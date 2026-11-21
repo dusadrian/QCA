@@ -21,10 +21,7 @@
     conditions <- admisc::recreate(substitute(conditions), colnames(data))
     enter <- if (is.element("enter", names(dots))) "" else "\n" # internal
     
-    if (identical(conditions, "")) {
-        conditions <- setdiff(colnames(data), admisc::notilde(outcome))
-    }
-    else {
+    if (!identical(conditions, "")) {
         if (is.character(conditions) & length(conditions) == 1) {
             conditions <- admisc::splitstr(conditions)
             if (length(conditions) == 1) {
@@ -69,7 +66,7 @@
         outcome <- admisc::curlyBrackets(outcome, outside = TRUE)
     }
     else {
-        admisc::squareBrackets(outcome, outside = TRUE)
+        outcome <- admisc::squareBrackets(outcome, outside = TRUE)
     }
 
     outcome <- admisc::notilde(outcome)
@@ -82,21 +79,8 @@
     if (identical(conditions, "")) {
         conditions <- setdiff(colnames(data), outcome)
     }
-    else {
-        conditions <- admisc::splitstr(conditions)
+    verify.data(data, outcome, conditions)
 
-        verify.data(data, outcome, conditions)
-        
-        if (length(conditions) == 1) {
-            if (grepl(":", conditions)) {
-                # they are already verified as existing columns
-                nms <- colnames(data)
-                cs <- unlist(strsplit(conditions, split = ":"))
-                conditions <- nms[seq(which(nms == cs[1]), which(nms == cs[2]))]
-            }
-        }
-    }
-    
     data <- data[, c(conditions, outcome)]
 
     infodata <- admisc::getInfo(data[, conditions, drop = FALSE])
