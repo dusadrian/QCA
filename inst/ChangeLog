@@ -1,6 +1,7 @@
 Version 3.27
     o Faster truth table construction by reusing the translated outcome
     o Faster retention() calculations by counting cases within each configuration
+    o Improved SAT solver and independent verifier
     o Fixed truth table contradictions with a frequency cutoff, exclusions with
       binomial tests, case attribution near 0.5, and large configuration numbers
     o Fixed pof() for negated outcomes supplied in a variable and very small
