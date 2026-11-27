@@ -2,14 +2,14 @@
     ..., na.rm = FALSE
 ) {
 
+    conditions <- as.list(match.call())[-1L]
+    conditions$na.rm <- NULL
+    conditions$use.tilde <- NULL
+
     funargs <- unlist(lapply(
-        lapply(match.call(), deparse)[-1],
+        lapply(conditions, deparse),
         function(x) gsub(paste0("'|\"|[[:space:]|", "\u00a0", "]"), "", x)
     ))
-
-    if (!is.na(rem <- match("na.rm", names(funargs)))) {
-        funargs <- funargs[-rem]
-    }
 
     dots <- vector(mode = "list", length = length(funargs))
 

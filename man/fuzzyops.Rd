@@ -23,6 +23,11 @@ fuzzyor(..., na.rm = FALSE)
 }
 
 
+\details{
+Negated conditions are labelled with a tilde. The legacy named argument
+\code{use.tilde} is accepted and ignored.
+}
+
 \value{A numerical vector of class \code{"QCA_fuzzy"}, with a \code{name} attribute expression}
 
 \author{
