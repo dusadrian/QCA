@@ -1,4 +1,6 @@
 Version 3.27
+    o Crisp calibration now keeps values exactly at a threshold in the lower
+      group, matching indirect calibration and admisc::recode()
     o Faster truth table construction by reusing the translated outcome
     o Faster retention() calculations by counting cases within each configuration
     o Improved SAT solver and independent verifier

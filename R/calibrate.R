@@ -83,7 +83,7 @@
 
         thresholds <- sort(thresholds)
 
-        return(findInterval(x, thresholds))
+        return(findInterval(x, thresholds, left.open = TRUE))
 
     }
     else if (type == "fuzzy") {
@@ -380,10 +380,7 @@
 
             values <- round(seq(0, 1, by = 1 / length(thresholds)), 3)
 
-            y <- rep(0, length(x))
-            for (i in seq(length(thresholds))) {
-                y[x > thresholds[i]] = values[i + 1]
-            }
+            y <- values[findInterval(x, thresholds, left.open = TRUE) + 1L]
 
             x[x == 0] <- 0.00001
 

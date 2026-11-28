@@ -36,9 +36,10 @@ qualitative anchors.
 
 When \bold{\code{type = "crisp"}}, the process is similar to recoding the original
 values to a number of categories defined by the number of thresholds. For one
-threshold, the calibration produces two categories (intervals): 0 if below, 1 if above.
-For two thresholds, the calibration produces three categories: 0 if below the first threshold,
-1 if in the interval between the thresholds and 2 if above the second threshold etc.
+threshold, values at or below the threshold receive 0 and larger values receive 1.
+For two thresholds, values at or below the first receive 0, values above the first
+and at or below the second receive 1, and values above the second receive 2.
+This follows the interval convention of \code{admisc::recode()} with numeric cut points.
 
 When \bold{\code{type = "fuzzy"}}, calibration produces fuzzy set membership scores, using
 three anchors for the increasing or decreasing \dfn{s-shaped} distributions (including
@@ -109,8 +110,10 @@ exist to make them different.
 
 For the \bold{\code{type = "fuzzy"}} it is also possible to use the \bold{\code{"indirect"}}
 method to calibrate the data, using a procedure first introduced by Ragin (2008). The indirect method
-assumes a vector of thresholds to cut the original data into equal intervals, then it applies
-a (quasi)binomial logistic regression with a fractional polynomial equation.
+uses the supplied thresholds to form preliminary groups. A value exactly at a threshold
+enters the lower group, as in crisp calibration. The groups receive equally spaced
+scores from 0 to 1 (rounded to three decimal places). A quasibinomial regression with a
+fractional polynomial then estimates the final fuzzy memberships from these scores.
 
 The results are also fuzzy between 0 and 1, but the method is entirely different: it has no anchors
 (specific to the direct method), and it doesn't need to specify a calibration function to calculate
@@ -248,8 +251,9 @@ inc <- c(40110, 34400, 25200, 24920, 20060, 17090, 15320, 13680, 11720,
          11290, 10940, 9800, 7470, 4670, 4100, 4070, 3740, 3690, 3590,
          2980, 1000, 650, 450, 110)
 
+# Income 1000 (Bolivia) falls in the second group: above 999 and at or below 4000.
 cinc <- calibrate(inc, method = "indirect",
-        thresholds = "1000, 4000, 5000, 10000, 20000")
+        thresholds = "999, 4000, 5000, 10000, 20000")
 
 plot(inc, cinc, main = "Membership scores in the set of high income", 
      xlab = "Raw data", ylab = "Calibrated data")
