@@ -1,5 +1,5 @@
 Package: QCA
-Version: 3.26.3
+Version: 3.26.4
 SystemRequirements: POSIX threads (optional)
 Title: Qualitative Comparative Analysis
 Authors@R: c(
@@ -15,7 +15,7 @@ Authors@R: c(
        )
 URL: https://github.com/dusadrian/QCA
 BugReports: https://github.com/dusadrian/QCA/issues
-Depends: R (>= 3.6.0), admisc (> 0.39)
+Depends: R (>= 3.6.0), admisc (>= 0.42)
 LazyData: yes
 Imports: methods, declared, venn
 Suggests: testthat (>= 3.0.0)
